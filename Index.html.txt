@@ -12725,6 +12725,19 @@ function initTabs() {
         if (isAdmin && typeof aktifPersonelListesiniCek === "function") aktifPersonelListesiniCek();
         if (typeof bordroListesiniCek === "function") bordroListesiniCek();
         if (typeof personelTalepleriniYukle === "function") personelTalepleriniYukle();
+        
+        google.script.run
+          .withSuccessHandler(function(res) {
+            if (res && res.ok && res.liste) {
+              var tbody = document.getElementById("personelListesiBody");
+              if (tbody) {
+                tbody.innerHTML = res.liste.map(function(p) {
+                  return "<tr><td>" + (p.ad || "") + "</td><td>" + (p.email || "") + "</td></tr>";
+                }).join("");
+              }
+            }
+          })
+          .api_personelListesiGetir();
       }
 
       if (panelId === "panelCEO") {
