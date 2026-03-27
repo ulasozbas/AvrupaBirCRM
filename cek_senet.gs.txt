@@ -1,0 +1,240 @@
+// ============================================================
+//  CEK_SENET.GS — Çek & Senet Takip Modülü
+//  Ödenecek çekler ve senetler, vade takibi,
+//  ödeme yapılınca banka/kasa ile ilişkilendirme.
+// ============================================================
+
+// ── ÇEK / SENET KAYIT ────────────────────────────────────────
+
+/**
+ * Yeni çek veya senet ekler.
+ *
+ * @param {Object} params
+ * @param {string} params.alacakli       - Kime ödenecek (firma/kişi adı)
+ * @param {number} params.tutar          - Tutar
+ * @param {string} params.vade           - Vade tarihi (GG.AA.YYYY)
+ * @param {string} [params.banka]        - Çek bankası
+ * @param {string} [params.aciklama]
+ * @param {string} [params.duzenlenmeTarihi] - Boş = bugün
+ * @returns {string} Oluşturulan çek ID'si
+ */
+function cekEkle(params) {
+  const {
+    alacakli,
+    tutar,
+    vade,
+    banka = '',
+    aciklama = '',
+    duzenlenmeTarihi,
+  } = params;
+
+  if (!alacakli) throw new Error('Alacaklı adı boş olamaz.');
+  if (typeof tutar !== 'number' || tutar <= 0) throw new Error('Tutar geçersiz.');
+  if (!vade) throw new Error('Vade tarihi zorunludur.');
+
+  const sheet = getSheet(SHEETS.CEK_SENET);
+  const id = yeniID('C', sheet);
+
+  sheet.appendRow([
+    id,
+    duzenlenmeTarihi ? tarihFormat(duzenlenmeTarihi) : bugun(),
+    vade,
+    alacakli,
+    banka,
+    tutar,
+    CEK_DURUM.BEKLIYOR,
+    aciklama,
+    '', // Ödeme tarihi (henüz ödenmedi)
+  ]);
+
+  Logger.log(`📄 Çek eklendi: ${alacakli} | ${paraBirim(tutar)} | Vade: ${vade} | ID: ${id}`);
+  return id;
+}
+
+// ── ÇEK ÖDEME ────────────────────────────────────────────────
+
+/**
+ * Çek ödemesini işler.
+ * - CEK_SENET satırını "Ödendi" yapar
+ * - Belirlenen kaynaktan ödeme düşer (Kasa veya Banka)
+ *
+ * @param {string} cekId           - Ödenen çekin ID'si
+ * @param {string} odemeKaynagi    - 'Kasa' veya banka kodu (örn: 'ISBANK_POS')
+ * @param {string} [odemeTarihi]   - Boş = bugün
+ */
+function cekOde(cekId, odemeKaynagi, odemeTarihi) {
+  const sheet = getSheet(SHEETS.CEK_SENET);
+  const satirNo = _cekSatirBul(sheet, cekId);
+
+  if (!satirNo) throw new Error(`"${cekId}" ID'li çek bulunamadı.`);
+
+  const satirVerisi = sheet.getRange(satirNo, 1, 1, 9).getValues()[0];
+  const durum = satirVerisi[COL.CEK_SENET.DURUM - 1];
+
+  if (durum === CEK_DURUM.ODENDI) throw new Error(`Bu çek zaten ödenmiş: ${cekId}`);
+  if (durum === CEK_DURUM.IPTAL)  throw new Error(`Bu çek iptal edilmiş: ${cekId}`);
+
+  const tutar     = satirVerisi[COL.CEK_SENET.TUTAR - 1];
+  const alacakli  = satirVerisi[COL.CEK_SENET.ALACAKLI - 1];
+  const tarih     = odemeTarihi || bugun();
+
+  // Durum ve ödeme tarihini güncelle
+  sheet.getRange(satirNo, COL.CEK_SENET.DURUM).setValue(CEK_DURUM.ODENDI);
+  sheet.getRange(satirNo, COL.CEK_SENET.ODEME_TAR).setValue(tarih);
+
+  // Ödeme kaynağından düş
+  const aciklama = `Çek ödemesi: ${alacakli} | ${cekId}`;
+
+  if (odemeKaynagi === 'Kasa') {
+    kasaCikis(aciklama, tutar, 'Çek Ödemesi', cekId, cekId);
+  } else {
+    // Banka hesabından EFT çıkışı
+    eftCikis(odemeKaynagi, tutar, aciklama, alacakli, cekId);
+  }
+
+  Logger.log(`✅ Çek ödendi: ${cekId} | ${paraBirim(tutar)} | Kaynak: ${odemeKaynagi}`);
+}
+
+/**
+ * Çeki iptal eder.
+ */
+function cekIptal(cekId, aciklama = '') {
+  const sheet = getSheet(SHEETS.CEK_SENET);
+  const satirNo = _cekSatirBul(sheet, cekId);
+  if (!satirNo) throw new Error(`"${cekId}" bulunamadı.`);
+
+  sheet.getRange(satirNo, COL.CEK_SENET.DURUM).setValue(CEK_DURUM.IPTAL);
+  if (aciklama) {
+    const mevcutAciklama = sheet.getRange(satirNo, COL.CEK_SENET.ACIKLAMA).getValue();
+    sheet.getRange(satirNo, COL.CEK_SENET.ACIKLAMA).setValue(`${mevcutAciklama} [İPTAL: ${aciklama}]`);
+  }
+  Logger.log(`❌ Çek iptal: ${cekId}`);
+}
+
+/**
+ * Çeki karşılıksız olarak işaretler.
+ */
+function cekKarsilksiz(cekId, aciklama = '') {
+  const sheet = getSheet(SHEETS.CEK_SENET);
+  const satirNo = _cekSatirBul(sheet, cekId);
+  if (!satirNo) throw new Error(`"${cekId}" bulunamadı.`);
+
+  sheet.getRange(satirNo, COL.CEK_SENET.DURUM).setValue(CEK_DURUM.KARSILKSZ);
+  Logger.log(`⚠️ Çek karşılıksız: ${cekId}`);
+}
+
+// ── ÇEK LİSTELEME ────────────────────────────────────────────
+
+/**
+ * Tüm çek/senetleri döner.
+ * @param {string} [durumFiltre] - 'Bekliyor', 'Ödendi' vb. (boş = hepsi)
+ */
+function cekleriAl(durumFiltre = '') {
+  const sheet = getSheet(SHEETS.CEK_SENET);
+  const sonSatir = sheet.getLastRow();
+  if (sonSatir <= 1) return [];
+
+  const data = sheet.getRange(2, 1, sonSatir - 1, 9).getValues();
+
+  return data
+    .map(r => ({
+      id             : r[COL.CEK_SENET.ID - 1],
+      duzenlenmeTarihi: tarihFormat(r[COL.CEK_SENET.DUZENLENME - 1]),
+      vade           : tarihFormat(r[COL.CEK_SENET.VADE - 1]),
+      alacakli       : r[COL.CEK_SENET.ALACAKLI - 1],
+      banka          : r[COL.CEK_SENET.BANKA - 1],
+      tutar          : r[COL.CEK_SENET.TUTAR - 1],
+      durum          : r[COL.CEK_SENET.DURUM - 1],
+      aciklama       : r[COL.CEK_SENET.ACIKLAMA - 1],
+      odemeTarihi    : tarihFormat(r[COL.CEK_SENET.ODEME_TAR - 1]),
+    }))
+    .filter(c => !durumFiltre || c.durum === durumFiltre);
+}
+
+/**
+ * Bekleyen (ödenmemiş) çekleri döner, vade sırasına göre.
+ */
+function beklenyenCekler() {
+  return cekleriAl(CEK_DURUM.BEKLIYOR)
+    .sort((a, b) => _tariheGoreSirala(a.vade, b.vade));
+}
+
+/**
+ * Vadesi geçmiş ödenmemiş çekleri döner.
+ */
+function vadesiGecmisCekler() {
+  const bugunDate = new Date();
+  return beklenyenCekler().filter(c => {
+    const vadeDate = _tariheGoreParse(c.vade);
+    return vadeDate && vadeDate < bugunDate;
+  });
+}
+
+/**
+ * Bu ay vadesi gelecek çekleri döner.
+ */
+function buAyVadeliCekler() {
+  const simdi = new Date();
+  const yil = simdi.getFullYear();
+  const ay  = simdi.getMonth(); // 0-tabanlı
+
+  return beklenyenCekler().filter(c => {
+    const vadeDate = _tariheGoreParse(c.vade);
+    if (!vadeDate) return false;
+    return vadeDate.getFullYear() === yil && vadeDate.getMonth() === ay;
+  });
+}
+
+/**
+ * Bekleyen çeklerin toplam tutarını döner.
+ */
+function bekleyenCeklerToplam() {
+  return beklenyenCekler().reduce((s, c) => s + c.tutar, 0);
+}
+
+// ── DASHBOARD VERİSİ ──────────────────────────────────────────
+
+/**
+ * Dashboard için çek/senet verilerini döner.
+ */
+function cekDashboardVerisi() {
+  const bekleyen      = beklenyenCekler();
+  const vadesiGecmis  = vadesiGecmisCekler();
+  const buAyVadeli    = buAyVadeliCekler();
+
+  return {
+    toplamBekleyenTutar : bekleyenCeklerToplam(),
+    bekleyenAdet        : bekleyen.length,
+    vadesiGecmisAdet    : vadesiGecmis.length,
+    vadesiGecmisTutar   : vadesiGecmis.reduce((s, c) => s + c.tutar, 0),
+    buAyVadeliAdet      : buAyVadeli.length,
+    buAyVadeliTutar     : buAyVadeli.reduce((s, c) => s + c.tutar, 0),
+    yaklasanCekler      : buAyVadeli.slice(0, 5), // İlk 5
+  };
+}
+
+// ── YARDIMCI ─────────────────────────────────────────────────
+
+function _cekSatirBul(sheet, cekId) {
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === cekId) return i + 1; // 1-tabanlı satır no
+  }
+  return null;
+}
+
+function _tariheGoreParse(tarihStr) {
+  if (!tarihStr) return null;
+  const parts = tarihStr.split('.');
+  if (parts.length < 3) return null;
+  return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+}
+
+function _tariheGoreSirala(a, b) {
+  const da = _tariheGoreParse(a);
+  const db = _tariheGoreParse(b);
+  if (!da && !db) return 0;
+  if (!da) return 1;
+  if (!db) return -1;
+  return da - db;
+}

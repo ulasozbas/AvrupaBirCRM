@@ -1,0 +1,503 @@
+// ==========================================
+// RAPOR - KULLANICI PERFORMANS
+// ==========================================
+function api_raporKullaniciPerformans(opts) {
+  opts = opts || {};
+  var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+  var sh = ss.getSheetByName("HAREKETLER");
+  if (!sh) throw new Error("HAREKETLER sayfası bulunamadı!");
+  var vals = sh.getDataRange().getDisplayValues();
+  if (vals.length < 2) return { ok:true, rows:[], summary:{} };
+  var head = vals[0];
+  var idx = {};
+  head.forEach(function(h,i){ idx[String(h||"").toLowerCase().replace(/\s+/g,"").trim()] = i; });
+  var ixTarih=idx["tarih"], ixFirma=idx["firmaunvani"], ixUser=idx["kullaniciemail"], ixKanal=idx["kanal"], ixIslem=idx["islem"], ixAsama=idx["asama"];
+  function s(x){ return String(x==null?"":x).trim(); }
+  function parseTRDate_(t) {
+    t = s(t); if (!t) return null;
+    var parts = t.split(" ")[0].split(".");
+    if (parts.length < 3) return null;
+    return new Date(parts[2], parts[1]-1, parts[0]);
+  }
+  var d1 = opts.from ? parseTRDate_(opts.from) : null;
+  var d2 = opts.to ? parseTRDate_(opts.to) : null;
+  if (d2) d2.setHours(23,59,59,999);
+  var fKanal = s(opts.kanal).toUpperCase(), fAsama = s(opts.asama).toUpperCase(), fUser = s(opts.kullaniciEmail).toLowerCase();
+  var rows=[], byKanal={}, byAsama={}, sayIslem={TEKLIF:0,TANITIM:0,TOPLANTI:0}, pos=0, neg=0;
+  for (var i=vals.length-1; i>=1; i--) {
+    var r=vals[i];
+    var rDate=parseTRDate_(r[ixTarih]);
+    if (d1&&rDate&&rDate<d1) continue;
+    if (d2&&rDate&&rDate>d2) continue;
+    var kanal=s(r[ixKanal]).toUpperCase(), asama=s(r[ixAsama]).toUpperCase(), user=s(r[ixUser]).toLowerCase();
+    if (fKanal&&kanal!==fKanal) continue;
+    if (fAsama&&asama!==fAsama) continue;
+    if (fUser&&user!==fUser) continue;
+    byKanal[kanal]=(byKanal[kanal]||0)+1;
+    byAsama[asama]=(byAsama[asama]||0)+1;
+    var islemTipi=s(r[ixIslem]).toUpperCase();
+    if(islemTipi==="TEKLIF") sayIslem.TEKLIF++;
+    if(islemTipi==="TANITIM") sayIslem.TANITIM++;
+    if(islemTipi==="TOPLANTI") sayIslem.TOPLANTI++;
+    if(asama==="OLUMLU") pos++;
+    if(asama==="OLUMSUZ") neg++;
+    if(kanal === "SİSTEM" || kanal === "SISTEM") continue;
+    rows.push({ tarih:String(r[ixTarih]||""), firma:r[ixFirma]||"-", user:user.split("@")[0], kanal:kanal, islem:islemTipi, asama:asama });
+  }
+  return { ok:true, summary:{ toplamAktivite:rows.length, kanalDagilim:byKanal, asamaDagilim:byAsama, sayilar:sayIslem, oran:{ olumlu:pos, olumsuz:neg, olumluOran:(pos+neg)?Math.round((pos/(pos+neg))*100):0 } }, rows:rows };
+}
+
+// ==========================================
+// RAPOR - TEKLİFLER
+// ==========================================
+function api_raporTeklifler(p) {
+  try {
+    p = p || {};
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("TEKLIFLER") || ss.getSheetByName("TEKLİFLER");
+    if (!sh || sh.getLastRow() < 2) return { ok:true, rows:[] };
+    var vals = sh.getDataRange().getValues();
+    var head = vals[0];
+    function getIdx(names){ for(var n=0;n<names.length;n++){var i=head.indexOf(names[n]);if(i>-1)return i;} return -1; }
+    var iNo=getIdx(["TeklifNo"]), iTarih=getIdx(["Tarih","OlusturmaTarihi"]), iFirma=getIdx(["Firma","FirmaAdi"]), iTutar=getIdx(["GenelToplam","Toplam"]), iDurum=getIdx(["Durum"]), iOlus=getIdx(["Olusturan"]);
+    var from=p.from?new Date(p.from):null, to=p.to?new Date(p.to+"T23:59:59"):null;
+    var rows=[];
+    for(var r=1;r<vals.length;r++){
+      var row=vals[r];
+      if(iNo>-1&&!row[iNo]) continue;
+      if(iTarih>-1&&(from||to)){ var dt=new Date(row[iTarih]); if(from&&dt&&dt<from)continue; if(to&&dt&&dt>to)continue; }
+      if(p.kullaniciEmail&&iOlus>-1){if(String(row[iOlus]||"").toLowerCase()!==p.kullaniciEmail.toLowerCase())continue;}
+      rows.push({ tarih:iTarih>-1?String(row[iTarih]||""):"", firma:iFirma>-1?String(row[iFirma]||""):"", tutar:iTutar>-1?Number(row[iTutar])||0:0, durum:iDurum>-1?String(row[iDurum]||""):"", olusturan:iOlus>-1?String(row[iOlus]||""):"" });
+    }
+    rows.sort(function(a,b){return (b.tarih||"").localeCompare(a.tarih||"");});
+    return { ok:true, rows:rows };
+  } catch(e) { return { ok:false, hata:e.message }; }
+}
+
+// ==========================================
+// RAPOR - FİRMALAR
+// ==========================================
+function api_raporFirmalar(p) {
+  try {
+    p = p || {};
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİRMALAR") || ss.getSheetByName("FIRMALAR");
+    if (!sh || sh.getLastRow() < 2) return { ok:true, rows:[] };
+    var vals = sh.getDataRange().getValues();
+    var head = vals[0];
+    function getIdx(names){ for(var n=0;n<names.length;n++){var i=head.indexOf(names[n]);if(i>-1)return i;} return -1; }
+    var iAdi=getIdx(["FirmaAdi","FirmaUnvani","Firma"]), iTarih=getIdx(["OlusturmaTarihi","Tarih"]), iSektor=getIdx(["Sektor"]), iDurum=getIdx(["Durum"]), iEkl=getIdx(["Olusturan","SorumluEmail"]);
+    var from=p.from?new Date(p.from):null, to=p.to?new Date(p.to+"T23:59:59"):null;
+    var rows=[];
+    for(var r=1;r<vals.length;r++){
+      var row=vals[r];
+      if(iAdi>-1&&!row[iAdi]) continue;
+      if(iTarih>-1&&(from||to)){ var dt=new Date(row[iTarih]); if(from&&dt&&dt<from)continue; if(to&&dt&&dt>to)continue; }
+      rows.push({ tarih:iTarih>-1?String(row[iTarih]||""):"", firmaAdi:iAdi>-1?String(row[iAdi]||""):"", sektor:iSektor>-1?String(row[iSektor]||""):"", durum:iDurum>-1?String(row[iDurum]||"AKTİF"):"AKTİF", ekleyen:iEkl>-1?String(row[iEkl]||""):"" });
+    }
+    rows.sort(function(a,b){return (b.tarih||"").localeCompare(a.tarih||"");});
+    return { ok:true, rows:rows };
+  } catch(e) { return { ok:false, hata:e.message }; }
+}
+
+// ==========================================
+// RAPOR - EXCEL
+// ==========================================
+function api_raporExcel(p) {
+  try {
+    p = p || {};
+    var tmp = SpreadsheetApp.create("Rapor_Gecici_" + new Date().getTime());
+    var sh1 = tmp.getActiveSheet();
+    sh1.setName("Aktivite");
+    var res = api_raporKullaniciPerformans(p);
+    sh1.appendRow(["Tarih","Firma","Personel","Kanal","İşlem","Aşama"]);
+    ((res&&res.rows)||[]).forEach(function(r){ sh1.appendRow([r.tarih||"",r.firma||"",r.kullaniciEmail||"",r.kanal||"",r.islem||"",r.asama||""]); });
+    var sh2 = tmp.insertSheet("Teklifler");
+    var tRes = api_raporTeklifler(p);
+    sh2.appendRow(["Tarih","Firma","Tutar","Durum","Oluşturan"]);
+    ((tRes&&tRes.rows)||[]).forEach(function(t){ sh2.appendRow([t.tarih||"",t.firma||"",t.tutar||0,t.durum||"",t.olusturan||""]); });
+    var id = tmp.getId();
+    var url = "https://docs.google.com/spreadsheets/d/"+id+"/export?format=xlsx";
+    var blob = UrlFetchApp.fetch(url, { headers:{Authorization:"Bearer "+ScriptApp.getOAuthToken()} }).getBlob();
+    var b64 = Utilities.base64Encode(blob.getBytes());
+    DriveApp.getFileById(id).setTrashed(true);
+    return { ok:true, b64:b64 };
+  } catch(e) { return { ok:false, hata:e.message }; }
+}
+
+// ==========================================
+// PERFORMANS DASHBOARD
+// ==========================================
+function api_perfDashboard(opts) {
+  opts = opts || {};
+  var res = api_raporKullaniciPerformans({ from:opts.from||"", to:opts.to||"", kanal:opts.kanal||"", asama:opts.asama||"" });
+  var rows = (res&&res.rows) ? res.rows : [];
+  var user = String(opts.user||"").trim().toLowerCase();
+  if (user && user !== "ALL") rows = rows.filter(function(r){ return String(r.kullaniciEmail||"").trim().toLowerCase()===user; });
+  var users = {};
+  rows.forEach(function(r){ var u=String(r.kullaniciEmail||"").trim().toLowerCase(); if(u) users[u]=true; });
+  var userList = Object.keys(users).sort();
+  var total=rows.length, byKanal={}, byAsama={}, sayIslem={TEKLIF:0,TANITIM:0,TOPLANTI:0,DIGER:0}, pos=0, neg=0;
+  rows.forEach(function(x){
+    var kanal=String(x.kanal||"").toUpperCase()||"BOS", asama=String(x.asama||"").toUpperCase()||"BOS", islem=String(x.islem||"").toUpperCase();
+    byKanal[kanal]=(byKanal[kanal]||0)+1;
+    byAsama[asama]=(byAsama[asama]||0)+1;
+    if(islem==="TEKLIF")sayIslem.TEKLIF++;
+    else if(islem==="TANITIM")sayIslem.TANITIM++;
+    else if(islem==="TOPLANTI")sayIslem.TOPLANTI++;
+    else sayIslem.DIGER++;
+    if(asama==="OLUMLU")pos++;
+    if(asama==="OLUMSUZ")neg++;
+  });
+  var oran={olumlu:pos,olumsuz:neg,olumluOran:(pos+neg)?Math.round((pos/(pos+neg))*100):0,olumsuzOran:(pos+neg)?Math.round((neg/(pos+neg))*100):0};
+  var byUser={};
+  rows.forEach(function(r){ var u=String(r.kullaniciEmail||"").trim().toLowerCase()||"BOS"; if(!byUser[u])byUser[u]={user:u,total:0,TEKLIF:0,TANITIM:0,TOPLANTI:0,OLUMLU:0,OLUMSUZ:0}; byUser[u].total++; var isl=String(r.islem||"").toUpperCase(),asm=String(r.asama||"").toUpperCase(); if(isl==="TEKLIF")byUser[u].TEKLIF++;if(isl==="TANITIM")byUser[u].TANITIM++;if(isl==="TOPLANTI")byUser[u].TOPLANTI++;if(asm==="OLUMLU")byUser[u].OLUMLU++;if(asm==="OLUMSUZ")byUser[u].OLUMSUZ++; });
+  var leaderboard = Object.keys(byUser).map(function(k){return byUser[k];});
+  leaderboard.sort(function(a,b){return b.total-a.total;});
+  return { ok:true, filters:{from:opts.from||"",to:opts.to||"",user:opts.user||"ALL",kanal:(opts.kanal||"").toUpperCase(),asama:(opts.asama||"").toUpperCase()}, users:userList, summary:{total:total,sayIslem:sayIslem,oran:oran,byKanal:byKanal,byAsama:byAsama}, leaderboard:leaderboard, rows:rows.slice(0,500) };
+}
+
+function api_perfDefaultRange() {
+  var now = new Date();
+  var d2 = Utilities.formatDate(now,"Europe/Istanbul","dd.MM.yyyy");
+  var d1 = new Date(now.getTime()-6*24*60*60*1000);
+  return { from:Utilities.formatDate(d1,"Europe/Istanbul","dd.MM.yyyy"), to:d2 };
+}
+
+// ==========================================
+// KULLANICI ÖZET
+// ==========================================
+function api_raporKullaniciOzet(p) {
+  p = p || {};
+  var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+  var sh = ss.getSheetByName("HAREKETLER");
+  if (!sh) return { ok:true, items:[] };
+
+  var data = sh.getDataRange().getValues();
+  if (data.length < 2) return { ok:true, items:[] };
+
+  var head = data[0];
+  function getCol(aranan) {
+    for(var z=0; z<head.length; z++){
+      if(String(head[z]).toLowerCase().indexOf(aranan) > -1) return z;
+    }
+    return -1;
+  }
+
+  var ixTar  = getCol("tarih");
+  var ixUser = getCol("kullaniciemail");
+  var ixKanal = getCol("kanal");
+  var ixIslem = getCol("islem");
+
+  function parseDT_(v) {
+    if(v instanceof Date) return v;
+    var s = String(v||"").trim();
+    if(!s) return null;
+    var m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+    if(m) return new Date(m[3], m[2]-1, m[1]);
+    var d2 = new Date(s);
+    return isNaN(d2.getTime()) ? null : d2;
+  }
+
+  var dFrom = p.startDate ? parseDT_(p.startDate) : new Date(2000,0,1);
+  var dTo   = p.endDate   ? parseDT_(p.endDate)   : new Date(2099,11,31);
+  if(dTo) dTo.setHours(23,59,59,999);
+
+  // Dinamik kullanıcı listesi
+  var map = {};
+
+  for(var r=1; r<data.length; r++) {
+    var rawTarih = data[r][ixTar];
+    if(!rawTarih) continue;
+    var dt = parseDT_(rawTarih);
+    if(!dt || dt < dFrom || dt > dTo) continue;
+
+    var email = String(data[r][ixUser]||"").trim().toLowerCase();
+    if(!email) continue;
+
+    if(!map[email]) {
+      map[email] = {
+        email: email,
+        ad: email.split("@")[0].toUpperCase(),
+        telefon: 0, mail: 0, toplanti: 0, teklif: 0
+      };
+    }
+
+    var oKanal = String(data[r][ixKanal]||"").trim().toUpperCase();
+    var oIslem = String(data[r][ixIslem]||"").trim().toUpperCase();
+
+    if(oKanal.indexOf("TELEFON") > -1) map[email].telefon++;
+    if(oKanal.indexOf("MAIL") > -1 || oKanal.indexOf("MAİL") > -1) map[email].mail++;
+    if(oKanal.indexOf("TOPLANTI") > -1 || oKanal.indexOf("GÖRÜŞME") > -1) map[email].toplanti++;
+    if(oIslem.indexOf("TEKLIF") > -1 || oIslem.indexOf("TEKLİF") > -1) map[email].teklif++;
+  }
+
+  var items = Object.keys(map).map(function(k){ return map[k]; });
+  items.sort(function(a,b){ return (b.telefon+b.mail+b.toplanti+b.teklif) - (a.telefon+a.mail+a.toplanti+a.teklif); });
+
+  return { ok:true, items:items };
+}
+
+// ==========================================
+// PERFORMANS VERİSİ
+// ==========================================
+function api_getPerformanceData(p) {
+  try {
+    p = p || {};
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sheet = ss.getSheetByName("HAREKETLER");
+    if (!sheet) return [];
+    var data = sheet.getDataRange().getValues();
+    if (data.length < 2) return [];
+    var baslik = data[0];
+    function getCol(aranan){ for(var m=0;m<baslik.length;m++){if(String(baslik[m]).toLowerCase().indexOf(aranan)>-1)return m;} return -1; }
+    var ixt=getCol("tarih"),ixfr=getCol("firma"),ixkl=getCol("kullaniciemail"),ixk=getCol("kanal"),ixis=getCol("islem"),ixasm=getCol("asama"),ixnot=getCol("not");
+    var fromDate=p.from?new Date(p.from).getTime():0;
+    var toDate=p.to?new Date(p.to+"T23:59:59").getTime():4102444800000;
+    var outputArray=[], ustLimit=0;
+    for(var k=data.length-1;k>=1;k--){
+      var r=data[k];
+      var rawDate=r[ixt];
+      if(!rawDate) continue;
+      var currentTDate;
+      if(rawDate instanceof Date){currentTDate=rawDate;}
+      else{var fixPar=String(rawDate).match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);currentTDate=fixPar?new Date(fixPar[3],fixPar[2]-1,fixPar[1]):new Date(rawDate);}
+      var zamanPulu=currentTDate.getTime();
+      if(zamanPulu<fromDate||zamanPulu>toDate) continue;
+      var safeStringDate=Utilities.formatDate(currentTDate,"Europe/Istanbul","dd.MM.yyyy HH:mm");
+      outputArray.push({tarih:safeStringDate,firma:String(r[ixfr]||"Bilinmeyen"),kullanici:String(r[ixkl]||""),kanal:String(r[ixk]||""),islem:String(r[ixis]||""),asama:String(r[ixasm]||""),not:String(r[ixnot]||"")});
+      ustLimit++;
+      if(ustLimit>=1500) break;
+    }
+    return outputArray;
+  } catch(e) { return []; }
+}
+
+// ==========================================
+// SICAK TAKİPLER
+// ==========================================
+function api_getSicakTakipler(aktifEmail) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sTakip=ss.getSheetByName("TEKLIF_TAKIP"), sTeklif=ss.getSheetByName("TEKLIFLER")||ss.getSheetByName("TEKLİFLER");
+    if(!sTakip||!sTeklif) return [];
+    var tkData=sTakip.getDataRange().getValues(), tfData=sTeklif.getDataRange().getValues();
+    var creatorMap={}, tHead=tfData[0];
+    function getCol(hdr,str){for(var i=0;i<hdr.length;i++)if(String(hdr[i]).toLowerCase().indexOf(str)>-1)return i;return -1;}
+    var noIx=getCol(tHead,"teklifno"),oIx=getCol(tHead,"olusturan"),dIx=getCol(tHead,"durum"),fIdIx=getCol(tHead,"firmaid");
+    for(var j=1;j<tfData.length;j++){var tNo=String(tfData[j][noIx]||"");if(tNo)creatorMap[tNo]={olusturan:String(tfData[j][oIx]||"").toLowerCase(),durum:String(tfData[j][dIx]||"").toUpperCase(),firmaId:String(tfData[j][fIdIx]||"")};}
+    var tkHead=tkData[0];
+    var tIxNo=getCol(tkHead,"teklifno"),tIxFirma=getCol(tkHead,"firma"),tIxSonOkuma=getCol(tkHead,"lastviewed"),tIxAdet=getCol(tkHead,"viewcount");
+    var sicakFirsatlar=[], userMail=String(aktifEmail||"").trim().toLowerCase();
+    var isAdmin=(userMail==="ulas.ozbas@avrupabir.com.tr"||userMail==="kurumsal_isg_partneri@avrupabir.com.tr");
+    for(var r=1;r<tkData.length;r++){
+      var pRakam=Number(tkData[r][tIxAdet]||0);
+      if(pRakam>=1){
+        var teklifNmr=String(tkData[r][tIxNo]||"");
+        var ekBilgi=creatorMap[teklifNmr]||{};
+        if(ekBilgi.durum==="ONAYLANDI"||ekBilgi.durum==="KAZANILDI"||ekBilgi.durum==="REDDEDİLDİ") continue;
+        var asilSahibi=ekBilgi.olusturan||"";
+        if(isAdmin||asilSahibi===userMail||!asilSahibi){
+          var h_rawDate=tkData[r][tIxSonOkuma];
+          var parseDate=(h_rawDate instanceof Date)?h_rawDate:new Date(h_rawDate);
+          sicakFirsatlar.push({no:teklifNmr,firmaAdi:String(tkData[r][tIxFirma]||"Bilinmiyor"),sayac:pRakam,sahibi:asilSahibi,zamanObj:parseDate.getTime()||0,sonBakisTarihi:isFinite(parseDate)?Utilities.formatDate(parseDate,"Europe/Istanbul","dd.MM.yyyy HH:mm"):"-"});
+        }
+      }
+    }
+    sicakFirsatlar.sort(function(a,b){return b.zamanObj-a.zamanObj;});
+    return sicakFirsatlar.slice(0,15);
+  } catch(e) { return []; }
+}
+
+// ==========================================
+// HATIRLATMALAR
+// ==========================================
+function api_getTakipHatirlatmalar(aktifEmail) {
+  try {
+    var mail=String(aktifEmail||"").trim().toLowerCase();
+    if(!mail) return [];
+    var ss=SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh=ss.getSheetByName("HAREKETLER");
+    if(!sh) return [];
+    var data=sh.getDataRange().getValues();
+    if(data.length<2) return [];
+    var head=data[0];
+    function getCol(aranan){for(var m=0;m<head.length;m++){if(String(head[m]).toLowerCase().replace(/\s/g,"")===aranan)return m;}return -1;}
+    var ixt=getCol("tarih"),ixFirma=getCol("firmaunvani"),ixFirmaId=getCol("firmaid"),ixUser=getCol("kullaniciemail"),ixSonraki=getCol("sonrakitarih"),ixNot=getCol("not");
+    if(ixFirma===-1) ixFirma=getCol("firma");
+    if(ixSonraki===-1||ixUser===-1||ixt===-1) return [];
+    var bugunTarihText=Utilities.formatDate(new Date(),"Europe/Istanbul","dd.MM.yyyy");
+    var limitsizAksiyonCariFirmaLogu={};
+    var now=new Date();
+    var zamanSiniriPulu=new Date(now.getFullYear(),now.getMonth(),now.getDate(),23,59,59).getTime();
+    for(var x=data.length-1;x>=1;x--){
+      var rxUser=String(data[x][ixUser]||"").trim().toLowerCase();
+      var fidAksi=String(data[x][ixFirmaId]||"").trim();
+      if(rxUser===mail&&fidAksi!==""){
+        var hamTarStr=data[x][ixt];
+        var tespitZamani;
+        if(hamTarStr instanceof Date) tespitZamani=Utilities.formatDate(hamTarStr,"Europe/Istanbul","dd.MM.yyyy");
+        else tespitZamani=String(hamTarStr).substring(0,10);
+        if(tespitZamani===bugunTarihText) limitsizAksiyonCariFirmaLogu[fidAksi]=true;
+      }
+    }
+    var cikti=[], engelliIkinciKopya={};
+    for(var i=data.length-1;i>=1;i--){
+      var rUser=String(data[i][ixUser]||"").trim().toLowerCase();
+      var rTarih=String(data[i][ixSonraki]||"").trim();
+      var fIdSonuc=String(data[i][ixFirmaId]||"").trim();
+      if(rUser===mail&&rTarih!==""&&fIdSonuc!==""&&!limitsizAksiyonCariFirmaLogu[fIdSonuc]&&!engelliIkinciKopya[fIdSonuc]){
+        var parsTarih;
+        if(data[i][ixSonraki] instanceof Date){parsTarih=data[i][ixSonraki];}
+        else{var ayrac=rTarih.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);if(ayrac){parsTarih=new Date(ayrac[3],ayrac[2]-1,ayrac[1],23,59,0);}else continue;}
+        if(parsTarih.getTime()<=zamanSiniriPulu){
+          engelliIkinciKopya[fIdSonuc]=true;
+          cikti.push({firmaId:fIdSonuc,firmaAdi:String(data[i][ixFirma]||"Bilinmeyen"),planTarihi:Utilities.formatDate(parsTarih,"Europe/Istanbul","dd.MM.yyyy"),hatirlatmaNotu:String(data[i][ixNot]||"...")});
+        }
+      }
+      if(cikti.length>=8) break;
+    }
+    cikti=cikti.filter(function(x){return String(x.firmaAdi||"").toUpperCase().indexOf("AVRUPA")===-1;});
+    return cikti;
+  } catch(e) { return []; }
+}
+
+// ==========================================
+// FİRMA GEÇMİŞ DETAY
+// ==========================================
+function api_getFirmaGecmisiDetay(p) {
+  try {
+    p = p || {};
+    var fId=String(p.firmaId||"").trim();
+    if(!fId) return [];
+    var ss=SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh=ss.getSheetByName("HAREKETLER");
+    if(!sh) return [];
+    var data=sh.getDataRange().getValues();
+    if(data.length<2) return [];
+    var head=data[0];
+    function getCol(aranan){for(var m=0;m<head.length;m++){if(String(head[m]).toLowerCase().replace(/\s/g,"")===aranan)return m;}return -1;}
+    var ixt=getCol("tarih"),ixId=getCol("firmaid"),ixUser=getCol("kullaniciemail"),ixk=getCol("kanal"),ixi=getCol("islem"),ixa=getCol("asama"),ixn=getCol("not");
+    if(ixId===-1) return [];
+    var ciktilar=[], taramaLimiti=0;
+    for(var i=data.length-1;i>=1;i--){
+      if(String(data[i][ixId]||"").trim().toLowerCase()===fId.toLowerCase()){
+        var dTar=data[i][ixt];
+        var tarihStr=dTar;
+        if(dTar instanceof Date) tarihStr=Utilities.formatDate(dTar,"Europe/Istanbul","dd.MM.yyyy HH:mm");
+        var hmtzRawUye=String(data[i][ixUser]).split("@")[0].toUpperCase();
+        ciktilar.push({tarih:tarihStr,personel:hmtzRawUye,kanal:String(data[i][ixk]||"-"),islem:String(data[i][ixi]||"-"),asama:String(data[i][ixa]||"-"),not:String(data[i][ixn]||"-")});
+        taramaLimiti++;
+        if(taramaLimiti>=25) break;
+      }
+    }
+    return ciktilar;
+  } catch(e) { return []; }
+}
+
+// ==========================================
+// POLİS DENETİM LİSTESİ
+// ==========================================
+function api_getPoliceAuditList() {
+  var ss=SpreadsheetApp.openById(CRM_SHEET_ID);
+  var shISG=ss.getSheetByName("ISG_HIZMETLER"), shMobil=ss.getSheetByName("MOBIL_SAGLIK_FIRMA"), shIseGiris=ss.getSheetByName("ISE_GIRIS_FIRMA");
+  var shHareket=ss.getSheetByName("HAREKETLER"), shFirma=ss.getSheetByName("FİRMALAR")||ss.getSheetByName("FIRMALAR");
+  if(!shHareket||!shFirma) return [];
+  var hizmetFirmalar={};
+  if(shISG&&shISG.getLastRow()>1){var isgVals=shISG.getDataRange().getValues();for(var i=1;i<isgVals.length;i++){var id=String(isgVals[i][0]||"");if(id)hizmetFirmalar[id]={hizmet:"OSGB"};}}
+  if(shMobil&&shMobil.getLastRow()>1){var mobilVals=shMobil.getDataRange().getValues();for(var m=1;m<mobilVals.length;m++){var mid=String(mobilVals[m][0]||"");if(mid){if(hizmetFirmalar[mid])hizmetFirmalar[mid].hizmet+="+MOBİL";else hizmetFirmalar[mid]={hizmet:"MOBİL"};}}}
+  if(shIseGiris&&shIseGiris.getLastRow()>1){var iseVals=shIseGiris.getDataRange().getValues();for(var g=1;g<iseVals.length;g++){var gid=String(iseVals[g][0]||"");if(gid){if(hizmetFirmalar[gid])hizmetFirmalar[gid].hizmet+="+İŞE GİRİŞ";else hizmetFirmalar[gid]={hizmet:"İŞE GİRİŞ"};}}}
+  var hareketler=shHareket.getDataRange().getValues(), hHead=hareketler[0];
+  function getCol(hdr,aranan){for(var z=0;z<hdr.length;z++){if(String(hdr[z]).toLowerCase().replace(/\s/g,"").indexOf(aranan)>-1)return z;}return -1;}
+  var cxHTar=getCol(hHead,"tarih"),cxHId=getCol(hHead,"firmaid"),cxHIs=getCol(hHead,"islem"),cxHAsa=getCol(hHead,"asama"),cxHNot=getCol(hHead,"not");
+  var lastAuditMap={};
+  for(var h=1;h<hareketler.length;h++){
+    var okunanIslem=String(hareketler[h][cxHIs]||"").toUpperCase();
+    if(okunanIslem==="DENETIM"||okunanIslem==="DENETİM"){
+      var fId=String(hareketler[h][cxHId]||"");
+      var gTarihRaw=hareketler[h][cxHTar];
+      var d=(gTarihRaw instanceof Date)?gTarihRaw:new Date(gTarihRaw);
+      if(isFinite(d)){if(!lastAuditMap[fId]||d>lastAuditMap[fId].tarih)lastAuditMap[fId]={tarih:d,durum:hareketler[h][cxHAsa],aciklama:String(hareketler[h][cxHNot]||"-")};}
+    }
+  }
+  var firmalar=shFirma.getDataRange().getValues(), fHead=firmalar[0];
+  var cFId=getCol(fHead,"firmaid"),cFAd=getCol(fHead,"firmaadi");
+  if(cFAd===-1)cFAd=getCol(fHead,"unvan");
+  var cFYt=getCol(fHead,"yetkili"),cFTl=getCol(fHead,"tel"),cFSor=getCol(fHead,"sorumluad"),cFDrm=getCol(fHead,"durum");
+  var firmaMap={};
+  for(var f=1;f<firmalar.length;f++){var fid=String(firmalar[f][cFId]||"");if(fid)firmaMap[fid]={FirmaAdi:String(firmalar[f][cFAd]||""),YetkiliAdi:String(firmalar[f][cFYt]||""),Telefon:String(firmalar[f][cFTl]||""),SorumluAdSoyad:String(firmalar[f][cFSor]||""),Durum:String(firmalar[f][cFDrm]||"")};}
+  for(var hid in lastAuditMap){if(!hizmetFirmalar[hid]&&firmaMap[hid])hizmetFirmalar[hid]={hizmet:"ESKİ KAYIT"};}
+  var out=[], today=new Date();
+  for(var kid in hizmetFirmalar){
+    var firma=firmaMap[kid];
+    if(!firma) continue;
+    var lastAudit=lastAuditMap[kid];
+    var auditStatus="";
+    if(!lastAudit){auditStatus="NEVER";}
+    else{var gunFarki=(today-lastAudit.tarih)/(1000*60*60*24);auditStatus=gunFarki>=60?"DUE":"OK";}
+    var tarString=lastAudit?Utilities.formatDate(lastAudit.tarih,"Europe/Istanbul","dd.MM.yyyy HH:mm"):"HİÇ ARANMADI";
+    out.push({FirmaID:kid,FirmaAdi:firma.FirmaAdi,YetkiliAdi:firma.YetkiliAdi,Telefon:firma.Telefon,SorumluAdSoyad:firma.SorumluAdSoyad,Hizmet:hizmetFirmalar[kid].hizmet,AuditStatus:auditStatus,SonDenetimTarihi:tarString,SonDenetimDurumu:lastAudit?String(lastAudit.durum):"",SonAlinanNot:lastAudit?String(lastAudit.aciklama):"Bu firmanın denetim sicili boş."});
+  }
+  return out;
+}
+
+// ==========================================
+// CEO YARDIMCI FONKSİYONLAR
+// ==========================================
+function ceo_sheet_(ss, names) {
+  for(var i=0;i<names.length;i++){var sh=ss.getSheetByName(names[i]);if(sh&&sh.getLastRow()>1)return sh;}
+  return null;
+}
+
+function ceo_headerMap_(head) {
+  var map={};
+  head.forEach(function(h,i){var k=String(h||"").trim();if(k)map[k]=i;});
+  return map;
+}
+
+function ceo_idx_(map, candidates) {
+  for(var i=0;i<candidates.length;i++){if(map[candidates[i]]!=null)return map[candidates[i]];}
+  return -1;
+}
+
+function ceo_parseDate_(v) {
+  if(v instanceof Date) return v;
+  var s=String(v||"").trim();
+  if(!s) return null;
+  var m=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  if(m) return new Date(+m[3],+m[2]-1,+m[1]);
+  var d=new Date(s); return isNaN(d.getTime())?null:d;
+}
+
+function ceo_fmtDate_(v) {
+  var d=ceo_parseDate_(v);
+  if(!d) return String(v||"");
+  return Utilities.formatDate(d,"Europe/Istanbul","dd.MM.yyyy");
+}
+
+function ceo_toNum_(v) { return Number(String(v||"0").replace(/[^\d.,\-]/g,"").replace(",",".")) || 0; }
+
+function api_memnuniyetAnalizi() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("MUSTERI_DENETIM") || ss.getSheetByName("POL_DENETIM");
+    if (!sh || sh.getLastRow() < 2) return { ok:true, ortalama:0, liste:[] };
+    var vals = sh.getDataRange().getValues();
+    var head = vals[0].map(function(x){return String(x||"").trim();});
+    var iFirma=head.indexOf("FirmaAdi"), iSkor=head.indexOf("Skor"), iTarih=head.indexOf("Tarih");
+    if(iFirma<0||iSkor<0) return { ok:true, ortalama:0, liste:[] };
+    var firmaMap={};
+    for(var r=1;r<vals.length;r++){
+      var f=String(vals[r][iFirma]||"").trim();
+      if(!f) continue;
+      var skor=Number(vals[r][iSkor])||0;
+      var tarih=iTarih>-1?String(vals[r][iTarih]||""):"";
+      if(!firmaMap[f]) firmaMap[f]={firma:f,toplam:0,adet:0,sonTarih:tarih};
+      firmaMap[f].toplam+=skor; firmaMap[f].adet++; firmaMap[f].sonTarih=tarih;
+    }
+    var liste=Object.keys(firmaMap).map(function(f){var o=firmaMap[f];return{firma:f,ortalama:Math.round((o.toplam/o.adet)*10)/10,adet:o.adet,sonTarih:o.sonTarih};});
+    liste.sort(function(a,b){return a.ortalama-b.ortalama;});
+    var toplamOrtalama=liste.length?Math.round(liste.reduce(function(s,x){return s+x.ortalama;},0)/liste.length*10)/10:0;
+    return { ok:true, ortalama:toplamOrtalama, liste:liste.slice(0,20) };
+  } catch(e) { return { ok:false, ortalama:0, liste:[], msg:e.message }; }
+}

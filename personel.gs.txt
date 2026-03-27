@@ -1,0 +1,435 @@
+
+function api_personelEkle(payload) {
+  try {
+    // YETKİ KONTROLÜ
+    var ekleyenEmail = String(payload.ekleyenEmail || payload.kullanici || "").toLowerCase().trim();
+    var yetkiliPersonelEkleyenler = [
+      "ulas.ozbas@avrupabir.com.tr",
+      "yasemin.orbay@avrupabir.com.tr",
+      "gulbahar.gultekin@avrupabir.com.tr",
+      "dilara.bayrakdar@avrupabir.com.tr"
+    ];
+    if (yetkiliPersonelEkleyenler.indexOf(ekleyenEmail) === -1) {
+      return { ok: false, msg: "Bu işlem için yetkiniz bulunmamaktadır." };
+    }
+
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("PERSONEL_IK") || ss.getSheetByName("Personel");
+    if (!sh) return { ok: false, msg: "Personel sekmesi bulunamadı" };
+
+    var id = "P_" + new Date().getTime();
+    var tarih = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd.MM.yyyy");
+    var iz = payload.izinler || {};
+
+    sh.appendRow([
+      id,                           // A - PersonelID
+      payload.ad,                   // B - Ad Soyad
+      payload.mail,                 // C - E-Posta
+      payload.unvan,                // D - Unvan
+      tarih,                        // E - İşe Giriş Tarihi
+      payload.maas,                 // F - Maaş
+      payload.izin,                 // G - Toplam İzin
+      0,                            // H - Kullanılan İzin
+      payload.izin,                 // I - Kalan İzin
+      0,                            // J - Kazanılan Mesai
+      0,                            // K - Kullanılan Mesai
+      0,                            // L - Kalan Mesai
+      "",                           // M - IBAN
+      "AKTİF",                      // N - Durum
+      iz.panelFirmalar  ? true : false,  // O
+      iz.panelTeklif    ? true : false,  // P
+      iz.panelFinans    ? true : false,  // Q
+      iz.panelAktivite  ? true : false,  // R
+      iz.panelPersonel  ? true : false,  // S
+      iz.panelRapor     ? true : false,  // T
+      payload.gorevYeri || "OFİS"        // U - Görev Yeri
+    ]);
+
+    // Kullanicilar sekmesine de ekle
+    var ku = ss.getSheetByName("Kullanicilar");
+    if (!ku) ku = ss.insertSheet("Kullanicilar");
+    ku.appendRow([
+  payload.mail,
+  "1234",
+  payload.ad,
+  "", "",
+  iz.panelFirmalar ? true : false,
+  iz.panelTeklif ? true : false,
+  iz.panelFinans ? true : false,
+  iz.panelAktivite ? true : false,
+  iz.panelPersonel ? true : false,
+  iz.panelRapor ? true : false,
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "EVET"
+]);
+    chatBildir_("👤 *Yeni Personel Eklendi*\nAd: " + (payload.ad || "") + "\nUnvan: " + (payload.unvan || "") + "\nEkleyen: " + (payload.ekleyenEmail || ""));
+    return { ok: true };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+
+// ==========================================
+// ✏️ PERSONEL GÜNCELLE
+// ==========================================
+function api_personelGuncelle(id, ad, mail, pin, unvan, maas, izin, izinler) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("PERSONEL_IK") || ss.getSheetByName("Personel");
+    if (!sh) return { ok: false, msg: "Personel sekmesi bulunamadı" };
+
+    var data = sh.getDataRange().getValues();
+    var iz = izinler || {};
+    pin = String(pin || "1234").trim();
+
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][0].toString() === id.toString()) {
+        var row = i + 1;
+        sh.getRange(row, 2).setValue(ad);
+        sh.getRange(row, 3).setValue(mail);
+        sh.getRange(row, 4).setValue(unvan);
+        sh.getRange(row, 6).setValue(maas);
+        sh.getRange(row, 7).setValue(izin);
+        sh.getRange(row, 15).setValue(iz.panelFirmalar  ? true : false);
+        sh.getRange(row, 16).setValue(iz.panelTeklif    ? true : false);
+        sh.getRange(row, 17).setValue(iz.panelFinans    ? true : false);
+        sh.getRange(row, 18).setValue(iz.panelAktivite  ? true : false);
+        sh.getRange(row, 19).setValue(iz.panelPersonel  ? true : false);
+        sh.getRange(row, 20).setValue(iz.panelRapor     ? true : false);
+        sh.getRange(row, 21).setValue(iz.gorevYeri || "OFİS");
+        break;
+      }
+    }
+
+    // Kullanicilar sekmesini güncelle — yoksa yeni satır ekle
+    var ku = ss.getSheetByName("Kullanicilar");
+    if (ku) {
+      var kuData = ku.getDataRange().getValues();
+      var bulundu = false;
+
+      for (var j = 1; j < kuData.length; j++) {
+        if (kuData[j][0].toString().toLowerCase() === mail.toLowerCase()) {
+          var kRow = j + 1;
+          ku.getRange(kRow, 2).setValue(pin);
+          ku.getRange(kRow, 3).setValue(ad);
+          ku.getRange(kRow, 6).setValue(iz.panelFirmalar  ? true : false);
+          ku.getRange(kRow, 7).setValue(iz.panelTeklif    ? true : false);
+          ku.getRange(kRow, 8).setValue(iz.panelFinans    ? true : false);
+          ku.getRange(kRow, 9).setValue(iz.panelAktivite  ? true : false);
+          ku.getRange(kRow, 10).setValue(iz.panelPersonel ? true : false);
+          ku.getRange(kRow, 11).setValue(iz.panelRapor    ? true : false);
+          bulundu = true;
+          break;
+        }
+      }
+
+      // Kullanicilar'da yoksa yeni satır ekle
+      if (!bulundu && mail) {
+        ku.appendRow([
+          mail, pin, ad, "", "",
+          iz.panelFirmalar  ? true : false,
+          iz.panelTeklif    ? true : false,
+          iz.panelFinans    ? true : false,
+          iz.panelAktivite  ? true : false,
+          iz.panelPersonel  ? true : false,
+          iz.panelRapor     ? true : false
+        ]);
+      }
+    }
+
+    return { ok: true };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+function toplantiPersonelListesiDoldur() {
+  var sel = document.getElementById('tplRefakatci');
+  sel.innerHTML = '<option value="">-- Personel Seçin --</option>';
+  google.script.run
+    .withSuccessHandler(function(res) {
+      var liste = (res && res.liste) ? res.liste : [];
+      liste.forEach(function(p) {
+        if (p.email === window.currentUserEmail) return;
+        var opt = document.createElement('option');
+        opt.value = p.email;
+        opt.textContent = p.ad + ' — ' + p.email;
+        sel.appendChild(opt);
+      });
+    })
+    .withFailureHandler(function() {})
+    .api_personelListesiGetir();
+}
+// ==========================================
+// 🔄 PERSONEL DURUM GÜNCELLE
+// ==========================================
+function api_personelDurumGuncelle(personelId, yeniDurum, patronEmail) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("PERSONEL_IK") || ss.getSheetByName("Personel");
+    if (!sh) return { ok: false, msg: "Personel sekmesi bulunamadı" };
+
+    var data = sh.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][0].toString() === personelId.toString()) {
+        sh.getRange(i + 1, 14).setValue(yeniDurum); // N - Durum
+        return { ok: true };
+      }
+    }
+    return { ok: false, msg: "Personel bulunamadı" };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+
+// ==========================================
+// 📋 PERSONEL TALEPLERİNİ GETİR
+// ==========================================
+function api_personelTalepleriniGetir(mail) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("PERSONEL_TALEPLER");
+    if (!sh) return [];
+
+    var data = sh.getDataRange().getValues();
+    var list = [];
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][3] || "").toLowerCase() === String(mail || "").toLowerCase() ||
+          String(data[i][4] || "").toLowerCase() === String(mail || "").toLowerCase()) {
+        list.push({
+          id:        String(data[i][0]),
+          tarih:     String(data[i][1]),
+          tur:       String(data[i][2]),
+          talepEden: String(data[i][3]),
+          miktar:    data[i][5],
+          baslangic: String(data[i][6]),
+          bitis:     String(data[i][7]),
+          aciklama:  String(data[i][8]),
+          durum:     String(data[i][9])
+        });
+      }
+    }
+    return list.reverse();
+  } catch(e) { return []; }
+}
+
+// ==========================================
+// ⚙️ ADMİN PERSONEL İŞLEM KAYDET
+// ==========================================
+function api_adminPersonelIslem(p) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("PERSONEL_IK") || ss.getSheetByName("Personel");
+    if (!sh) return { ok: false, msg: "Personel sekmesi bulunamadı" };
+
+    var data = sh.getDataRange().getValues();
+    var tarih = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd.MM.yyyy HH:mm");
+    var row = -1;
+
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(p.personelId)) { row = i + 1; break; }
+    }
+    if (row < 0) return { ok: false, msg: "Personel bulunamadı" };
+
+    // İşlem türüne göre kolonu güncelle
+    if (p.tur === "MESAİ") {
+      var mevcutMesai = parseFloat(data[row-1][9]) || 0;
+      sh.getRange(row, 10).setValue(mevcutMesai + parseFloat(p.miktar));
+    } else if (p.tur === "MESAİ_IZIN") {
+      var kalanMesai = parseFloat(data[row-1][11]) || 0;
+      var kalanIzin = parseFloat(data[row-1][8]) || 0;
+      var gunEkle = Math.floor(parseFloat(p.miktar) / 8);
+      sh.getRange(row, 12).setValue(Math.max(0, kalanMesai - parseFloat(p.miktar)));
+      sh.getRange(row, 9).setValue(kalanIzin + gunEkle);
+    }
+
+    // PERSONEL_ISLEMLER sekmesine kaydet
+    var ish = ss.getSheetByName("PERSONEL_ISLEMLER");
+    if (!ish) {
+      ish = ss.insertSheet("PERSONEL_ISLEMLER");
+      ish.appendRow(["ID", "Tarih", "PersonelID", "PersonelAd", "PersonelMail", "Tur", "Miktar", "Aciklama", "Yapan", "Donem"]);
+    }
+    var donem = Utilities.formatDate(new Date(), "Europe/Istanbul", "MM/yyyy");
+    ish.appendRow([
+      "ISL_" + new Date().getTime(), tarih,
+      p.personelId, p.personelAd, p.personelMail,
+      p.tur, parseFloat(p.miktar) || 0,
+      String(p.aciklama || ""), String(p.yapan || ""), donem
+    ]);
+
+    // PATRONUYARI bildirimi
+    var uyariSh = ss.getSheetByName("PATRONUYARI");
+    if (uyariSh) {
+      var turEmoji = { "AVANS": "💸", "AVANS_DUS": "💸", "MESAİ": "⏰", "PRİM": "🏆", "HARCAMA": "🧾" };
+      uyariSh.appendRow([
+        "B_" + new Date().getTime(), tarih, "PERSONEL",
+        (turEmoji[p.tur] || "📋") + " " + p.tur + " — " + p.personelAd,
+        p.personelAd + " | " + p.tur + " | " + p.miktar + " | " + p.aciklama,
+        false, "", p.yapan
+      ]);
+    }
+
+    return { ok: true };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+function api_ikTalepCevaplaBackend(talepId, karar, yetkiliEmail) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+
+    // PATRONUYARI'dan personel mailini bul (henüz okundu yapma)
+    var personelMail = "";
+    var uyariSatirNo = -1;
+    var uyariSh = ss.getSheetByName("PATRONUYARI");
+    if (uyariSh) {
+      var uyariData = uyariSh.getDataRange().getValues();
+      for (var u = 1; u < uyariData.length; u++) {
+        if (String(uyariData[u][6]) === String(talepId)) {
+          personelMail = String(uyariData[u][7] || "");
+          uyariSatirNo = u + 1;
+          break;
+        }
+      }
+    }
+
+    // PERSONEL_TALEPLER'de talebi bul ve güncelle
+    var sh = ss.getSheetByName("PERSONEL_TALEPLER");
+    if (!sh) return { ok: false, msg: "PERSONEL_TALEPLER sekmesi bulunamadı" };
+
+    var data = sh.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(talepId)) {
+        sh.getRange(i+1, 10).setValue(karar);
+        sh.getRange(i+1, 11).setValue(new Date());
+        sh.getRange(i+1, 12).setValue(yetkiliEmail);
+
+        // Onaylandıysa izin düş
+        if (karar === "ONAYLANDI" && personelMail) {
+          var gun = parseFloat(data[i][5]) || 0;
+          var psh = ss.getSheetByName("PERSONEL_IK") || ss.getSheetByName("Personel");
+          if (psh && gun > 0) {
+            var pdata = psh.getDataRange().getValues();
+            for (var j = 1; j < pdata.length; j++) {
+              if (String(pdata[j][2]).toLowerCase() === personelMail.toLowerCase()) {
+                psh.getRange(j+1, 8).setValue((parseFloat(pdata[j][7])||0) + gun);
+                psh.getRange(j+1, 9).setValue(Math.max(0, (parseFloat(pdata[j][8])||0) - gun));
+                break;
+              }
+            }
+          }
+        }
+
+        // Onay tamamlandı, şimdi okundu işaretle
+        if (uyariSatirNo > 0) {
+          uyariSh.getRange(uyariSatirNo, 6).setValue(true);
+        }
+        return { ok: true };
+      }
+    }
+    return { ok: false, msg: "Talep bulunamadı: " + talepId };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+function api_personelIzinKaydet(email, izinler) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("PERSONEL_IK");
+    if (!sh) return { ok: false, msg: "Sheet bulunamadı" };
+    var data = sh.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][2]||"").toLowerCase() === String(email||"").toLowerCase()) {
+        sh.getRange(i+1, 15).setValue(!!izinler.panelFirmalar);
+        sh.getRange(i+1, 16).setValue(!!izinler.panelTeklif);
+        sh.getRange(i+1, 17).setValue(!!izinler.panelFinans);
+        sh.getRange(i+1, 18).setValue(!!izinler.panelAktivite);
+        sh.getRange(i+1, 19).setValue(!!izinler.panelPersonel);
+        sh.getRange(i+1, 20).setValue(!!izinler.panelRapor);
+        sh.getRange(i+1, 21).setValue(JSON.stringify(izinler));
+        return { ok: true };
+      }
+    }
+    return { ok: false, msg: "Personel bulunamadı" };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+
+
+function api_personelIzinGetir(email) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("PERSONEL_IK");
+    if (!sh) return {};
+    var data = sh.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][2]||"").toLowerCase() === String(email||"").toLowerCase()) {
+        var mevcutIzinler = {
+          panelFirmalar:  data[i][15] === true,
+panelTeklif:    data[i][16] === true,
+panelFinans:    data[i][17] === true,
+panelAktivite:  data[i][18] === true,
+panelPersonel:  data[i][19] === true,
+panelRapor:     data[i][20] === true,
+        };
+        var izinStr = String(data[i][20]||"");
+        if (izinStr && izinStr.startsWith("{")) {
+          try { return Object.assign(mevcutIzinler, JSON.parse(izinStr)); } catch(e) {}
+        }
+        return mevcutIzinler;
+      }
+    }
+    return {};
+  } catch(e) { return {}; }
+}
+
+function api_personelPasifYap(personelId) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("PERSONEL_IK");
+    if (!sh) return { ok: false, msg: "PERSONEL_IK bulunamadı" };
+    var data = sh.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(personelId)) {
+        sh.getRange(i + 1, 14).setValue("PASİF");
+        var ku = ss.getSheetByName("Kullanicilar");
+        if (ku) {
+          var kd = ku.getDataRange().getValues();
+          for (var j = 1; j < kd.length; j++) {
+            if (String(kd[j][0]).toLowerCase() === String(data[i][2]).toLowerCase()) {
+              ku.deleteRow(j + 1);
+              break;
+            }
+          }
+        }
+        chatBildir_("🚫 *Personel Pasife Alındı*\nAd: " + String(data[i][1]||""));
+        return { ok: true };
+      }
+    }
+    return { ok: false, msg: "Personel bulunamadı" };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+
+function api_personelSil(personelId) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("PERSONEL_IK");
+    if (!sh) return { ok: false, msg: "PERSONEL_IK bulunamadı" };
+    var data = sh.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(personelId)) {
+        var silAd = String(data[i][1]||"");
+        var silMail = String(data[i][2]||"").toLowerCase();
+        sh.deleteRow(i + 1);
+        var ku = ss.getSheetByName("Kullanicilar");
+        if (ku) {
+          var kd = ku.getDataRange().getValues();
+          for (var j = 1; j < kd.length; j++) {
+            if (String(kd[j][0]).toLowerCase() === silMail) {
+              ku.deleteRow(j + 1);
+              break;
+            }
+          }
+        }
+        chatBildir_("🗑️ *Personel Silindi*\nAd: " + silAd);
+        return { ok: true };
+      }
+    }
+    return { ok: false, msg: "Personel bulunamadı" };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}

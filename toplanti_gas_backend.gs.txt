@@ -1,0 +1,573 @@
+var TOPLANTI_SHEET = "Toplantılar";
+
+// ── SHEETS BAŞLIKLARI ──
+var TOPLANTI_COLS = [
+  "ID", "Planlayan", "PlanlayanAd", "FirmaId", "FirmaAdi",
+  "Tarih", "Saat", "Konu", "Aciklama", "Refakatci",
+  "RefakatciAd", "Durum", "OlusturmaTarih", "CevapTarih"
+];
+// Sütun indeksleri (1'den başlar)
+var TC = {};
+TOPLANTI_COLS.forEach(function(k, i) { TC[k] = i + 1; });
+
+
+// ════════════════════════════════════════════════════════════
+//  SHEETS YARDIMCI FONKSİYONLARI
+// ════════════════════════════════════════════════════════════
+
+function _toplantiSheet() {
+  var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+var sh = ss.getSheetByName(TOPLANTI_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(TOPLANTI_SHEET);
+    sh.getRange(1, 1, 1, TOPLANTI_COLS.length).setValues([TOPLANTI_COLS]);
+    sh.getRange(1, 1, 1, TOPLANTI_COLS.length)
+      .setBackground('#1e293b')
+      .setFontColor('#ffffff')
+      .setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function _toplantiUniqueId() {
+  return 'TPL_' + new Date().getTime() + '_' + Math.floor(Math.random() * 9000 + 1000);
+}
+
+function _toplantiTumVeri() {
+  var sh = _toplantiSheet();
+  var data = sh.getDataRange().getValues();
+  if (data.length <= 1) return [];
+  return data.slice(1).map(function(row) {
+    var obj = {};
+    TOPLANTI_COLS.forEach(function(k, i) { obj[k] = row[i]; });
+    return obj;
+  });
+}
+
+function _toplantiSatirBul(id) {
+  var sh = _toplantiSheet();
+  var data = sh.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][TC.ID - 1]) === String(id)) return i + 1; // satır no (1-based)
+  }
+  return -1;
+}
+
+// ── Personel adını emailden bul ──
+function _personelAdiBul(email) {
+  try {
+    // Mevcut sisteminizdeki personel sayfasını kullanın
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+var sh = ss.getSheetByName("PERSONEL_IK");
+    if (!sh) return email;
+    var data = sh.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      // Email sütununu bul — mevcut yapınıza göre indeksi ayarlayın
+      var rowEmail = String(data[i][1] || data[i][2] || '').toLowerCase().trim();
+      if (rowEmail === email.toLowerCase().trim()) {
+        return String(data[i][0] || email); // Ad sütunu
+      }
+    }
+    return email;
+  } catch(e) {
+    return email;
+  }
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  API: TOPLANTI OLUŞTUR
+// ════════════════════════════════════════════════════════════
+
+function api_toplantiOlustur(params) {
+  try {
+    var id           = _toplantiUniqueId();
+    var planlayan    = String(params.planlayan || '').trim();
+    var planlayanAd  = _personelAdiBul(planlayan);
+    var firmaId      = String(params.firmaId  || '').trim();
+    var firmaAdi     = String(params.firmaAdi || '').trim();
+    var tarih        = String(params.tarih    || '').trim();
+    var saat         = String(params.saat     || '').trim();
+    var konu         = String(params.konu     || '').trim();
+    var aciklama     = String(params.aciklama || '').trim();
+    var refakatci    = String(params.refakatci|| '').trim();
+    var refakatciAd  = _personelAdiBul(refakatci);
+    var now          = new Date().toLocaleString('tr-TR');
+
+    if (!planlayan || !firmaAdi || !tarih || !konu || !refakatci) {
+      return { ok: false, msg: 'Eksik parametre.' };
+    }
+
+    // ── Sheets'e yaz ──
+    var sh = _toplantiSheet();
+    sh.appendRow([
+      id, planlayan, planlayanAd, firmaId, firmaAdi,
+      tarih, saat, konu, aciklama, refakatci,
+      refakatciAd, 'bekliyor', now, ''
+    ]);
+
+    // ── 1. Refakatçıya Chat Bildirimi ──
+    _toplantiChatGonder(refakatci, {
+      tip:    'davet',
+      id:     id,
+      firma:  firmaAdi,
+      tarih:  tarih,
+      saat:   saat,
+      konu:   konu,
+      mesaj:  planlayanAd + ' sizi "' + firmaAdi + '" toplantısına davet ediyor.',
+      planlayan: planlayanAd + ' (' + planlayan + ')'
+    });
+
+    // ── 2. Müdüre Chat Bildirimi ──
+    var mudurEmail = _mudurEmailGetir();
+    if (mudurEmail && mudurEmail !== planlayan) {
+      _toplantiChatGonder(mudurEmail, {
+        tip:    'bilgi',
+        id:     id,
+        firma:  firmaAdi,
+        tarih:  tarih,
+        saat:   saat,
+        konu:   konu,
+        mesaj:  planlayanAd + ', ' + firmaAdi + ' toplantısı için ' + refakatciAd + ' bey/hanımı refakatçı olarak seçti.',
+        planlayan: planlayanAd
+      });
+    }
+     Logger.log("Refakatci email: " + refakatci);
+Logger.log("RefakatciAd: " + refakatciAd);
+    // ── 3. Refakatçıya Mail ──
+    _toplantiMailGonder(refakatci, refakatciAd, {
+      tip:       'davet',
+      firma:     firmaAdi,
+      tarih:     tarih,
+      saat:      saat,
+      konu:      konu,
+      aciklama:  aciklama,
+      planlayan: planlayanAd,
+      planlayanEmail: planlayan,
+      id:        id
+    });
+
+    return { ok: true, id: id };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  API: TOPLANTI CEVAPLA (Kabul / Red)
+// ════════════════════════════════════════════════════════════
+
+function api_toplantiCevapla(params) {
+  try {
+    var id     = String(params.id    || '').trim();
+    var karar  = String(params.karar || '').trim(); // 'kabul' veya 'red'
+    var email  = String(params.email || '').trim();
+
+    if (!id || !karar) return { ok: false, msg: 'Eksik parametre.' };
+
+    var satir = _toplantiSatirBul(id);
+    if (satir < 0) return { ok: false, msg: 'Toplantı bulunamadı.' };
+
+    var sh  = _toplantiSheet();
+    var row = sh.getRange(satir, 1, 1, TOPLANTI_COLS.length).getValues()[0];
+
+    var planlayan   = String(row[TC.Planlayan    - 1] || '');
+    var planlayanAd = String(row[TC.PlanlayanAd  - 1] || planlayan);
+    var firmaAdi    = String(row[TC.FirmaAdi     - 1] || '');
+    var tarih       = String(row[TC.Tarih        - 1] || '');
+    var saat        = String(row[TC.Saat         - 1] || '');
+    var konu        = String(row[TC.Konu         - 1] || '');
+    var refAd       = String(row[TC.RefakatciAd  - 1] || email);
+
+    // Durum güncelle
+    sh.getRange(satir, TC.Durum).setValue(karar);
+    sh.getRange(satir, TC.CevapTarih).setValue(new Date().toLocaleString('tr-TR'));
+
+    // Satır rengi
+    var renk = karar === 'kabul' ? '#dcfce7' : '#fee2e2';
+    sh.getRange(satir, 1, 1, TOPLANTI_COLS.length).setBackground(renk);
+
+    var kararLabel = karar === 'kabul' ? 'KATILACAK ✅' : 'KATILMAYACAK ❌';
+    var kararMesaj = refAd + ', ' + firmaAdi + ' toplantısına ' + kararLabel;
+
+    // ── 1. Planlayana Chat Bildirimi ──
+    _toplantiChatGonder(planlayan, {
+      tip:    'cevap',
+      firma:  firmaAdi,
+      tarih:  tarih,
+      saat:   saat,
+      mesaj:  kararMesaj,
+      karar:  karar
+    });
+
+    // ── 2. Müdüre Chat Bildirimi ──
+    var mudurEmail = _mudurEmailGetir();
+    if (mudurEmail && mudurEmail !== planlayan && mudurEmail !== email) {
+      _toplantiChatGonder(mudurEmail, {
+        tip:   'bilgi_cevap',
+        firma: firmaAdi,
+        tarih: tarih,
+        mesaj: kararMesaj,
+        karar: karar
+      });
+    }
+
+    // ── 3. Planlayana Mail ──
+    _toplantiMailGonder(planlayan, planlayanAd, {
+      tip:        'cevap',
+      firma:      firmaAdi,
+      tarih:      tarih,
+      saat:       saat,
+      konu:       konu,
+      refakatci:  refAd,
+      karar:      karar,
+      kararLabel: kararLabel
+    });
+
+    // ── 4. Red ise müdüre ekstra mail ──
+    if (karar === 'red' && mudurEmail) {
+      _toplantiMailGonder(mudurEmail, 'Müdür', {
+        tip:        'red_bilgi',
+        firma:      firmaAdi,
+        tarih:      tarih,
+        saat:       saat,
+        konu:       konu,
+        refakatci:  refAd,
+        planlayan:  planlayanAd,
+        karar:      karar,
+        kararLabel: kararLabel
+      });
+    }
+
+    return { ok: true };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  API: TOPLANTI İPTAL
+// ════════════════════════════════════════════════════════════
+
+function api_toplantiIptal(params) {
+  try {
+    var id    = String(params.id    || '').trim();
+    var email = String(params.email || '').trim();
+
+    var satir = _toplantiSatirBul(id);
+    if (satir < 0) return { ok: false, msg: 'Bulunamadı.' };
+
+    var sh  = _toplantiSheet();
+    var row = sh.getRange(satir, 1, 1, TOPLANTI_COLS.length).getValues()[0];
+
+    var planlayan  = String(row[TC.Planlayan  - 1]);
+    var refakatci  = String(row[TC.Refakatci  - 1]);
+    var firmaAdi   = String(row[TC.FirmaAdi   - 1]);
+    var tarih      = String(row[TC.Tarih      - 1]);
+    
+    // Sadece planlayan iptal edebilir
+    if (planlayan !== email) return { ok: false, msg: 'Sadece planı oluşturan iptal edebilir.' };
+
+    sh.getRange(satir, TC.Durum).setValue('iptal');
+    sh.getRange(satir, 1, 1, TOPLANTI_COLS.length).setBackground('#f1f5f9');
+
+    // Refakatçıya chat
+    _toplantiChatGonder(refakatci, {
+      tip:   'iptal',
+      firma: firmaAdi,
+      tarih: tarih,
+      mesaj: firmaAdi + ' (' + tarih + ') toplantı planı iptal edildi.'
+    });
+
+    return { ok: true };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  API: TOPLANTI LİSTESİ GETİR
+// ════════════════════════════════════════════════════════════
+
+function api_toplantiListeGetir(params) {
+  try {
+    Logger.log("Fonksiyon çağrıldı, params: " + JSON.stringify(params));
+    
+    var tip = String(params.tip || "planladiklari").toLowerCase().trim();
+    var email = String(params.email || "").toLowerCase().trim();
+    var filtreTarih = String(params.tarih || "").trim();
+    var filtreDurum = String(params.durum || "").trim();
+    
+    if (!email) return { ok: false, liste: [], msg: "Email gerekli" };
+    
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("Toplantılar");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, liste: [] };
+    
+    var data = sh.getDataRange().getValues();
+    var liste = [];
+    
+    function formatTarih(d) {
+      if (!d) return "";
+      if (typeof d === 'string') {
+        if (d.match(/^\d{4}-\d{2}-\d{2}/)) return d.split('T')[0];
+        return d;
+      }
+      if (d instanceof Date) {
+        var year = d.getFullYear();
+        var month = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return year + '-' + month + '-' + day;
+      }
+      return String(d);
+    }
+    
+    function formatSaat(d) {
+      if (!d) return "";
+      if (typeof d === 'string') {
+        if (d.match(/^\d{2}:\d{2}/)) return d.substring(0, 5);
+        if (d.indexOf(':') > -1) {
+          var parts = d.match(/(\d{1,2}):(\d{2})/);
+          if (parts) return String(parts[1]).padStart(2, '0') + ':' + parts[2];
+        }
+        return d;
+      }
+      if (d instanceof Date) {
+        var h = String(d.getHours()).padStart(2, '0');
+        var m = String(d.getMinutes()).padStart(2, '0');
+        return h + ':' + m;
+      }
+      return String(d);
+    }
+    
+    for (var i = 1; i < data.length; i++) {
+      var id = String(data[i][0] || "").trim();
+      var planlayan = String(data[i][1] || "").toLowerCase().trim();
+      var planlayiciAd = String(data[i][2] || "").trim();
+      var firmaId = String(data[i][3] || "").trim();
+      var firmaAdi = String(data[i][4] || "").trim();
+      var tarih = formatTarih(data[i][5]);
+      var saat = formatSaat(data[i][6]);
+      var konu = String(data[i][7] || "").trim();
+      var aciklama = String(data[i][8] || "").trim();
+      var refakatci = String(data[i][9] || "").toLowerCase().trim();
+      var refakatciAd = String(data[i][10] || "").trim();
+      var durum = String(data[i][11] || "").trim().toLowerCase();
+      var olusturmaTarihi = formatTarih(data[i][12]);
+      
+      if (!id || (!firmaAdi && !konu)) continue;
+      
+      var uygunMu = false;
+      if (tip === "planladiklari" && planlayan === email) {
+        uygunMu = true;
+      } else if (tip === "davetedildikleri" && refakatci === email) {
+        uygunMu = true;
+      }
+      
+      if (!uygunMu) continue;
+      if (filtreTarih && tarih !== filtreTarih) continue;
+      if (filtreDurum && durum !== filtreDurum.toLowerCase()) continue;
+      
+      var toplanti = {
+        id: id,
+        firmaId: firmaId,
+        firmaAdi: firmaAdi,
+        tarih: tarih,
+        saat: saat,
+        konu: konu,
+        aciklama: aciklama,
+        durum: durum,
+        planlayan: planlayiciAd,
+        refakatci: refakatciAd,
+        olusturmaTarihi: olusturmaTarihi
+      };
+      
+      liste.push(toplanti);
+    }
+    
+    liste.sort(function(a, b) {
+      var dateA = new Date(a.tarih + "T" + a.saat);
+      var dateB = new Date(b.tarih + "T" + b.saat);
+      return dateB - dateA;
+    });
+    
+    Logger.log("Sonuç: " + JSON.stringify(liste));
+    return { ok: true, liste: liste };
+    
+  } catch(e) {
+    Logger.log("HATA (api_toplantiListeGetir): " + e.message);
+    return { ok: false, liste: [], msg: e.message };
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  YARDIMCI: CHAT BİLDİRİMİ GÖNDER
+//  (Mevcut sisteminizin chat yapısına uyarlayın)
+// ════════════════════════════════════════════════════════════
+
+function _toplantiChatGonder(hedefEmail, data) {
+  try {
+    var ikon = '📅';
+    var baslik = '';
+    var metin  = data.mesaj || '';
+
+    if (data.tip === 'davet') {
+      ikon   = '🤝';
+      baslik = 'Toplantı Daveti — ' + data.firma;
+      metin  = '📆 ' + data.tarih + ' — 🕐 ' + data.saat + '\n' +
+               '📝 ' + data.konu + '\n' +
+               '👤 ' + data.planlayan + ' sizi bu toplantıya davet ediyor.\n\n' +
+               '🔔 CRM\'de "Davet Edildiğim" sekmesinden yanıtlayabilirsiniz.';
+    } else if (data.tip === 'cevap') {
+      ikon   = data.karar === 'kabul' ? '✅' : '❌';
+      baslik = 'Toplantı Daveti Yanıtı — ' + data.firma;
+    } else if (data.tip === 'bilgi') {
+      ikon   = '📋';
+      baslik = '[Müdür Bilgisi] Yeni Toplantı Planı';
+    } else if (data.tip === 'bilgi_cevap') {
+      ikon   = data.karar === 'kabul' ? '✅' : '❌';
+      baslik = '[Müdür Bilgisi] Toplantı Daveti Yanıtı';
+    } else if (data.tip === 'iptal') {
+      ikon   = '🚫';
+      baslik = 'Toplantı İptal Edildi';
+    }
+
+    // Mevcut sisteminizde chat mesajı nasıl kaydediliyorsa aynı şekilde çağırın
+    // Örnek — mevcut yapınıza göre düzenleyin:
+    _chatMesajiKaydet({
+      alici:   hedefEmail,
+      gonderen: 'sistem@avrupabir.com.tr',
+      baslik:  ikon + ' ' + baslik,
+      mesaj:   metin,
+      tip:     'toplanti_bildirimi',
+      veri:    JSON.stringify(data)
+    });
+
+  } catch(e) {
+    console.log('Chat bildirimi gönderilemedi: ' + e.message);
+  }
+}
+
+function _chatMesajiKaydet(params) {
+  try {
+    var mesaj = params.baslik + "\n" + params.mesaj;
+    chatBildir_(mesaj, "MUDUR");
+  } catch(e) {
+    Logger.log('Chat gönderilemedi: ' + e.message);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  YARDIMCI: MAİL GÖNDER
+// ════════════════════════════════════════════════════════════
+
+function _toplantiMailGonder(hedefEmail, hedefAd, data) {
+  try {
+    var konu = '';
+    var govde = '';
+
+    if (data.tip === 'davet') {
+      konu = '📅 Toplantı Daveti: ' + data.firma + ' — ' + data.tarih;
+      govde = _toplantiMailSablonu({
+        baslik:    '🤝 Toplantı Davetiniz Var!',
+        renk:      '#6366f1',
+        icerik:
+          '<p>Merhaba <b>' + hedefAd + '</b>,</p>' +
+          '<p><b>' + data.planlayan + '</b> sizi aşağıdaki toplantıya davet ediyor:</p>' +
+          '<table style="width:100%;border-collapse:collapse;margin:16px 0;">' +
+            '<tr><td style="padding:8px;background:#f8fafc;font-weight:bold;width:130px;">🏢 Firma</td><td style="padding:8px;border:1px solid #e2e8f0;">' + data.firma + '</td></tr>' +
+            '<tr><td style="padding:8px;background:#f8fafc;font-weight:bold;">📆 Tarih</td><td style="padding:8px;border:1px solid #e2e8f0;">' + data.tarih + '</td></tr>' +
+            '<tr><td style="padding:8px;background:#f8fafc;font-weight:bold;">🕐 Saat</td><td style="padding:8px;border:1px solid #e2e8f0;">' + data.saat + '</td></tr>' +
+            '<tr><td style="padding:8px;background:#f8fafc;font-weight:bold;">📝 Konu</td><td style="padding:8px;border:1px solid #e2e8f0;">' + data.konu + '</td></tr>' +
+            (data.aciklama ? '<tr><td style="padding:8px;background:#f8fafc;font-weight:bold;">💬 Açıklama</td><td style="padding:8px;border:1px solid #e2e8f0;">' + data.aciklama + '</td></tr>' : '') +
+          '</table>' +
+          '<p style="background:#fef3c7;padding:12px;border-radius:8px;border-left:4px solid #f59e0b;">⚠️ Lütfen CRM sistemi üzerinden <b>"Davet Edildiğim"</b> sekmesinden yanıtlayın.</p>'
+      });
+
+    } else if (data.tip === 'cevap') {
+      var kararRenk = data.karar === 'kabul' ? '#10b981' : '#ef4444';
+      konu = (data.karar === 'kabul' ? '✅' : '❌') + ' Toplantı Yanıtı: ' + data.firma + ' — ' + data.refakatci;
+      govde = _toplantiMailSablonu({
+        baslik:    data.karar === 'kabul' ? '✅ Davet Kabul Edildi' : '❌ Davet Reddedildi',
+        renk:      kararRenk,
+        icerik:
+          '<p>Merhaba <b>' + hedefAd + '</b>,</p>' +
+          '<p><b>' + data.refakatci + '</b>, ' + data.firma + ' toplantısına <b style="color:' + kararRenk + '">' + data.kararLabel + '</b></p>' +
+          '<table style="width:100%;border-collapse:collapse;margin:16px 0;">' +
+            '<tr><td style="padding:8px;background:#f8fafc;font-weight:bold;width:130px;">🏢 Firma</td><td style="padding:8px;border:1px solid #e2e8f0;">' + data.firma + '</td></tr>' +
+            '<tr><td style="padding:8px;background:#f8fafc;font-weight:bold;">📆 Tarih</td><td style="padding:8px;border:1px solid #e2e8f0;">' + data.tarih + ' — ' + data.saat + '</td></tr>' +
+          '</table>' +
+          (data.karar === 'red' ? '<p style="background:#fee2e2;padding:12px;border-radius:8px;border-left:4px solid #ef4444;">ℹ️ CRM üzerinden yeni bir refakatçı seçebilirsiniz.</p>' : '')
+      });
+
+    } else if (data.tip === 'red_bilgi') {
+      konu = '⚠️ Toplantı Daveti Reddedildi: ' + data.firma;
+      govde = _toplantiMailSablonu({
+        baslik: '⚠️ Refakatçı Daveti Reddedildi',
+        renk:   '#f59e0b',
+        icerik:
+          '<p>Merhaba,</p>' +
+          '<p><b>' + data.refakatci + '</b>, <b>' + data.planlayan + '</b> tarafından planlanan <b>' + data.firma + '</b> toplantısını reddetti.</p>' +
+          '<table style="width:100%;border-collapse:collapse;margin:16px 0;">' +
+            '<tr><td style="padding:8px;background:#f8fafc;font-weight:bold;width:130px;">🏢 Firma</td><td style="padding:8px;border:1px solid #e2e8f0;">' + data.firma + '</td></tr>' +
+            '<tr><td style="padding:8px;background:#f8fafc;font-weight:bold;">📆 Tarih</td><td style="padding:8px;border:1px solid #e2e8f0;">' + data.tarih + '</td></tr>' +
+            '<tr><td style="padding:8px;background:#f8fafc;font-weight:bold;">👤 Planlayan</td><td style="padding:8px;border:1px solid #e2e8f0;">' + data.planlayan + '</td></tr>' +
+          '</table>'
+      });
+    }
+
+    if (konu && govde) {
+      GmailApp.sendEmail(hedefEmail, konu, '', { htmlBody: govde, name: 'Avrupa İSG CRM' });
+    }
+  } catch(e) {
+    console.log('Mail gönderilemedi (' + hedefEmail + '): ' + e.message);
+  }
+}
+
+function _toplantiMailSablonu(params) {
+  return '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;background:#f6f7fb;margin:0;padding:20px;">' +
+    '<div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);">' +
+      '<div style="background:' + params.renk + ';padding:20px 24px;">' +
+        '<h2 style="color:#fff;margin:0;font-size:18px;">' + params.baslik + '</h2>' +
+      '</div>' +
+      '<div style="padding:24px;">' +
+        params.icerik +
+      '</div>' +
+      '<div style="background:#f8fafc;padding:12px 24px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8;text-align:center;">' +
+        'Bu mail Avrupa İSG CRM sistemi tarafından otomatik gönderilmiştir.' +
+      '</div>' +
+    '</div>' +
+  '</body></html>';
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  YARDIMCI: MÜDÜR EMAİL
+//  (Mevcut sisteminizde müdür emaili nasıl tutuluyorsa oradan alın)
+// ════════════════════════════════════════════════════════════
+
+function _mudurEmailGetir() {
+  try {
+    // Mevcut yapınıza göre düzenleyin:
+    // Örnek 1 — sabit:
+     return 'ulas.ozbas@avrupabir.com.tr';
+    
+    // Örnek 2 — Ayarlar sheet'inden:
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sh = ss.getSheetByName("Ayarlar") || ss.getSheetByName("Kullanicilar");
+    if (!sh) return '';
+    var data = sh.getDataRange().getValues();
+    for (var i = 0; i < data.length; i++) {
+      if (String(data[i][0]).toLowerCase() === 'mudur' || String(data[i][2]).toLowerCase() === 'mudur') {
+        return String(data[i][1] || data[i][0] || '');
+      }
+    }
+    return '';
+  } catch(e) {
+    return '';
+  }
+}

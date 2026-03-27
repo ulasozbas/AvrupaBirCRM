@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSGB Finansal Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #f5f6fa;
+    color: #2d3436;
+    font-size: 13px;
+    padding: 12px;
+  }
+
+  /* ── Üst başlık ── */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .header h1 { font-size: 16px; font-weight: 600; color: #2d3436; }
+  .header .guncelleme { font-size: 11px; color: #636e72; }
+  .btn-yenile {
+    background: #0984e3;
+    color: #fff;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .btn-yenile:hover { background: #0873c4; }
+
+  /* ── 4 büyük kart ── */
+  .kartlar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .kart {
+    background: #fff;
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    border-left: 4px solid #dfe6e9;
+  }
+  .kart.yesil { border-left-color: #00b894; }
+  .kart.mavi  { border-left-color: #0984e3; }
+  .kart.turuncu { border-left-color: #e17055; }
+  .kart.mor   { border-left-color: #6c5ce7; }
+
+  .kart .etiket {
+    font-size: 11px;
+    color: #636e72;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .kart .tutar {
+    font-size: 22px;
+    font-weight: 700;
+    color: #2d3436;
+    line-height: 1;
+  }
+  .kart .alt-bilgi {
+    font-size: 11px;
+    color: #636e72;
+    margin-top: 4px;
+  }
+
+  /* ── Skorboard ── */
+  .skorboard {
+    background: #fff;
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    margin-bottom: 12px;
+  }
+  .skorboard-baslik {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .skorboard-baslik h3 { font-size: 13px; font-weight: 600; }
+  .yuzde-badge {
+    font-size: 20px;
+    font-weight: 700;
+  }
+  .yuzde-badge.yeterli  { color: #00b894; }
+  .yuzde-badge.dikkat   { color: #fdcb6e; }
+  .yuzde-badge.yetersiz { color: #d63031; }
+
+  .progress-bar {
+    width: 100%;
+    height: 18px;
+    background: #dfe6e9;
+    border-radius: 9px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .progress-dolgu {
+    height: 100%;
+    border-radius: 9px;
+    transition: width 0.8s ease;
+  }
+  .progress-dolgu.yeterli  { background: linear-gradient(90deg, #55efc4, #00b894); }
+  .progress-dolgu.dikkat   { background: linear-gradient(90deg, #ffeaa7, #fdcb6e); }
+  .progress-dolgu.yetersiz { background: linear-gradient(90deg, #ff7675, #d63031); }
+
+  .skor-detay {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #636e72;
+  }
+  .skor-mesaj {
+    font-size: 12px;
+    margin-top: 6px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: #f5f6fa;
+  }
+
+  /* ── Çift kolon ── */
+  .iki-kolon {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  /* ── Liste panelleri ── */
+  .panel {
+    background: #fff;
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  .panel h3 {
+    font-size: 12px;
+    font-weight: 600;
+    color: #636e72;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+  }
+  .hareket-listesi { list-style: none; }
+  .hareket-listesi li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid #f5f6fa;
+    font-size: 12px;
+  }
+  .hareket-listesi li:last-child { border-bottom: none; }
+  .hareket-listesi .h-tarih { color: #b2bec3; font-size: 11px; }
+  .hareket-listesi .h-aciklama { flex: 1; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hareket-listesi .h-tutar { font-weight: 600; white-space: nowrap; }
+  .h-tutar.giris  { color: #00b894; }
+  .h-tutar.cikis  { color: #d63031; }
+
+  /* ── Ödeme tipi badge ── */
+  .badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .badge.nakit  { background: #d1fae5; color: #065f46; }
+  .badge.kart   { background: #dbeafe; color: #1e40af; }
+  .badge.eft    { background: #fef3c7; color: #92400e; }
+  .badge.cari   { background: #ede9fe; color: #5b21b6; }
+
+  /* ── Loading ── */
+  .yukleniyor {
+    text-align: center;
+    padding: 30px;
+    color: #b2bec3;
+    font-size: 13px;
+  }
+  .hata { color: #d63031; background: #fff5f5; padding: 10px; border-radius: 8px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>💼 OSGB Finansal Dashboard</h1>
+    <div class="guncelleme" id="guncelleme-zaman">Yükleniyor...</div>
+  </div>
+  <button class="btn-yenile" onclick="yukle()">↻ Yenile</button>
+</div>
+
+<!-- 4 Büyük Kart -->
+<div class="kartlar" id="kartlar">
+  <div class="yukleniyor">Veriler yükleniyor...</div>
+</div>
+
+<!-- Skorboard -->
+<div class="skorboard" id="skorboard">
+  <div class="yukleniyor">Skorboard yükleniyor...</div>
+</div>
+
+<!-- İki Kolon: Son Hareketler + Bekleyen Çekler -->
+<div class="iki-kolon">
+  <div class="panel">
+    <h3>📋 Son Kasa Hareketleri</h3>
+    <ul class="hareket-listesi" id="son-kasa"></ul>
+  </div>
+  <div class="panel">
+    <h3>💳 Son Tahsilatlar</h3>
+    <ul class="hareket-listesi" id="son-tahsilat"></ul>
+  </div>
+</div>
+
+<!-- Aylık Tahsilat Özeti -->
+<div class="panel" style="margin-bottom:12px">
+  <h3>📊 Bu Ay Tahsilat Dağılımı</h3>
+  <div id="tahsilat-dagilim" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px;"></div>
+</div>
+
+<script>
+  function yukle() {
+    document.getElementById('guncelleme-zaman').textContent = 'Yükleniyor...';
+    google.script.run
+      .withSuccessHandler(render)
+      .withFailureHandler(hataGoster)
+      .dashboardVerisiAl();
+  }
+
+  function render(veri) {
+    document.getElementById('guncelleme-zaman').textContent = 'Son güncelleme: ' + veri.guncelleme;
+
+    // ── 4 Kart ──
+    const k = veri.kartlar;
+    document.getElementById('kartlar').innerHTML = `
+      <div class="kart yesil">
+        <div class="etiket">🏦 Kasa Nakit</div>
+        <div class="tutar">${formatPara(k.kasaNakit)}</div>
+        <div class="alt-bilgi">Anlık nakit bakiye</div>
+      </div>
+      <div class="kart mavi">
+        <div class="etiket">🏛️ Banka Nakit</div>
+        <div class="tutar">${formatPara(k.bankaNakit)}</div>
+        <div class="alt-bilgi">Tüm banka hesapları toplamı</div>
+      </div>
+      <div class="kart turuncu">
+        <div class="etiket">⚠️ Toplam Borçlar</div>
+        <div class="tutar">${formatPara(k.toplamBorclar)}</div>
+        <div class="alt-bilgi">Çek + SGK + Vergi bekleyenler</div>
+      </div>
+      <div class="kart mor">
+        <div class="etiket">📌 Aylık Sabit Gider</div>
+        <div class="tutar">${formatPara(k.aylikSabitGider)}</div>
+        <div class="alt-bilgi">Planlanan toplam / ay</div>
+      </div>
+    `;
+
+    // ── Skorboard ──
+    const s = veri.skorboard;
+    const genislik = Math.min(s.yuzde, 100);
+    document.getElementById('skorboard').innerHTML = `
+      <div class="skorboard-baslik">
+        <div>
+          <h3>🎯 Aylık Ödeme Skorboard'u — ${s.donem}</h3>
+          <div style="font-size:11px;color:#636e72;margin-top:2px">
+            Sabit giderler için gereken ${formatPara(s.hedefTutar)}'e karşı gerçekleşen tahsilat
+          </div>
+        </div>
+        <div class="yuzde-badge ${s.durum}">%${s.yuzde}</div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-dolgu ${s.durum}" style="width:${genislik}%"></div>
+      </div>
+      <div class="skor-detay">
+        <span>Giren: <strong>${formatPara(s.gerceklesen)}</strong></span>
+        <span>Hedef: <strong>${formatPara(s.hedefTutar)}</strong></span>
+        <span>Kalan: <strong>${formatPara(s.kalan)}</strong></span>
+      </div>
+      <div class="skor-mesaj">${s.mesaj}</div>
+    `;
+
+    // ── Son Kasa Hareketleri ──
+    const kasaListesi = document.getElementById('son-kasa');
+    if (veri.sonKasaHareketler && veri.sonKasaHareketler.length > 0) {
+      kasaListesi.innerHTML = veri.sonKasaHareketler.map(h => `
+        <li>
+          <span class="h-tarih">${h.tarih}</span>
+          <span class="h-aciklama">${h.aciklama}</span>
+          <span class="h-tutar ${h.tip === 'Giriş' ? 'giris' : 'cikis'}">
+            ${h.tip === 'Giriş' ? '+' : '-'}${formatPara(h.tutar)}
+          </span>
+        </li>
+      `).join('');
+    } else {
+      kasaListesi.innerHTML = '<li><span class="h-aciklama" style="color:#b2bec3">Hareket yok</span></li>';
+    }
+
+    // ── Son Tahsilatlar ──
+    const tahsilatListesi = document.getElementById('son-tahsilat');
+    if (veri.sonTahsilatlar && veri.sonTahsilatlar.length > 0) {
+      tahsilatListesi.innerHTML = veri.sonTahsilatlar.map(t => `
+        <li>
+          <span class="h-tarih">${t.tarih}</span>
+          <span class="h-aciklama">${t.musteriAd}</span>
+          <span class="badge ${odemeTipBadge(t.odemeTipi)}">${odemeTipKisa(t.odemeTipi)}</span>
+          <span class="h-tutar giris" style="margin-left:6px">+${formatPara(t.tutar)}</span>
+        </li>
+      `).join('');
+    } else {
+      tahsilatListesi.innerHTML = '<li><span class="h-aciklama" style="color:#b2bec3">Tahsilat yok</span></li>';
+    }
+
+    // ── Tahsilat Dağılımı ──
+    const at = veri.aylikTahsilat;
+    document.getElementById('tahsilat-dagilim').innerHTML = `
+      <div style="text-align:center;min-width:80px">
+        <div style="font-size:16px;font-weight:700;color:#00b894">${formatPara(at.nakit)}</div>
+        <div class="badge nakit" style="margin-top:3px">Nakit</div>
+      </div>
+      <div style="text-align:center;min-width:80px">
+        <div style="font-size:16px;font-weight:700;color:#0984e3">${formatPara(at.kart)}</div>
+        <div class="badge kart" style="margin-top:3px">K.Kartı</div>
+      </div>
+      <div style="text-align:center;min-width:80px">
+        <div style="font-size:16px;font-weight:700;color:#e17055">${formatPara(at.eft)}</div>
+        <div class="badge eft" style="margin-top:3px">EFT</div>
+      </div>
+      <div style="text-align:center;min-width:80px">
+        <div style="font-size:16px;font-weight:700;color:#6c5ce7">${formatPara(at.cari)}</div>
+        <div class="badge cari" style="margin-top:3px">Cari</div>
+      </div>
+      <div style="text-align:center;min-width:80px;margin-left:auto">
+        <div style="font-size:16px;font-weight:700">${formatPara(at.toplamTutar)}</div>
+        <div style="font-size:11px;color:#636e72;margin-top:3px">Toplam (${at.adet} işlem)</div>
+      </div>
+    `;
+  }
+
+  function hataGoster(hata) {
+    document.getElementById('kartlar').innerHTML = `<div class="hata" style="grid-column:1/-1">Hata: ${hata.message}</div>`;
+  }
+
+  function formatPara(tutar) {
+    if (tutar === undefined || tutar === null || isNaN(tutar)) return '₺0,00';
+    return '₺' + Number(tutar).toLocaleString('tr-TR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+
+  function odemeTipBadge(tip) {
+    if (tip === 'Nakit') return 'nakit';
+    if (tip === 'Kredi Kartı (POS)') return 'kart';
+    if (tip === 'Havale / EFT') return 'eft';
+    if (tip === 'Cari Hesap') return 'cari';
+    return '';
+  }
+
+  function odemeTipKisa(tip) {
+    if (tip === 'Nakit') return 'Nakit';
+    if (tip === 'Kredi Kartı (POS)') return 'K.Kartı';
+    if (tip === 'Havale / EFT') return 'EFT';
+    if (tip === 'Cari Hesap') return 'Cari';
+    return tip;
+  }
+
+  // Sayfa açılınca yükle
+  yukle();
+  // Her 60 saniyede otomatik yenile
+  setInterval(yukle, 60000);
+</script>
+</body>
+</html>

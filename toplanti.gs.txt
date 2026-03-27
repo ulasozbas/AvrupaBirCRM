@@ -1,0 +1,49 @@
+
+
+function api_personelListesiGetir(payload) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("PERSONEL_IK");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, liste: [] };
+    var data = sh.getDataRange().getValues();
+    var liste = [];
+    for (var i = 1; i < data.length; i++) {
+      var ad    = String(data[i][1] || '').trim();
+      var email = String(data[i][2] || '').trim();
+      if (!email) continue;
+      liste.push({ ad: ad, email: email });
+    }
+    Logger.log("Toplam personel: " + liste.length);
+    Logger.log(JSON.stringify(liste.slice(0,3)));
+    return { ok: true, liste: liste };
+  } catch(e) {
+    Logger.log("HATA: " + e.message);
+    return { ok: true, liste: [] };
+  }
+}
+
+function api_firmaListesiGetir(q) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FIRMALAR");
+    if (!sh || sh.getLastRow() < 2) return { liste: [] };
+    var data = sh.getDataRange().getValues();
+    var liste = [];
+    var aranan = String(q || '').toLowerCase().trim();
+    for (var i = 1; i < data.length; i++) {
+      var ad = String(data[i][1] || '').trim();
+      var id = String(data[i][0] || '').trim();
+      if (!ad) continue;
+      if (aranan && ad.toLowerCase().indexOf(aranan) === -1) continue;
+      liste.push({ firmaId: id, firmaAdi: ad });
+      if (liste.length >= 8) break;
+    }
+    return { liste: liste };
+  } catch(e) {
+    return { liste: [] };
+  }
+}
+
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}

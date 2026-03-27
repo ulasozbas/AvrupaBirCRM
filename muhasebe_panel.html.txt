@@ -1,0 +1,870 @@
+<!-- ============================================================
+     MUHASEBE / BANKO PANELİ
+     Apps Script'te: + → HTML Dosyası → "muhasebe_panel" adıyla ekle
+     Index.html'de muhasebe sekmesi açıldığında bu panel yüklenir
+     ============================================================ -->
+<div id="muhasebePanel">
+
+<style>
+/* ---- Genel ---- */
+#muhasebePanel { font-family:'Segoe UI',Arial,sans-serif; background:#f0f4f8; min-height:100vh; }
+.muh-wrap { max-width:1400px; margin:0 auto; padding:16px; }
+
+/* ---- KPI Kartları ---- */
+.muh-kpi-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
+.muh-kpi { background:#fff; border-radius:12px; padding:16px 18px; box-shadow:0 2px 8px rgba(0,0,0,.07); border-left:4px solid #3b82f6; }
+.muh-kpi.yesil { border-color:#10b981; }
+.muh-kpi.kirmizi { border-color:#ef4444; }
+.muh-kpi.mor { border-color:#8b5cf6; }
+.muh-kpi.turuncu { border-color:#f59e0b; }
+.muh-kpi label { font-size:11px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:.5px; display:block; margin-bottom:4px; }
+.muh-kpi .val { font-size:20px; font-weight:700; color:#1e293b; }
+.muh-kpi .val.pos { color:#10b981; }
+.muh-kpi .val.neg { color:#ef4444; }
+.muh-kpi .val.mor { color:#8b5cf6; }
+
+/* ---- İki Kolon ---- */
+.muh-cols { display:grid; grid-template-columns:420px 1fr; gap:16px; align-items:start; }
+@media(max-width:900px){ .muh-cols { grid-template-columns:1fr; } }
+
+/* ---- Form Kartı ---- */
+.muh-form-card { background:#fff; border-radius:14px; padding:20px; box-shadow:0 2px 10px rgba(0,0,0,.08); }
+.muh-form-card h3 { margin:0 0 16px; font-size:15px; color:#1e293b; display:flex; align-items:center; gap:8px; }
+.tip-tabs { display:flex; gap:6px; margin-bottom:16px; }
+.tip-tab { flex:1; padding:8px 6px; border:2px solid #e2e8f0; border-radius:8px; background:#f8fafc; cursor:pointer; font-size:12px; font-weight:700; text-align:center; transition:all .2s; color:#64748b; }
+.tip-tab.aktif-gelir { border-color:#10b981; background:#ecfdf5; color:#065f46; }
+.tip-tab.aktif-gider { border-color:#ef4444; background:#fef2f2; color:#991b1b; }
+.tip-tab:hover { border-color:#94a3b8; }
+
+.muh-form-group { margin-bottom:12px; }
+.muh-form-group label { display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:4px; }
+.muh-form-group input,
+.muh-form-group select,
+.muh-form-group textarea {
+  width:100%; padding:9px 11px; border:1.5px solid #e2e8f0; border-radius:8px;
+  font-size:14px; color:#1e293b; box-sizing:border-box; transition:border .2s;
+  background:#fff;
+}
+.muh-form-group input:focus,
+.muh-form-group select:focus { outline:none; border-color:#3b82f6; }
+.muh-form-group textarea { resize:vertical; min-height:60px; }
+
+/* Ödeme yöntemi seçici */
+.odeme-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:4px; }
+.odeme-btn {
+  padding:8px 4px; border:2px solid #e2e8f0; border-radius:8px;
+  background:#f8fafc; cursor:pointer; font-size:11px; font-weight:700;
+  text-align:center; transition:all .2s; color:#475569;
+}
+.odeme-btn.aktif { border-color:#3b82f6; background:#eff6ff; color:#1d4ed8; }
+.odeme-btn:hover { border-color:#94a3b8; }
+
+.muh-submit-btn {
+  width:100%; padding:12px; border:none; border-radius:10px;
+  font-size:15px; font-weight:700; cursor:pointer; transition:all .2s;
+  margin-top:6px;
+}
+.muh-submit-btn.gelir-btn { background:#10b981; color:#fff; }
+.muh-submit-btn.gelir-btn:hover { background:#059669; }
+.muh-submit-btn.gider-btn { background:#ef4444; color:#fff; }
+.muh-submit-btn.gider-btn:hover { background:#dc2626; }
+.muh-submit-btn:disabled { opacity:.6; cursor:not-allowed; }
+
+/* ---- Sağ Taraf ---- */
+.muh-right { display:flex; flex-direction:column; gap:14px; }
+
+/* Kasa/Banka kartları */
+.hesap-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:10px; }
+.hesap-card { background:#fff; border-radius:10px; padding:14px; box-shadow:0 1px 6px rgba(0,0,0,.07); border-top:3px solid #3b82f6; }
+.hesap-card.nakit-card { border-color:#10b981; }
+.hesap-card.kart-card  { border-color:#8b5cf6; }
+.hesap-card.havale-card{ border-color:#f59e0b; }
+.hesap-card.banka-card { border-color:#3b82f6; }
+.hesap-card .h-adi { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; margin-bottom:4px; }
+.hesap-card .h-bakiye { font-size:18px; font-weight:800; color:#1e293b; }
+.hesap-card .h-tip { font-size:10px; color:#94a3b8; }
+
+/* Son hareketler tablosu */
+.muh-tablo-kart { background:#fff; border-radius:12px; padding:16px; box-shadow:0 2px 8px rgba(0,0,0,.07); }
+.muh-tablo-kart h4 { margin:0 0 12px; font-size:14px; color:#1e293b; display:flex; justify-content:space-between; align-items:center; }
+.muh-tablo-kart h4 span { font-size:11px; color:#94a3b8; font-weight:400; }
+.muh-table { width:100%; border-collapse:collapse; font-size:13px; }
+.muh-table th { background:#f8fafc; padding:8px 10px; text-align:left; font-size:11px; color:#64748b; font-weight:700; text-transform:uppercase; border-bottom:2px solid #e2e8f0; }
+.muh-table td { padding:9px 10px; border-bottom:1px solid #f1f5f9; color:#334155; vertical-align:middle; }
+.muh-table tr:last-child td { border-bottom:none; }
+.muh-table tr:hover td { background:#f8fafc; }
+.badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:700; }
+.badge.gelir { background:#dcfce7; color:#166534; }
+.badge.gider { background:#fee2e2; color:#991b1b; }
+.badge.devir { background:#e0e7ff; color:#3730a3; }
+
+/* Bildirim */
+.muh-notif { position:fixed; bottom:24px; right:24px; z-index:9999; max-width:320px; }
+.muh-notif-item {
+  padding:12px 16px; border-radius:10px; color:#fff; font-size:13px; font-weight:600;
+  margin-top:8px; box-shadow:0 4px 16px rgba(0,0,0,.2); animation:slideIn .3s ease;
+}
+.muh-notif-item.ok { background:#10b981; }
+.muh-notif-item.err { background:#ef4444; }
+@keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+
+/* Başlık satırı */
+.muh-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+.muh-header h2 { margin:0; font-size:18px; color:#1e293b; }
+.muh-refresh-btn { padding:7px 14px; background:#3b82f6; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:12px; font-weight:700; }
+.muh-refresh-btn:hover { background:#2563eb; }
+
+/* Yükleniyor */
+.muh-loading { text-align:center; padding:32px; color:#94a3b8; font-size:14px; }
+
+/* CEO Dashboard mini */
+.ceo-mini-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:8px; }
+.ceo-mini-item { background:linear-gradient(135deg,#1e293b,#334155); border-radius:10px; padding:12px; color:#fff; }
+.ceo-mini-item .cm-label { font-size:10px; color:#94a3b8; text-transform:uppercase; font-weight:700; margin-bottom:2px; }
+.ceo-mini-item .cm-val { font-size:16px; font-weight:800; }
+.ceo-mini-item .cm-val.green { color:#34d399; }
+.ceo-mini-item .cm-val.red   { color:#f87171; }
+.ceo-mini-item .cm-val.blue  { color:#60a5fa; }
+.ceo-mini-item .cm-val.yellow{ color:#fbbf24; }
+
+.muh-donem-btn {
+  background:#e2e8f0;color:#475569;border:none;padding:4px 10px;
+  border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;
+}
+.muh-donem-btn.aktif { background:#3b82f6;color:#fff; }
+.radar-alarm {
+  background:#fef2f2;border:1px solid #fecaca;border-radius:8px;
+  padding:10px 14px;margin-bottom:8px;font-size:13px;
+}
+.radar-alarm.anormal { background:#fffbeb;border-color:#fde68a; }
+.yz-analiz-kutu {
+  background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;
+  padding:16px;font-size:13px;line-height:1.7;white-space:pre-wrap;
+}
+</style>
+
+<div class="muh-wrap">
+
+  <!-- Başlık -->
+  <div class="muh-header">
+    <h2>💰 Muhasebe / Banko</h2>
+    <button class="muh-refresh-btn" onclick="muhasebeYukle()">🔄 Yenile</button>
+  </div>
+
+  <!-- CEO KPI Satırı -->
+  <div id="muhKpiRow" class="muh-kpi-row">
+    <div class="muh-loading">Veriler yükleniyor...</div>
+  </div>
+
+  <!-- Hesap Bakiyeleri -->
+  <div class="muh-tablo-kart" style="margin-bottom:14px;">
+    <h4>🏦 Kasa & Banka Bakiyeleri <span>Anlık</span></h4>
+    <div id="hesapBakiyeleri" class="hesap-cards">
+      <div class="muh-loading">Yükleniyor...</div>
+    </div>
+  </div>
+
+  <!-- Ana İki Kolon -->
+  <div class="muh-cols">
+
+    <!-- SOL: İşlem Formu -->
+    <div class="muh-form-card">
+      <h3>📝 Yeni İşlem Kaydet</h3>
+
+      <!-- Gelir / Gider seçimi -->
+      <div class="tip-tabs">
+        <div class="tip-tab aktif-gelir" id="tabGelir" onclick="muhIslemTipiSec('GELIR')">
+          ⬆️ GELİR / TAHSİLAT
+        </div>
+        <div class="tip-tab" id="tabGider" onclick="muhIslemTipiSec('GIDER')">
+          ⬇️ GİDER / ÖDEME
+        </div>
+      </div>
+
+      <!-- Ödeme/Tahsilat Yöntemi -->
+      <div class="muh-form-group">
+        <label>💳 <span id="odemeYonLabel">Tahsilat Yöntemi</span></label>
+        <div class="odeme-grid">
+          <div class="odeme-btn aktif" id="oBtn_NAKIT" onclick="muhOdemeSecKasa('NAKİT','NAKİT')">💵 Nakit</div>
+          <div class="odeme-btn" id="oBtn_KART" onclick="muhOdemeSecKasa('KREDİ KARTI','KART')">💳 Kredi Kartı</div>
+          <div class="odeme-btn" id="oBtn_HAVALE" onclick="muhOdemeSecKasa('HAVALE/EFT','HAVALE')">🏦 Havale/EFT</div>
+        </div>
+      </div>
+
+      <!-- Banka Hesabı (Havale seçilince görünür) -->
+      <div class="muh-form-group" id="bankaHesapSecDiv" style="display:none">
+        <label>🏦 Banka Hesabı</label>
+        <select id="muhBankaHesap">
+          <option value="">-- Hesap Seçin --</option>
+        </select>
+      </div>
+
+      <!-- Tutar -->
+      <div class="muh-form-group">
+        <label>💰 Tutar (TL)</label>
+        <input type="number" id="muhTutar" placeholder="0.00" min="0" step="0.01">
+      </div>
+
+      <!-- Kategori (Gider için) -->
+      <div class="muh-form-group" id="kategoriDiv" style="display:none">
+        <label>🏷️ Gider Kategorisi</label>
+        <select id="muhKategori">
+          <option value="Diğer">Diğer</option>
+          <option value="Araç Yakıt & Otoyol">Araç Yakıt & Otoyol</option>
+          <option value="Ofis ve Mutfak Gideri">Ofis ve Mutfak Gideri</option>
+          <option value="Personel Yemek">Personel Yemek</option>
+          <option value="Kırtasiye ve Toner">Kırtasiye ve Toner</option>
+          <option value="Dışarıdan Hizmet / Laboratuvar">Dışarıdan Hizmet / Laboratuvar</option>
+          <option value="Maaş / Avans Ödemesi">Maaş / Avans Ödemesi</option>
+          <option value="Vergi ve SGK Ödemeleri">Vergi ve SGK Ödemeleri</option>
+          <option value="Kira">Kira</option>
+          <option value="Elektrik / Su / Doğalgaz">Elektrik / Su / Doğalgaz</option>
+          <option value="Telefon & İnternet">Telefon & İnternet</option>
+          <option value="Sigorta">Sigorta</option>
+          <option value="Bakım & Onarım">Bakım & Onarım</option>
+          <option value="Temsil & Ağırlama">Temsil & Ağırlama</option>
+          <option value="Reklam & Pazarlama">Reklam & Pazarlama</option>
+          <option value="Yazılım & Abonelik">Yazılım & Abonelik</option>
+          <option value="Banka & Finansman Giderleri">Banka & Finansman Giderleri</option>
+        </select>
+      </div>
+
+      <!-- Açıklama -->
+      <div class="muh-form-group">
+        <label>📄 Açıklama</label>
+        <textarea id="muhAciklama" rows="2" placeholder="İşlem açıklaması..."></textarea>
+      </div>
+
+      <!-- Kaydet Butonu -->
+      <button class="muh-submit-btn gelir-btn" id="muhKaydetBtn" onclick="muhIslemKaydet()">
+        ✅ GELİR KAYDET
+      </button>
+    </div>
+
+    <!-- SAĞ: Özet + Son Hareketler -->
+    <div class="muh-right">
+
+      <!-- Bu Ay Özeti -->
+      <div class="muh-tablo-kart">
+        <h4>📊 Bu Ay Özeti <span id="buAyLabel"></span></h4>
+        <div id="ceoMiniGrid" class="ceo-mini-grid">
+          <div class="muh-loading">Yükleniyor...</div>
+        </div>
+      </div>
+
+      <!-- Son Hareketler -->
+      <div class="muh-tablo-kart">
+        <h4>🕐 Son Hareketler <span>Bu ay</span></h4>
+        <div id="sonHareketlerDiv">
+          <div class="muh-loading">Yükleniyor...</div>
+        </div>
+      </div>
+
+    </div>
+  </div><!-- /muh-cols -->
+<!-- KAR/ZARAR DÖNEM ANALİZİ -->
+<div class="muh-tablo-kart" style="margin-bottom:14px;">
+  <h4>📈 Kar/Zarar Analizi
+    <span style="display:flex;gap:6px;">
+      <button onclick="muhKarZararYukle('aylik')"  id="btnAy"  class="muh-donem-btn aktif">Aylık</button>
+      <button onclick="muhKarZararYukle('yillik')" id="btnYil" class="muh-donem-btn">Yıllık</button>
+    </span>
+  </h4>
+  <div id="karZararKartlar" class="muh-kpi-row" style="margin-bottom:0;">
+    <div class="muh-loading">Yükleniyor...</div>
+  </div>
+</div>
+
+<!-- KAÇAK RADAR -->
+<div class="muh-tablo-kart" style="margin-bottom:14px;">
+  <h4>🚨 Kaçak Radar
+    <span id="radarAlarmBadge" style="background:#ef4444;color:#fff;border-radius:99px;padding:2px 10px;font-size:11px;font-weight:700;">0 alarm</span>
+    <button onclick="muhRadarYukle()" style="background:#f59e0b;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;margin-left:8px;">🔄 Tara</button>
+  </h4>
+  <div id="radarSonuclar"><div class="muh-loading">Taramak için butona tıklayın.</div></div>
+</div>
+
+<!-- YAPAY ZEKA ANALİZİ -->
+<div class="muh-tablo-kart" style="margin-bottom:14px;">
+  <h4>🤖 Yapay Zeka Mali Analizi
+    <button onclick="muhYZAnalizYukle()" style="background:#8b5cf6;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;margin-left:8px;">✨ Analiz Et</button>
+  </h4>
+  <div id="yzAnalizSonuc"><div class="muh-loading">Analiz için butona tıklayın.</div></div>
+</div>
+
+<!-- TAHSİLAT TAKİP -->
+<div class="muh-tablo-kart" style="margin-bottom:14px;">
+  <h4>💰 Tahsilat Takibi <span>Bu ay</span></h4>
+  <div id="tahsilatTakipDiv"><div class="muh-loading">Yükleniyor...</div></div>
+</div>
+</div><!-- /muh-wrap -->
+
+<!-- Bildirim Alanı -->
+<div class="muh-notif" id="muhNotifArea"></div>
+
+</div><!-- /muhasebePanel -->
+
+<!-- MAHSUPLAŞMA BÖLÜMÜ -->
+<div class="muh-tablo-kart" style="margin-bottom:14px;">
+  <h4>⚖️ Mahsuplaşma Yönetimi
+    <span style="display:flex;gap:6px;align-items:center;">
+      <select id="muh2MahsupTip" onchange="muh2MahsupTipDegistir()" style="padding:4px 8px;border:2px solid #7c3aed;border-radius:6px;font-size:11px;font-weight:700;">
+        <option value="giden">📤 Kesilen Faturalar</option>
+        <option value="gelen">📥 Gelen Faturalar</option>
+      </select>
+      <select id="muh2MahsupDurum" onchange="muh2MahsupFiltrele()" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;">
+        <option value="">Tüm Durumlar</option>
+        <option value="overdue">Gecikmiş</option>
+        <option value="unpaid">Ödenmemiş</option>
+        <option value="paid">Ödenmiş</option>
+      </select>
+      <input type="text" id="muh2MahsupAra" placeholder="Firma ara..." oninput="muh2MahsupFiltrele()" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;width:140px;">
+    </span>
+  </h4>
+  <div id="muh2MahsupListesi"><div class="muh-loading">Yükleniyor...</div></div>
+</div>
+
+<!-- MAHSUPLAŞMA KAYIT FORMU -->
+<div id="muh2MahsupForm" style="display:none;background:#f5f3ff;border:2px solid #7c3aed;border-radius:12px;padding:16px;margin-bottom:14px;">
+  <h4 style="margin:0 0 12px;color:#5b21b6;">⚖️ Mahsuplaşma Kaydı</h4>
+  <input type="hidden" id="muh2MahsupFaturaId">
+  <input type="hidden" id="muh2MahsupFaturaNo">
+  <div style="display:flex;gap:10px;margin-bottom:12px;">
+    <div style="flex:1;background:#fef3c7;border-radius:8px;padding:10px;">
+      <div style="font-size:11px;color:#92400e;">Firma</div>
+      <div id="muh2MahsupFirmaAdi" style="font-weight:700;color:#92400e;font-size:13px;"></div>
+    </div>
+    <div style="flex:1;background:#ede9fe;border-radius:8px;padding:10px;">
+      <div style="font-size:11px;color:#5b21b6;">Fatura Tutarı</div>
+      <div id="muh2MahsupFaturaTutar" style="font-weight:900;color:#5b21b6;font-size:16px;"></div>
+    </div>
+    <div style="flex:1;background:#f0fdf4;border-radius:8px;padding:10px;">
+      <div style="font-size:11px;color:#065f46;">Kasa Bakiyesi</div>
+      <div id="muh2MahsupKasaBakiye" style="font-weight:900;color:#065f46;font-size:16px;"></div>
+    </div>
+  </div>
+  <div class="muh-form-group">
+    <label>Mahsuplaşma Tutarı (₺)</label>
+    <input type="number" id="muh2MahsupTutar" placeholder="0.00" oninput="muh2MahsupHesapla()" style="width:100%;padding:10px;border:2px solid #7c3aed;border-radius:8px;font-size:16px;font-weight:700;box-sizing:border-box;">
+  </div>
+  <div id="muh2MahsupHesap" style="display:none;background:#ede9fe;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#5b21b6;">
+    Kasa Etkisi: <strong id="muh2MahsupKasaEtki"></strong>
+  </div>
+  <div class="muh-form-group">
+    <label>Açıklama</label>
+    <textarea id="muh2MahsupAciklama" rows="2" placeholder="Mahsuplaşma açıklaması..." style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;resize:none;"></textarea>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <button onclick="muh2MahsupKaydet()" style="flex:1;background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:12px;font-weight:700;cursor:pointer;font-size:14px;">✅ Kaydet</button>
+    <button onclick="document.getElementById('muh2MahsupForm').style.display='none'" style="flex:1;background:#64748b;color:#fff;border:none;border-radius:8px;padding:12px;font-weight:700;cursor:pointer;">İptal</button>
+  </div>
+</div>
+
+
+<script>
+// =========================================================
+// MUHASEBE PANELİ - JavaScript
+// =========================================================
+
+var _muhIslemTipi = 'GELIR';
+var _muhOdemeTipi = 'NAKİT';
+var _muhKasaAdi   = 'NAKİT';
+var _muhBankaHesaplar = [];
+
+// Sayfa ilk yüklendiğinde
+function muhasebeYukle() {
+  muhKpiYukle();
+  muhBakiyelerYukle();
+  muhSonHareketlerYukle();
+  muhBankaHesaplariYukle();
+
+  // Bu ay etiketi
+  var ay = new Date();
+  var aylar = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran',
+               'Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+  document.getElementById('buAyLabel').textContent = aylar[ay.getMonth()] + ' ' + ay.getFullYear();
+}
+
+// ---- KPI Kartları ----
+function muhKpiYukle() {
+  google.script.run
+    .withSuccessHandler(function(d) {
+      if (!d || !d.ok) return;
+      var html = '';
+      html += muhKpiKart('Bu Ay Gelir', d.ayGelir, 'TL', 'yesil');
+      html += muhKpiKart('Bu Ay Gider', d.ayGider, 'TL', 'kirmizi');
+      html += muhKpiKart('Net', d.ayNet, 'TL', d.ayNet >= 0 ? 'yesil' : 'kirmizi');
+      html += muhKpiKart('Toplam Nakit', d.toplamNakit, 'TL', '');
+      html += muhKpiKart('Açık Alacak', d.acikAlacak, 'TL', 'mor');
+      html += muhKpiKart('Bekleyen Çek', d.bekleyenCek, 'TL', 'turuncu');
+      document.getElementById('muhKpiRow').innerHTML = html;
+    })
+    .withFailureHandler(function(){})
+    .api_muhasebeKpiKartlari();
+}
+
+function muhKpiKart(label, val, birim, renk) {
+  var cls = renk ? ' ' + renk : '';
+  var valStr = typeof val === 'number'
+    ? val.toLocaleString('tr-TR', {minimumFractionDigits:0, maximumFractionDigits:0}) + ' ' + birim
+    : (val || '-');
+  var valCls = renk === 'yesil' ? 'pos' : renk === 'kirmizi' ? 'neg' : renk === 'mor' ? 'mor' : '';
+  return '<div class="muh-kpi' + cls + '"><label>' + label + '</label>'
+       + '<div class="val ' + valCls + '">' + valStr + '</div></div>';
+}
+
+// ---- Bakiyeler ----
+function muhBakiyelerYukle() {
+  // Kasa bakiyeleri
+  google.script.run
+    .withSuccessHandler(function(d) {
+      if (!d || !d.ok) {
+        document.getElementById('hesapBakiyeleri').innerHTML = '<div class="muh-loading">Veri yok. Önce kasaları tanımlayın.</div>';
+        return;
+      }
+      var nakitPoz = d;
+      var html = '';
+
+      // Nakit kasalar
+      (nakitPoz.kasaListesi || []).forEach(function(k) {
+        var tipCls = k.tip === 'NAKİT' ? 'nakit-card'
+                   : k.tip === 'KREDİ KARTI' ? 'kart-card'
+                   : k.tip === 'HAVALE/EFT' ? 'havale-card' : '';
+        html += '<div class="hesap-card ' + tipCls + '">'
+             +  '<div class="h-adi">' + k.kasa + '</div>'
+             +  '<div class="h-bakiye">₺' + (k.bakiye||0).toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}) + '</div>'
+             +  '<div class="h-tip">' + (k.tip||'Kasa') + '</div>'
+             + '</div>';
+      });
+
+      // Banka hesapları
+      (nakitPoz.bankaListesi || []).forEach(function(b) {
+        if (b.durum !== 'AKTİF') return;
+        html += '<div class="hesap-card banka-card">'
+             +  '<div class="h-adi">' + b.hesapAdi + '</div>'
+             +  '<div class="h-bakiye">₺' + (b.bakiye||0).toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}) + '</div>'
+             +  '<div class="h-tip">' + (b.banka||'Banka') + '</div>'
+             + '</div>';
+      });
+
+      if (!html) html = '<div class="muh-loading">Henüz kasa/banka kaydı yok.</div>';
+
+      // Toplam nakit kutusu
+      html += '<div class="hesap-card" style="border-color:#1e293b;background:#1e293b;color:#fff;">'
+           +  '<div class="h-adi" style="color:#94a3b8">TOPLAM NAKİT</div>'
+           +  '<div class="h-bakiye" style="color:#fff">₺' + (nakitPoz.toplamNakit||0).toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}) + '</div>'
+           +  '<div class="h-tip" style="color:#64748b">Kasa + Banka</div>'
+           + '</div>';
+
+      document.getElementById('hesapBakiyeleri').innerHTML = html;
+    })
+    .withFailureHandler(function(){ document.getElementById('hesapBakiyeleri').innerHTML = '<div class="muh-loading">Hata oluştu.</div>'; })
+    .api_nakitPozisyonu();
+}
+
+
+// Bu Ay KPI mini grid
+function muhSonHareketlerYukle() {
+  var tarih = new Date();
+  google.script.run
+    .withSuccessHandler(function(d) {
+      var gelir = d && d.ok ? d.gelirToplam : 0;
+      var gider = d && d.ok ? d.giderToplam : 0;
+      var net   = gelir - gider;
+      var gridHtml =
+        '<div class="ceo-mini-item"><div class="cm-label">Gelir</div><div class="cm-val green">₺' + gelir.toLocaleString('tr-TR',{maximumFractionDigits:0}) + '</div></div>' +
+        '<div class="ceo-mini-item"><div class="cm-label">Gider</div><div class="cm-val red">₺' + gider.toLocaleString('tr-TR',{maximumFractionDigits:0}) + '</div></div>' +
+        '<div class="ceo-mini-item"><div class="cm-label">Net</div><div class="cm-val ' + (net>=0?'green':'red') + '">₺' + net.toLocaleString('tr-TR',{maximumFractionDigits:0}) + '</div></div>';
+      document.getElementById('ceoMiniGrid').innerHTML = gridHtml;
+
+      // Son hareketler tablosu
+      if (!d || !d.ok || !d.hareketler || d.hareketler.length === 0) {
+        document.getElementById('sonHareketlerDiv').innerHTML = '<div class="muh-loading">Bu ay henüz hareket yok.</div>';
+        return;
+      }
+      var rows = '';
+      d.hareketler.slice(0,20).forEach(function(h) {
+        var tipStr  = h.tip.indexOf('GEL') > -1 || h.tip.indexOf('TAH') > -1 ? 'gelir'
+                    : h.tip === 'DEVIR' ? 'devir' : 'gider';
+        var tipLabel= tipStr==='gelir'?'⬆️ Gelir': tipStr==='devir'?'🔄 Devir':'⬇️ Gider';
+        rows += '<tr>'
+              + '<td>' + (String(h.tarih).split(' ')[0]) + '</td>'
+              + '<td><span class="badge ' + tipStr + '">' + tipLabel + '</span></td>'
+              + '<td>' + (h.aciklama || h.kategori || h.tip || '-').substring(0,40) + '</td>'
+              + '<td style="text-align:right;font-weight:700;color:' + (tipStr==='gelir'?'#10b981':tipStr==='devir'?'#6366f1':'#ef4444') + '">'
+              + '₺' + (h.tutar||0).toLocaleString('tr-TR',{minimumFractionDigits:2}) + '</td>'
+              + '</tr>';
+      });
+      document.getElementById('sonHareketlerDiv').innerHTML =
+        '<table class="muh-table"><thead><tr><th>Tarih</th><th>Tip</th><th>Açıklama</th><th style="text-align:right">Tutar</th></tr></thead>'
+        + '<tbody>' + rows + '</tbody></table>';
+    })
+    .withFailureHandler(function(){})
+    .api_kasaHareketleri(null, tarih.getMonth()+1, tarih.getFullYear());
+}
+
+// ---- Banka Hesaplarını Yükle ----
+function muhBankaHesaplariYukle() {
+  google.script.run
+    .withSuccessHandler(function(d) {
+      _muhBankaHesaplar = (d && d.liste) ? d.liste : [];
+      var sel = document.getElementById('muhBankaHesap');
+      sel.innerHTML = '<option value="">-- Hesap Seçin --</option>';
+      _muhBankaHesaplar.forEach(function(b) {
+        if (b.durum !== 'AKTİF') return;
+        sel.innerHTML += '<option value="' + b.hesapAdi + '">' + b.hesapAdi + ' - ' + b.banka + ' (₺' + (b.bakiye||0).toLocaleString('tr-TR',{maximumFractionDigits:0}) + ')</option>';
+      });
+    })
+    .withFailureHandler(function(){})
+    .api_bankaHesaplariListele();
+}
+
+// ---- İşlem Tipi (Gelir/Gider) ----
+function muhIslemTipiSec(tip) {
+  _muhIslemTipi = tip;
+  if (tip === 'GELIR') {
+    document.getElementById('tabGelir').className = 'tip-tab aktif-gelir';
+    document.getElementById('tabGider').className = 'tip-tab';
+    document.getElementById('muhKaydetBtn').textContent = '✅ GELİR KAYDET';
+    document.getElementById('muhKaydetBtn').className = 'muh-submit-btn gelir-btn';
+    document.getElementById('odemeYonLabel').textContent = 'Tahsilat Yöntemi';
+    document.getElementById('kategoriDiv').style.display = 'none';
+  } else {
+    document.getElementById('tabGider').className = 'tip-tab aktif-gider';
+    document.getElementById('tabGelir').className = 'tip-tab';
+    document.getElementById('muhKaydetBtn').textContent = '🔴 GİDER KAYDET';
+    document.getElementById('muhKaydetBtn').className = 'muh-submit-btn gider-btn';
+    document.getElementById('odemeYonLabel').textContent = 'Ödeme Yöntemi';
+    document.getElementById('kategoriDiv').style.display = 'block';
+  }
+}
+
+// ---- Ödeme Yöntemi / Kasa Seçimi ----
+function muhOdemeSecKasa(odemeTipi, btnKey) {
+  _muhOdemeTipi = odemeTipi;
+  ['NAKIT','KART','HAVALE'].forEach(function(k) {
+    document.getElementById('oBtn_' + k).className = 'odeme-btn' + (k === btnKey ? ' aktif' : '');
+  });
+  var bankaDiv = document.getElementById('bankaHesapSecDiv');
+  if (btnKey === 'HAVALE') {
+    bankaDiv.style.display = 'block';
+    _muhKasaAdi = 'HAVALE/EFT';
+  } else {
+    bankaDiv.style.display = 'none';
+    _muhKasaAdi = odemeTipi;
+  }
+}
+
+// ---- İşlem Kaydet ----
+function muhIslemKaydet() {
+  var tutar = parseFloat(document.getElementById('muhTutar').value || 0);
+  var aciklama = (document.getElementById('muhAciklama').value || '').trim();
+  var kategori = document.getElementById('muhKategori').value || 'Diğer';
+
+  if (!tutar || tutar <= 0) {
+    muhNotif('Lütfen geçerli bir tutar girin.', 'err');
+    return;
+  }
+
+  // Havale seçildiyse banka hesabı zorunlu
+  var kasaAdi = _muhKasaAdi;
+  if (_muhOdemeTipi === 'HAVALE/EFT') {
+    var secHesap = document.getElementById('muhBankaHesap').value;
+    if (!secHesap) { muhNotif('Lütfen banka hesabı seçin.', 'err'); return; }
+    kasaAdi = secHesap;
+  }
+
+  var btn = document.getElementById('muhKaydetBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Kaydediliyor...';
+
+  var tipStr = _muhIslemTipi === 'GELIR' ? 'GELİR' : 'GİDER';
+
+  // finans.gs'deki mevcut api_gelirKaydet / api_giderKaydet fonksiyonlarını kullan
+  if (_muhIslemTipi === 'GELIR') {
+    google.script.run
+      .withSuccessHandler(function(d) { muhIslemSonuc(d, btn, true); })
+      .withFailureHandler(function(e) { muhIslemSonuc({ok:false, msg: e.message || 'Hata'}, btn, true); })
+      .api_gelirKaydet({
+        tarih:     null,
+        kategori:  'Satış / Tahsilat',
+        kasa:      kasaAdi,
+        aciklama:  aciklama || 'Banko tahsilatı',
+        tutar:     tutar,
+        kdvOrani:  0,
+        odemeTipi: _muhOdemeTipi,
+        kaydeden:  'BANKO'
+      });
+  } else {
+    google.script.run
+      .withSuccessHandler(function(d) { muhIslemSonuc(d, btn, false); })
+      .withFailureHandler(function(e) { muhIslemSonuc({ok:false, msg: e.message || 'Hata'}, btn, false); })
+      .api_giderKaydet({
+        tarih:     null,
+        kategori:  kategori,
+        kasa:      kasaAdi,
+        aciklama:  aciklama || kategori,
+        tutar:     tutar,
+        kdvOrani:  0,
+        odemeTipi: _muhOdemeTipi,
+        kaydeden:  'BANKO'
+      });
+  }
+}
+
+function muhIslemSonuc(d, btn, gelirMi) {
+  btn.disabled = false;
+  muhIslemTipiSec(_muhIslemTipi); // metni geri yükle
+
+  if (d && d.ok) {
+    muhNotif((gelirMi ? '✅ Gelir kaydedildi!' : '✅ Gider kaydedildi!') + ' Bakiyeler güncellendi.', 'ok');
+    // Formu temizle
+    document.getElementById('muhTutar').value = '';
+    document.getElementById('muhAciklama').value = '';
+    // Verileri yenile
+    setTimeout(function() {
+      muhBakiyelerYukle();
+      muhSonHareketlerYukle();
+      muhKpiYukle();
+    }, 800);
+  } else {
+    muhNotif('❌ Hata: ' + (d && d.msg ? d.msg : 'Bilinmeyen hata'), 'err');
+  }
+}
+
+// ---- Bildirim ----
+function muhNotif(msg, tip) {
+  var area = document.getElementById('muhNotifArea');
+  var div  = document.createElement('div');
+  div.className = 'muh-notif-item ' + (tip || 'ok');
+  div.textContent = msg;
+  area.appendChild(div);
+  setTimeout(function() { if (div.parentNode) div.parentNode.removeChild(div); }, 4000);
+}
+
+// ---- Kar/Zarar ----
+function muhKarZararYukle(donem) {
+  ['Ay','Yil'].forEach(function(k){
+  document.getElementById('btn'+k).className = 'muh-donem-btn';
+});
+var btnMap = {aylik:'Ay', yillik:'Yil'};
+document.getElementById('btn'+btnMap[donem]).className = 'muh-donem-btn aktif';
+
+  google.script.run
+    .withSuccessHandler(function(d) {
+      if (!d || !d.ok) { document.getElementById('karZararKartlar').innerHTML = '<div class="muh-loading">Veri yok.</div>'; return; }
+      var degisimRenk = d.degisim >= 0 ? '#10b981' : '#ef4444';
+      var degisimIkon = d.degisim >= 0 ? '▲' : '▼';
+      document.getElementById('karZararKartlar').innerHTML =
+        muhKpiKart('Gelir', d.gelir, 'TL', 'yesil') +
+        muhKpiKart('Gider', d.gider, 'TL', 'kirmizi') +
+        '<div class="muh-kpi"><label>Net Kar/Zarar</label>' +
+        '<div class="val ' + (d.net >= 0 ? 'pos' : 'neg') + '">' + d.net.toLocaleString('tr-TR', {maximumFractionDigits:0}) + ' TL</div>' +
+        '<div style="font-size:11px;color:' + degisimRenk + ';margin-top:4px;">' + degisimIkon + ' %' + Math.abs(d.degisim) + ' önceki döneme göre</div></div>';
+    })
+    .withFailureHandler(function(){ document.getElementById('karZararKartlar').innerHTML = '<div class="muh-loading">Hata.</div>'; })
+    .api_karZararHesapla(donem);
+}
+
+// ---- Kaçak Radar ----
+function muhRadarYukle() {
+  document.getElementById('radarSonuclar').innerHTML = '<div class="muh-loading">Taranıyor...</div>';
+  google.script.run
+    .withSuccessHandler(function(d) {
+      if (!d || !d.ok) { document.getElementById('radarSonuclar').innerHTML = '<div class="muh-loading">Hata.</div>'; return; }
+      document.getElementById('radarAlarmBadge').textContent = d.alarmSayisi + ' alarm';
+      document.getElementById('radarAlarmBadge').style.background = d.alarmSayisi > 0 ? '#ef4444' : '#10b981';
+      if (d.alarmlar.length === 0) {
+        document.getElementById('radarSonuclar').innerHTML = '<div style="color:#10b981;padding:12px;font-weight:700;">✅ Anormal harcama tespit edilmedi.</div>';
+        return;
+      }
+      var html = '';
+      d.alarmlar.forEach(function(a) {
+        var cls = a.tip === 'ANORMAL_ARTIS' ? 'radar-alarm anormal' : 'radar-alarm';
+        var ikon = a.tip === 'ANORMAL_ARTIS' ? '⚠️' : '🚨';
+        html += '<div class="' + cls + '">' + ikon + ' <b>' + a.kategori + '</b>: ' + a.mesaj +
+          '<span style="float:right;font-weight:700;">₺' + a.harcanan.toLocaleString('tr-TR') + '</span></div>';
+      });
+      document.getElementById('radarSonuclar').innerHTML = html;
+    })
+    .withFailureHandler(function(){ document.getElementById('radarSonuclar').innerHTML = '<div class="muh-loading">Hata.</div>'; })
+    .api_kacakRadariKontrol();
+}
+
+// ---- Yapay Zeka Analizi ----
+function muhYZAnalizYukle() {
+  document.getElementById('yzAnalizSonuc').innerHTML = '<div class="muh-loading">🤖 Yapay zeka analiz yapıyor, lütfen bekleyin...</div>';
+  google.script.run
+    .withSuccessHandler(function(d) {
+      if (!d || !d.ok) { document.getElementById('yzAnalizSonuc').innerHTML = '<div class="muh-loading">Hata: ' + (d ? d.msg : '') + '</div>'; return; }
+      document.getElementById('yzAnalizSonuc').innerHTML =
+        '<div class="yz-analiz-kutu">' + d.analiz + '</div>' +
+        '<div style="font-size:11px;color:#94a3b8;margin-top:8px;">Oluşturulma: ' + d.olusturmaTarihi + '</div>';
+    })
+    .withFailureHandler(function(e){ document.getElementById('yzAnalizSonuc').innerHTML = '<div class="muh-loading">Hata: ' + e.message + '</div>'; })
+    .api_yapayzeka_harcamaAnalizi();
+}
+
+// ---- Tahsilat Takip ----
+function muhTahsilatTakipYukle() {
+  google.script.run
+    .withSuccessHandler(function(d) {
+      if (!d || !d.ok || !d.hareketler || d.hareketler.length === 0) {
+        document.getElementById('tahsilatTakipDiv').innerHTML = '<div class="muh-loading">Bu ay tahsilat yok.</div>';
+        return;
+      }
+      var gelirler = d.hareketler.filter(function(h){ return h.tip.indexOf('GEL') > -1 || h.tip.indexOf('TAH') > -1; });
+      if (gelirler.length === 0) { document.getElementById('tahsilatTakipDiv').innerHTML = '<div class="muh-loading">Bu ay tahsilat yok.</div>'; return; }
+      var rows = '';
+      gelirler.slice(0, 20).forEach(function(h) {
+        rows += '<tr><td>' + String(h.tarih).split(' ')[0] + '</td>' +
+          '<td>' + (h.aciklama || h.kategori || '-').substring(0, 40) + '</td>' +
+          '<td>' + (h.kategori || '-') + '</td>' +
+          '<td style="text-align:right;font-weight:700;color:#10b981;">₺' + (h.tutar||0).toLocaleString('tr-TR', {minimumFractionDigits:2}) + '</td></tr>';
+      });
+      document.getElementById('tahsilatTakipDiv').innerHTML =
+        '<table class="muh-table"><thead><tr><th>Tarih</th><th>Açıklama</th><th>Yöntem</th><th style="text-align:right">Tutar</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    })
+    .withFailureHandler(function(){ document.getElementById('tahsilatTakipDiv').innerHTML = '<div class="muh-loading">Hata.</div>'; })
+    .api_kasaHareketleri(null, new Date().getMonth()+1, new Date().getFullYear());
+}
+
+// Sayfa yüklenince çalıştır
+muhKarZararYukle('aylik');
+muhTahsilatTakipYukle();
+
+// ---- Mahsuplaşma ----
+var _muh2MahsupFaturalar = [];
+var _muh2KasaBakiye = 0;
+
+function muh2MahsupYukle() {
+  document.getElementById('muh2MahsupListesi').innerHTML = '<div class="muh-loading">Yükleniyor...</div>';
+  var tip = document.getElementById('muh2MahsupTip').value;
+
+  // Kasa bakiyesi al
+  google.script.run
+    .withSuccessHandler(function(d) {
+      if (d && d.ok) {
+        _muh2KasaBakiye = d.toplam || 0;
+      }
+    })
+    .withFailureHandler(function(){})
+    .api_getToplamKasa();
+
+  // Faturaları al
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (!res || !res.ok) {
+        document.getElementById('muh2MahsupListesi').innerHTML = '<div class="muh-loading">Veri alınamadı.</div>';
+        return;
+      }
+      _muh2MahsupFaturalar = res.data || [];
+      muh2MahsupRender(_muh2MahsupFaturalar);
+    })
+    .withFailureHandler(function(e) {
+      document.getElementById('muh2MahsupListesi').innerHTML = '<div class="muh-loading">Hata: ' + e.message + '</div>';
+    })
+    .api_parasutFaturaListesi();
+}
+
+function muh2MahsupTipDegistir() {
+  muh2MahsupYukle();
+}
+
+function muh2MahsupFiltrele() {
+  var ara = (document.getElementById('muh2MahsupAra').value || '').toLowerCase();
+  var durum = document.getElementById('muh2MahsupDurum').value;
+  var filtreli = _muh2MahsupFaturalar.filter(function(f) {
+    var firmaUyum = !ara || (f.firmaAdi||'').toLowerCase().indexOf(ara) > -1 || (f.faturaNo||'').toLowerCase().indexOf(ara) > -1;
+    var durumUyum = !durum || f.durum === durum;
+    return firmaUyum && durumUyum;
+  });
+  muh2MahsupRender(filtreli);
+}
+
+function muh2MahsupRender(liste) {
+  var el = document.getElementById('muh2MahsupListesi');
+  if (!liste || !liste.length) {
+    el.innerHTML = '<div class="muh-loading">Fatura bulunamadı.</div>';
+    return;
+  }
+  var html = '<table class="muh-table"><thead><tr><th>Fatura No</th><th>Firma</th><th>Tarih</th><th>Durum</th><th style="text-align:right">Tutar</th><th></th></tr></thead><tbody>';
+  liste.forEach(function(f) {
+    var durumRenk = f.durum === 'overdue' ? '#fee2e2;color:#991b1b' : f.durum === 'paid' ? '#dcfce7;color:#166534' : '#fef3c7;color:#92400e';
+    var durumAd = f.durum === 'overdue' ? '⚠️ Gecikmiş' : f.durum === 'paid' ? '✅ Ödenmiş' : '🕐 Bekliyor';
+    html += '<tr>'
+      + '<td style="font-size:11px;font-weight:700;">' + (f.faturaNo||'-') + '</td>'
+      + '<td style="font-size:12px;">' + (f.firmaAdi||'-') + '</td>'
+      + '<td style="font-size:11px;color:#64748b;">' + (f.tarih||'-') + '</td>'
+      + '<td><span style="background:' + durumRenk + ';padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;">' + durumAd + '</span></td>'
+      + '<td style="text-align:right;font-weight:700;">₺' + Number(f.tutar||0).toLocaleString('tr-TR',{minimumFractionDigits:2}) + '</td>'
+      + '<td><button onclick="muh2MahsupFormAc(\'' + (f.faturaId||f.id) + '\',\'' + (f.faturaNo||'') + '\',\'' + (f.firmaAdi||'').replace(/'/g,"\\'") + '\',' + Number(f.tutar||0) + ')" style="background:#7c3aed;color:#fff;border:none;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">⚖️ Mahsup</button></td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+function muh2MahsupFormAc(faturaId, faturaNo, firmaAdi, faturaTutar) {
+  document.getElementById('muh2MahsupFaturaId').value = faturaId;
+  document.getElementById('muh2MahsupFaturaNo').value = faturaNo;
+  document.getElementById('muh2MahsupFirmaAdi').textContent = firmaAdi;
+  document.getElementById('muh2MahsupFaturaTutar').textContent = '₺' + Number(faturaTutar).toLocaleString('tr-TR',{minimumFractionDigits:2});
+  document.getElementById('muh2MahsupKasaBakiye').textContent = '₺' + _muh2KasaBakiye.toLocaleString('tr-TR',{minimumFractionDigits:2});
+  document.getElementById('muh2MahsupTutar').value = '';
+  document.getElementById('muh2MahsupAciklama').value = '';
+  document.getElementById('muh2MahsupHesap').style.display = 'none';
+  document.getElementById('muh2MahsupForm').style.display = 'block';
+  document.getElementById('muh2MahsupForm').scrollIntoView({behavior:'smooth'});
+}
+
+function muh2MahsupHesapla() {
+  var tutar = Number(document.getElementById('muh2MahsupTutar').value || 0);
+  if (tutar > 0) {
+    document.getElementById('muh2MahsupHesap').style.display = 'block';
+    document.getElementById('muh2MahsupKasaEtki').textContent = '₺' + tutar.toLocaleString('tr-TR',{minimumFractionDigits:2});
+  } else {
+    document.getElementById('muh2MahsupHesap').style.display = 'none';
+  }
+}
+
+function muh2MahsupKaydet() {
+  var faturaId = document.getElementById('muh2MahsupFaturaId').value;
+  var faturaNo = document.getElementById('muh2MahsupFaturaNo').value;
+  var firmaAdi = document.getElementById('muh2MahsupFirmaAdi').textContent;
+  var faturaTutar = Number((document.getElementById('muh2MahsupFaturaTutar').textContent||'0').replace(/[^\d]/g,''));
+  var mahsupTutar = Number(document.getElementById('muh2MahsupTutar').value || 0);
+  var aciklama = document.getElementById('muh2MahsupAciklama').value;
+
+  if (!mahsupTutar || mahsupTutar <= 0) {
+    muhNotif('Mahsuplaşma tutarı giriniz!', 'err');
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res && res.ok) {
+        muhNotif('✅ Mahsuplaşma kaydedildi!', 'ok');
+        document.getElementById('muh2MahsupForm').style.display = 'none';
+        _muh2KasaBakiye += mahsupTutar;
+        muh2MahsupYukle();
+        muhBakiyelerYukle();
+      } else {
+        muhNotif('❌ Hata: ' + (res ? res.msg : 'Bilinmeyen hata'), 'err');
+      }
+    })
+    .withFailureHandler(function(e) { muhNotif('❌ Hata: ' + e.message, 'err'); })
+    .api_mahsupKaydet({
+      faturaId: faturaId,
+      faturaNo: faturaNo,
+      firmaAdi: firmaAdi,
+      faturaTutari: faturaTutar,
+      mahsupTutari: mahsupTutar,
+      aciklama: aciklama,
+      kaydedenEmail: window.currentUserEmail || ''
+    });
+}
+
+// Sayfa yüklenince mahsuplaşmayı da yükle
+muh2MahsupYukle();
+</script>

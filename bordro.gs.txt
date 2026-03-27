@@ -1,0 +1,108 @@
+
+function api_bordroHesapla(donem) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var personelSh = ss.getSheetByName("PERSONEL_IK");
+    if (!personelSh) return { ok: false, msg: "PERSONEL_IK bulunamadı" };
+
+    var bordroSh = ss.getSheetByName("BORDRO");
+    if (!bordroSh) {
+      bordroSh = ss.insertSheet("BORDRO");
+      bordroSh.appendRow(["Dönem","Ad Soyad","E-Posta","Net Maaş","Avans","Prim","Mesai","Harcama","Yatacak Tutar","Durum"]);
+      bordroSh.getRange(1,1,1,10).setFontWeight("bold").setBackground("#1e293b").setFontColor("white");
+    }
+
+    // Mevcut dönem satırlarını temizle (batch)
+    var mevcut = bordroSh.getDataRange().getValues();
+    var kalanlar = mevcut.filter(function(r, i) {
+      if (i === 0) return true; // başlık kalsın
+      var satirDonem = r[0] instanceof Date
+        ? Utilities.formatDate(r[0], "Europe/Istanbul", "MM/yyyy")
+        : String(r[0]).trim();
+      return satirDonem !== String(donem).trim();
+    });
+    bordroSh.clearContents();
+    if (kalanlar.length > 0) {
+      bordroSh.getRange(1, 1, kalanlar.length, kalanlar[0].length).setValues(kalanlar);
+    }
+
+    // Yeni satırları diziye topla
+    var data = personelSh.getDataRange().getValues();
+    var yeniSatirlar = [];
+
+    for (var i = 1; i < data.length; i++) {
+      var s = data[i];
+      if (!s[1]) continue;
+      if (String(s[14]||"").toUpperCase() === "PASİF") continue;
+
+      var netMaas = parseFloat(String(s[5]||"0").replace(/[^\d.-]/g,"")) || 0;
+      var avans = 0, prim = 0, mesai = 0, harcama = 0;
+      var yatacak = netMaas - avans + prim + mesai - harcama;
+
+      yeniSatirlar.push([
+        donem,
+        String(s[1]||""),
+        String(s[2]||""),
+        netMaas, avans, prim, mesai, harcama, yatacak,
+        "BEKLIYOR"
+      ]);
+    }
+
+    // Hepsini tek seferde yaz
+    if (yeniSatirlar.length > 0) {
+      var sonSatir = bordroSh.getLastRow();
+      bordroSh.getRange(sonSatir + 1, 1, yeniSatirlar.length, 10).setValues(yeniSatirlar);
+    }
+
+    return { ok: true, sayi: yeniSatirlar.length };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+
+function api_bordroListele(donem, email) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("BORDRO");
+    if (!sh) return { ok: true, liste: [] };
+    
+    var data = sh.getDataRange().getValues();
+    var liste = [];
+    for (var i = 1; i < data.length; i++) {
+      var s = data[i];
+      if (!s[0]) continue;
+      if (donem) {
+        var satirDonem = s[0] instanceof Date
+          ? Utilities.formatDate(s[0], "Europe/Istanbul", "MM/yyyy")
+          : String(s[0]).trim();
+        var arananDonem = String(donem).trim();
+        if (arananDonem.length === 7 && arananDonem[1] === "/") {
+          arananDonem = "0" + arananDonem;
+        }
+        if (satirDonem !== arananDonem) continue;
+      }
+      
+      var satirDonem2 = s[0] instanceof Date
+        ? Utilities.formatDate(s[0], "Europe/Istanbul", "MM/yyyy")
+        : String(s[0] || "");
+      liste.push({
+        donem:    satirDonem2,
+        personel: String(s[1] || ""),
+        mail:     String(s[2] || ""),
+        netMaas:  Number(s[3]) || 0,
+        maas:     Number(s[3]) || 0,
+        avans:    Number(s[4]) || 0,
+        prim:     Number(s[5]) || 0,
+        mesai:    Number(s[6]) || 0,
+        harcama:  Number(s[7]) || 0,
+        banka:    Number(s[8]) || 0,
+        yatacak:  Number(s[8]) || 0,
+        net:      Number(s[8]) || 0,
+        durum:    String(s[9] || "BEKLIYOR")
+      });
+    }
+    return { ok: true, liste: liste };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}

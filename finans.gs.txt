@@ -1,0 +1,723 @@
+// ==========================================
+// FİNANS İŞLEM KAYDET
+// ==========================================
+function api_finansIslemKaydet(p) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_CARİ");
+    if (!sh) return { ok: false, msg: "FİNANS_CARİ sekmesi bulunamadı" };
+    var simdi = new Date();
+    var tutar = parseFloat(p.tutar) || 0;
+    var kdv = parseFloat(p.kdv) || 0;
+    var kdvsiz = kdv > 0 ? tutar / (1 + kdv/100) : tutar;
+    var netTutar = tutar - (tutar - kdvsiz);
+    var tip = String(p.tip || "GİDER").toUpperCase();
+    sh.appendRow([
+      "FIN_" + simdi.getTime(),
+      simdi,
+      tip,
+      String(p.kategori || p.odemeTipi || ""),
+      String(p.kasa || "NAKİT"),
+      String(p.aciklama || p.firma || p.firmaAdi || ""),
+      tutar, kdv, kdvsiz, netTutar,
+      String(p.fisTip || "BANKO"),
+      String(p.kullanici || p.kaydedenEmail || ""),
+      "TAMAMLANDI", ""
+    ]);
+    var tipKasa = String(p.tip || p.odemeTipi || "").toUpperCase();
+    if (!tipKasa || (tipKasa !== "GELİR" && tipKasa !== "GİDER")) tipKasa = "GELİR";
+    api_kasaGuncelle_(String(p.kasa || "NAKİT"), tipKasa, tutar);
+    var emoji = tip.indexOf("GELİR") > -1 ? "💰" : "💸";
+    chatBildir_(emoji + " *" + tip + "*\nFirma: " + String(p.aciklama || p.firmaAdi || "-") + "\nTutar: " + tutar.toLocaleString("tr-TR") + " TL");
+    return { ok: true };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+
+
+// ==========================================
+// TOPLAM KASA
+// ==========================================
+function api_getToplamKasa() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var shKasa = ss.getSheetByName("FİNANS_KASA");
+    var toplam = 0, kasalar = [];
+    if (shKasa) {
+      var kasaData = shKasa.getDataRange().getValues();
+      for (var i=0; i<kasaData.length; i++) {
+        if (!kasaData[i][0]) continue;
+        var bakiye = parseFloat(kasaData[i][3]) || 0;
+        toplam += bakiye;
+        kasalar.push({ kasa: kasaData[i][0], bakiye: bakiye });
+      }
+    }
+    var shCari = ss.getSheetByName("FİNANS_CARİ");
+    var ayGelir = 0, ayGider = 0;
+    if (shCari && shCari.getLastRow() > 1) {
+      var cariData = shCari.getDataRange().getValues();
+      var simdi = new Date(), buAy = simdi.getMonth(), buYil = simdi.getFullYear();
+      for (var j=1; j<cariData.length; j++) {
+        if (!cariData[j][0]) continue;
+        var dt = new Date(cariData[j][1]);
+        if (isNaN(dt.getTime())) continue;
+        if (dt.getMonth()!==buAy || dt.getFullYear()!==buYil) continue;
+        var tip = String(cariData[j][2]||"");
+        var t = parseFloat(cariData[j][8]) || 0;
+        if (tip.indexOf("GELİR")>-1 || tip.indexOf("TAHSİLAT")>-1) ayGelir+=t;
+        else ayGider+=t;
+      }
+    }
+    return { ok:true, toplam:toplam, bakiye:toplam, kasalar:kasalar, ayGelir:ayGelir, ayGider:ayGider };
+  } catch(e) { return { ok:false, toplam:0, msg:e.message }; }
+}
+
+// ==========================================
+// FİNANS LİSTESİ
+// ==========================================
+function api_getFinansList(p) {
+  try {
+    p = p || {};
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_CARİ");
+    if (!sh) return [];
+    var data = sh.getDataRange().getValues();
+    if (data.length < 2) return [];
+    var from = p.from ? new Date(p.from) : null;
+    var to   = p.to   ? new Date(p.to + "T23:59:59") : null;
+    var tip  = String(p.tip || "");
+    var list = [];
+    for (var i=data.length-1; i>=1; i--) {
+      if (!data[i][0]) continue;
+      if (from || to) { var dt=new Date(data[i][1]); if(!isNaN(dt.getTime())){if(from&&dt<from)continue;if(to&&dt>to)continue;} }
+      if (tip && String(data[i][2]||"").indexOf(tip)<0) continue;
+      list.push({ id:String(data[i][0]||""), tarih:String(data[i][1]||""), tip:String(data[i][2]||""), kategori:String(data[i][3]||""), kasa:String(data[i][4]||""), firma:String(data[i][5]||""), kisi:parseInt(data[i][6])||0, aciklama:String(data[i][7]||""), tutar:parseFloat(data[i][8])||0, kdv:parseFloat(data[i][9])||0, kaydeden:String(data[i][12]||""), durum:String(data[i][13]||"") });
+      if (list.length >= 50) break;
+    }
+    return list;
+  } catch(e) { return []; }
+}
+
+function api_finansIslemSil(id) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_CARİ");
+    if (!sh) return { ok:false, msg:"FİNANS_CARİ bulunamadı" };
+    var data = sh.getDataRange().getValues();
+    for (var i=1; i<data.length; i++) {
+      if (String(data[i][0]) === String(id)) {
+        var tip=String(data[i][2]||""), tutar=parseFloat(data[i][8])||0, kasa=String(data[i][4]||"ANA_KASA");
+        var tersTip = (tip.indexOf("GELİR")>-1||tip.indexOf("TAHSİLAT")>-1) ? "GİDER" : "GELİR";
+        api_kasaGuncelle_(kasa, tersTip, tutar);
+        sh.deleteRow(i+1);
+        return { ok:true };
+      }
+    }
+    return { ok:false, msg:"Kayıt bulunamadı" };
+  } catch(e) { return { ok:false, msg:e.message }; }
+}
+
+// ==========================================
+// FİNANS DEFTERİ
+// ==========================================
+function api_getFinansDefteri(arananTarih) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var shCari = ss.getSheetByName("FİNANS_CARI") || ss.getSheetByName("FİNANS CARİ") || ss.getSheetByName("FINANS_CARI");
+    if (!shCari) return { hata:true, msg:"FİNANS_CARI sayfası bulunamadı!" };
+    var data = shCari.getDataRange().getDisplayValues();
+    if (data.length < 2) return [];
+    var head = data[0].map(function(h){ return String(h).toLowerCase().replace(/[\s\.\-\_₺\(\)\+]/g,""); });
+    var cxTarih=head.findIndex(function(h){return h.includes("tarih");}); if(cxTarih===-1)cxTarih=1;
+    var cxTip=head.findIndex(function(h){return h.includes("tip");}); if(cxTip===-1)cxTip=2;
+    var cxKategori=head.findIndex(function(h){return h.includes("kategori");}); if(cxKategori===-1)cxKategori=3;
+    var cxAciklama=head.findIndex(function(h){return h.includes("firma")||h.includes("açıklama")||h.includes("aciklama");}); if(cxAciklama===-1)cxAciklama=5;
+    var cxTutar=head.findIndex(function(h){return h.includes("tutar")||h.includes("kdv");}); if(cxTutar===-1)cxTutar=6;
+    var cxPersonel=head.findIndex(function(h){return h.includes("yapan")||h.includes("personel");}); if(cxPersonel===-1)cxPersonel=11;
+    var list = [], maxSayac = 0;
+    var temizAranan = String(arananTarih||"").trim().replace(/\//g,".");
+    for (var i=data.length-1; i>=1; i--) {
+      var islemTarihi = String(data[i][cxTarih]).trim();
+      if (!islemTarihi) continue;
+      var excelTarihi = islemTarihi.replace(/\//g,".");
+      if (temizAranan && !excelTarihi.includes(temizAranan)) continue;
+      var hamTutar = String(data[i][cxTutar]).replace(/[^\d\,\.-]/g,"");
+      if (hamTutar.includes(",")) hamTutar = hamTutar.replace(/\./g,"").replace(",",".");
+      list.push({ tarih:islemTarihi, tip:String(data[i][cxTip]).toUpperCase()||"BİLİNMİYOR", kategori:String(data[i][cxKategori])||"Diğer", aciklama:String(data[i][cxAciklama])||"-", tutar:parseFloat(hamTutar)||0, personel:String(data[i][cxPersonel]||"Bilinmiyor").trim() });
+      maxSayac++;
+      if (maxSayac >= 500) break;
+    }
+    return list;
+  } catch(e) { return { hata:true, msg:"Sunucu Hatası: "+e.message }; }
+}
+
+// ==========================================
+// KDV DURUMU
+// ==========================================
+function api_kdvDurumuHesapla() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_CARİ");
+    if (!sh) return { ok:false, msg:"FİNANS_CARİ bulunamadı" };
+    var simdi=new Date(), buAy=simdi.getMonth(), buYil=simdi.getFullYear();
+    var data = sh.getDataRange().getValues();
+    var toplananKdv=0, odenenKdv=0;
+    for (var i=1; i<data.length; i++) {
+      var tarih=data[i][1], dt=(tarih instanceof Date)?tarih:new Date(String(tarih).split(".").reverse().join("-"));
+      if (isNaN(dt)||dt.getMonth()!==buAy||dt.getFullYear()!==buYil) continue;
+      var tip=String(data[i][2]||""), tutar=parseFloat(data[i][6])||0, kdvOran=parseFloat(data[i][7])||0;
+      if (kdvOran<=0) continue;
+      var kdvTutar = tutar - (tutar/(1+kdvOran/100));
+      if (tip==="GELİR") toplananKdv+=kdvTutar; else odenenKdv+=kdvTutar;
+    }
+    return { ok:true, toplananKdv:Math.round(toplananKdv*100)/100, odenenKdv:Math.round(odenenKdv*100)/100, netKdv:Math.round((toplananKdv-odenenKdv)*100)/100 };
+  } catch(e) { return { ok:false, msg:e.message }; }
+}
+
+// ==========================================
+// KAÇAK RADAR
+// ==========================================
+function api_kacakRadariKontrol() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_CARİ");
+    if (!sh) return { ok:false, msg:"FİNANS_CARİ bulunamadı" };
+    var LIMITLER = { "Araç Yakıt & Otoyol":5000, "Ofis ve Mutfak Gideri":3000, "Personel Yemek":4000, "Kırtasiye ve Toner":2000, "Dışarıdan Hizmet / Laboratuvar":10000, "Maaş / Avans Ödemesi":100000, "Vergi ve SGK Ödemeleri":50000, "Diğer":5000 };
+    var simdi=new Date(), buAy=simdi.getMonth(), buYil=simdi.getFullYear();
+    var data = sh.getDataRange().getValues();
+    var toplamlar = {};
+    for (var i=1; i<data.length; i++) {
+      if (String(data[i][2])!=="GİDER") continue;
+      var tarih=data[i][1], dt=(tarih instanceof Date)?tarih:new Date(String(tarih).split(".").reverse().join("-"));
+      if (isNaN(dt)||dt.getMonth()!==buAy||dt.getFullYear()!==buYil) continue;
+      var kat=String(data[i][3]||"Diğer");
+      toplamlar[kat]=(toplamlar[kat]||0)+(parseFloat(data[i][6])||0);
+    }
+    var alarmlar = [];
+    for (var k in toplamlar) {
+      var limit=LIMITLER[k]||5000;
+      if (toplamlar[k]>limit) alarmlar.push({ kategori:k, harcanan:toplamlar[k], limit:limit });
+    }
+    return { ok:true, alarmlar:alarmlar };
+  } catch(e) { return { ok:false, msg:e.message }; }
+}
+
+// ==========================================
+// FİŞ OCR
+// ==========================================
+function api_fisiYapayZekayaOkut(base64Data, mimeType) {
+  try {
+    var GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
+    var url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + GEMINI_API_KEY;
+    var payload = { contents:[{parts:[{text:"Bu bir fiş veya fatura fotoğrafı. Sadece JSON döndür: {\"firma\": \"firma adı\", \"tutar\": toplam tutar sayı, \"kdv\": kdv oranı sayı, \"tarih\": \"gg.aa.yyyy\", \"aciklama\": \"kısa açıklama\"}"},{inline_data:{mime_type:mimeType,data:base64Data}}]}] };
+    var response = UrlFetchApp.fetch(url, { method:"POST", contentType:"application/json", payload:JSON.stringify(payload), muteHttpExceptions:true });
+    var json = JSON.parse(response.getContentText());
+    var text = json.candidates[0].content.parts[0].text.replace(/```json/g,"").replace(/```/g,"").trim();
+    var parsed = JSON.parse(text);
+    return { ok:true, firma:String(parsed.firma||""), tutar:parseFloat(parsed.tutar||0), kdv:parseInt(parsed.kdv||0), tarih:String(parsed.tarih||""), aciklama:String(parsed.aciklama||"") };
+  } catch(e) { return { ok:false, msg:"Fiş okunamadı: "+e.message }; }
+}
+
+function api_gelirKaydet(p) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_CARİ");
+    if (!sh) return { ok: false, msg: "FİNANS_CARİ bulunamadı" };
+    var simdi = new Date();
+    var tutar = parseFloat(p.tutar) || 0;
+    var odemeTipi = String(p.odemeTipi || "NAKİT").toUpperCase();
+    var kasaAdi = odemeTipi === "KREDİ KARTI" ? "KREDİ KARTI" :
+                  (odemeTipi === "HAVALE" || odemeTipi === "EFT") ? "HAVALE/EFT" : "NAKİT";
+    sh.appendRow([
+      "FIN_" + simdi.getTime(),
+      simdi,
+      "GELİR",
+      odemeTipi,
+      kasaAdi,
+      String(p.firmaAdi || p.aciklama || ""),
+      tutar, 0, tutar, tutar,
+      "BANKO",
+      String(p.kaydedenEmail || ""),
+      "TAMAMLANDI", ""
+    ]);
+    api_kasaGuncelle_(kasaAdi, "GELİR", tutar);
+    chatBildir_("💰 *Gelir Kaydedildi*\nFirma: " + String(p.firmaAdi||"-") + "\nTutar: " + tutar.toLocaleString("tr-TR") + " ₺\nÖdeme: " + odemeTipi + "\nKaydeden: " + String(p.kaydedenEmail||""));
+    return { ok: true };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+function api_firmaCariEkle(p) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    
+    // FİRMA_CARİ'ye kaydet (mevcut)
+    var sh = ss.getSheetByName("FİRMA_CARİ");
+    if (!sh) return { ok: false, msg: "FİRMA_CARİ tablosu bulunamadı" };
+    var simdi = new Date();
+    var tarih = Utilities.formatDate(simdi, "Europe/Istanbul", "dd.MM.yyyy HH:mm");
+    var id = "CARİ_" + simdi.getTime();
+    var tip = String(p.tip || "ALACAK").toUpperCase();
+    var borc = tip === "BORC" ? parseFloat(p.tutar || 0) : 0;
+    var alacak = tip === "ALACAK" ? parseFloat(p.tutar || 0) : 0;
+    var data = sh.getDataRange().getValues();
+    var mevcutBakiye = 0;
+    for (var i = data.length - 1; i >= 1; i--) {
+      if (String(data[i][2]||"").trim() === String(p.firmaId||"").trim()) {
+        mevcutBakiye = parseFloat(data[i][8]||0);
+        break;
+      }
+    }
+    var yeniBakiye = mevcutBakiye + alacak - borc;
+    sh.appendRow([id, tarih, String(p.firmaId||""), String(p.firmaAdi||""), tip, String(p.aciklama||""), borc, alacak, Math.round(yeniBakiye*100)/100, String(p.faturaNo||""), String(p.kaydeden||""), "AÇIK"]);
+
+    // FİNANS_CARİ'ye de kaydet (banko görünümü için)
+    var shFinans = ss.getSheetByName("FİNANS_CARİ");
+    if (shFinans) {
+      shFinans.appendRow([
+        id,                                      // A - ID
+        simdi,                                   // B - Tarih
+        "GELİR",                                 // C - Tip
+        "Cari Tahsilat",                         // D - Kategori
+        "CARİ",                                  // E - Kasa
+        String(p.firmaAdi || p.aciklama || ""),  // F - Açıklama
+        Number(p.tutar || 0),                    // G - Tutar
+        0,                                       // H - KDV%
+        Number(p.tutar || 0),                    // I - KDVsiz
+        Number(p.tutar || 0),                    // J - NetTutar
+        "BANKO",                                 // K - FisTip
+        String(p.kaydeden || ""),                // L - Kaydeden
+        "TAMAMLANDI"                             // M - Durum
+      ]);
+    }
+
+    chatBildir_("📋 *Cari Tahsilat*\nFirma: " + String(p.firmaAdi||"") + "\nTutar: " + Number(p.tutar||0).toLocaleString("tr-TR") + " ₺\nKaydeden: " + String(p.kaydeden||""));
+    return { ok: true, id: id, yeniBakiye: yeniBakiye };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+function api_firmaCariGetir(firmaId) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİRMA_CARİ");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, liste: [], bakiye: 0 };
+    var data = sh.getDataRange().getValues();
+    var liste = [];
+    var bakiye = 0;
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][2]||"").trim() !== String(firmaId||"").trim()) continue;
+      liste.push({
+        id: String(data[i][0]||""),
+        tarih: String(data[i][1]||""),
+        tip: String(data[i][4]||""),
+        aciklama: String(data[i][5]||""),
+        borc: parseFloat(data[i][6]||0),
+        alacak: parseFloat(data[i][7]||0),
+        bakiye: parseFloat(data[i][8]||0),
+        faturaNo: String(data[i][9]||""),
+        durum: String(data[i][11]||"")
+      });
+      bakiye = parseFloat(data[i][8]||0);
+    }
+    return { ok: true, liste: liste, bakiye: bakiye };
+  } catch(e) {
+    return { ok: false, liste: [], bakiye: 0, msg: e.message };
+  }
+}
+
+function api_firmaCariTahsilat(p) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİRMA_CARİ");
+    if (!sh) return { ok: false, msg: "FİRMA_CARİ bulunamadı" };
+    var data = sh.getDataRange().getValues();
+    var mevcutBakiye = 0;
+    for (var i = data.length - 1; i >= 1; i--) {
+      if (String(data[i][2]||"").trim() === String(p.firmaId||"").trim()) {
+        mevcutBakiye = parseFloat(data[i][8]||0);
+        break;
+      }
+    }
+    var tahsilat = parseFloat(p.tutar || 0);
+    var yeniBakiye = mevcutBakiye - tahsilat;
+    var simdi = new Date();
+    sh.appendRow([
+      "TAH_" + simdi.getTime(),
+      Utilities.formatDate(simdi, "Europe/Istanbul", "dd.MM.yyyy HH:mm"),
+      String(p.firmaId || ""),
+      String(p.firmaAdi || ""),
+      "TAHSİLAT",
+      String(p.aciklama || "Tahsilat"),
+      tahsilat, 0,
+      Math.round(yeniBakiye * 100) / 100,
+      String(p.faturaNo || ""),
+      String(p.kaydeden || ""),
+      "KAPANDI"
+    ]);
+    // Kasaya da ekle
+    var odemeTipi = String(p.odemeTipi || "NAKİT").toUpperCase();
+    var kasaAdi = odemeTipi === "KREDİ KARTI" ? "KREDİ KARTI" :
+                  (odemeTipi === "HAVALE" || odemeTipi === "EFT") ? "HAVALE/EFT" : "NAKİT";
+    api_kasaGuncelle_(kasaAdi, "GELİR", tahsilat);
+    return { ok: true, yeniBakiye: yeniBakiye };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+
+function api_giderKaydet(p) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_CARİ");
+    if (!sh) return { ok: false, msg: "FİNANS_CARİ bulunamadı" };
+    var simdi = new Date();
+    var tutar = parseFloat(p.tutar) || 0;
+    var odemeTipi = String(p.odemeTipi || "NAKİT").toUpperCase();
+
+    // Ödeme tipine göre kasa belirle
+    var kasaAdi;
+    if (odemeTipi === "KREDİ KARTI") kasaAdi = "KREDİ KARTI";
+    else if (odemeTipi === "HAVALE" || odemeTipi === "EFT") kasaAdi = "HAVALE/EFT";
+    else if (odemeTipi === "ÇEK") kasaAdi = "ÇEK";
+    else kasaAdi = "NAKİT";
+
+    sh.appendRow([
+      "FIN_" + simdi.getTime(),
+      simdi,
+      "GİDER",
+      String(p.kategori || "Diğer"),
+      kasaAdi,
+      String(p.aciklama || ""),
+      tutar, 0, tutar, tutar,
+      "BANKO",
+      String(p.kaydedenEmail || ""),
+      "TAMAMLANDI", ""
+    ]);
+
+    // Çek ise ayrı tabloya ekle
+    if (odemeTipi === "ÇEK") {
+      var shCek = ss.getSheetByName("CEKLER_SENETLER");
+      if (!shCek) {
+        shCek = ss.insertSheet("CEKLER_SENETLER");
+        shCek.appendRow(["ID","Tarih","VadeTarihi","Aciklama","Tutar","Tip","Durum","Kaydeden"]);
+        shCek.getRange(1,1,1,8).setFontWeight("bold").setBackground("#1e293b").setFontColor("white");
+      }
+      shCek.appendRow([
+        "CEK_" + simdi.getTime(),
+        Utilities.formatDate(simdi, "Europe/Istanbul", "dd.MM.yyyy"),
+        String(p.vadeTarihi || ""),
+        String(p.aciklama || ""),
+        tutar, "GİDER", "BEKLEMEDE",
+        String(p.kaydedenEmail || "")
+      ]);
+    } else {
+      // Kasadan düş
+      api_kasaGuncelle_(kasaAdi, "GİDER", tutar);
+    }
+
+    chatBildir_("💸 *GİDER*\nAçıklama: " + String(p.aciklama||"-") + "\nTutar: " + tutar.toLocaleString("tr-TR") + " ₺\nÖdeme: " + odemeTipi + "\nKaydeden: " + String(p.kaydedenEmail||""));
+    return { ok: true };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+
+function api_cekSenetListesiGetir() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("CEKLER_SENETLER");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, liste: [], toplam: 0 };
+    var data = sh.getDataRange().getValues();
+    var liste = [];
+    var toplam = 0;
+    for (var i = 1; i < data.length; i++) {
+      var durum = String(data[i][6]||"").toUpperCase();
+      if (durum === "ODENDI") continue;
+      var tutar = parseFloat(data[i][4]||0);
+      toplam += tutar;
+      liste.push({
+        id: String(data[i][0]||""),
+        tarih: String(data[i][1]||""),
+        vadeTarihi: String(data[i][2]||""),
+        aciklama: String(data[i][3]||""),
+        tutar: tutar,
+        tip: String(data[i][5]||""),
+        durum: durum,
+        kaydeden: String(data[i][7]||"")
+      });
+    }
+    liste.sort(function(a,b){ return a.vadeTarihi > b.vadeTarihi ? 1 : -1; });
+    return { ok: true, liste: liste, toplam: Math.round(toplam*100)/100 };
+  } catch(e) {
+    return { ok: false, liste: [], toplam: 0, msg: e.message };
+  }
+}
+
+function api_cekOdendi(id) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("CEKLER_SENETLER");
+    if (!sh) return { ok: false, msg: "CEKLER_SENETLER bulunamadı" };
+    var data = sh.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]||"") === String(id)) {
+        sh.getRange(i+1, 7).setValue("ODENDİ");
+        var tutar = parseFloat(data[i][4]||0);
+        api_kasaGuncelle_("NAKİT", "GİDER", tutar);
+        return { ok: true };
+      }
+    }
+    return { ok: false, msg: "Çek bulunamadı" };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+function api_karZararHesapla(donem) {
+  try {
+    donem = donem || "aylik";
+    if (donem === "gunluk" || donem === "haftalik") donem = "aylik"; // güvenlik
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_CARİ");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, gelir: 0, gider: 0, net: 0 };
+
+    var simdi = new Date();
+    var data = sh.getDataRange().getValues();
+    var gelir = 0, gider = 0, gelirOnceki = 0, giderOnceki = 0;
+
+    // Sabit giderleri al
+    var sabitGiderAylik = 0;
+    try {
+      var sgSh = ss.getSheetByName("SABIT_GIDER");
+      if (sgSh && sgSh.getLastRow() > 1) {
+        var sgData = sgSh.getDataRange().getValues();
+        for (var s = 1; s < sgData.length; s++) {
+          var aktif = sgData[s][4];
+          if (aktif === true || String(aktif).toUpperCase() === "TRUE") {
+            sabitGiderAylik += parseFloat(sgData[s][3]) || 0;
+          }
+        }
+      }
+    } catch(e) {}
+
+    for (var i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      var dt = data[i][1] instanceof Date ? data[i][1]
+        : new Date(String(data[i][1]).split(".").reverse().join("-"));
+      if (isNaN(dt)) continue;
+      var tutar = parseFloat(data[i][6]) || 0;
+      var tip = String(data[i][2] || "").toUpperCase();
+      var gelirMi = tip.indexOf("GELİR") > -1 || tip.indexOf("TAHSİLAT") > -1;
+
+      if (_donemIcindeMi(dt, simdi, donem)) {
+        if (gelirMi) gelir += tutar; else gider += tutar;
+      }
+      if (_oncekiDonemMi(dt, simdi, donem)) {
+        if (gelirMi) gelirOnceki += tutar; else giderOnceki += tutar;
+      }
+    }
+
+    // Sabit gideri ekle
+    var sabitGider = donem === "yillik" ? sabitGiderAylik * 12 : sabitGiderAylik;
+    gider += sabitGider;
+    giderOnceki += sabitGider;
+
+    var net = gelir - gider;
+    var netOnceki = gelirOnceki - giderOnceki;
+    var degisim = netOnceki !== 0
+      ? Math.round(((net - netOnceki) / Math.abs(netOnceki)) * 100) : 0;
+
+    return {
+      ok           : true,
+      donem        : donem,
+      gelir        : Math.round(gelir * 100) / 100,
+      gider        : Math.round(gider * 100) / 100,
+      net          : Math.round(net * 100) / 100,
+      sabitGider   : Math.round(sabitGider * 100) / 100,
+      onceki       : { gelir: gelirOnceki, gider: giderOnceki, net: netOnceki },
+      degisim      : degisim
+    };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+function _donemIcindeMi(dt, simdi, donem) {
+  if (donem === "aylik") {
+    return dt.getMonth() === simdi.getMonth() && dt.getFullYear() === simdi.getFullYear();
+  } else if (donem === "yillik") {
+    return dt.getFullYear() === simdi.getFullYear();
+  }
+  return false;
+}
+
+function _oncekiDonemMi(dt, simdi, donem) {
+  if (donem === "aylik") {
+    var oncekiAy = new Date(simdi.getFullYear(), simdi.getMonth() - 1, 1);
+    return dt.getMonth() === oncekiAy.getMonth() && dt.getFullYear() === oncekiAy.getFullYear();
+  } else if (donem === "yillik") {
+    return dt.getFullYear() === simdi.getFullYear() - 1;
+  }
+  return false;
+}
+function api_kacakRadariKontrol() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_CARİ");
+    if (!sh) return { ok: false, msg: "FİNANS_CARİ bulunamadı" };
+
+    var LIMITLER = {
+      "Araç Yakıt & Otoyol"            : 5000,
+      "Ofis ve Mutfak Gideri"           : 3000,
+      "Personel Yemek"                  : 4000,
+      "Kırtasiye ve Toner"              : 2000,
+      "Dışarıdan Hizmet / Laboratuvar"  : 10000,
+      "Maaş / Avans Ödemesi"            : 100000,
+      "Vergi ve SGK Ödemeleri"          : 50000,
+      "Kira"                            : 20000,
+      "Elektrik / Su / Doğalgaz"        : 5000,
+      "Diğer"                           : 5000
+    };
+
+    var simdi = new Date();
+    var buAy = simdi.getMonth();
+    var buYil = simdi.getFullYear();
+    var oncekiAy = buAy === 0 ? 11 : buAy - 1;
+    var oncekiYil = buAy === 0 ? buYil - 1 : buYil;
+
+    var data = sh.getDataRange().getValues();
+    var buAyToplam = {}, oncekiAyToplam = {};
+
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][2] || "").toUpperCase() !== "GİDER") continue;
+      var dt = data[i][1] instanceof Date ? data[i][1]
+        : new Date(String(data[i][1]).split(".").reverse().join("-"));
+      if (isNaN(dt)) continue;
+      var kat = String(data[i][3] || "Diğer");
+      var tutar = parseFloat(data[i][6]) || 0;
+
+      if (dt.getMonth() === buAy && dt.getFullYear() === buYil) {
+        buAyToplam[kat] = (buAyToplam[kat] || 0) + tutar;
+      }
+      if (dt.getMonth() === oncekiAy && dt.getFullYear() === oncekiYil) {
+        oncekiAyToplam[kat] = (oncekiAyToplam[kat] || 0) + tutar;
+      }
+    }
+
+    var alarmlar = [];
+
+    // Limit aşımı kontrolü
+    for (var kat in buAyToplam) {
+      var limit = LIMITLER[kat] || 5000;
+      if (buAyToplam[kat] > limit) {
+        alarmlar.push({
+          tip      : "LIMIT_ASIMI",
+          kategori : kat,
+          harcanan : Math.round(buAyToplam[kat]),
+          limit    : limit,
+          asim     : Math.round(buAyToplam[kat] - limit),
+          mesaj    : kat + " kategorisi limiti " + Math.round(buAyToplam[kat] - limit).toLocaleString("tr-TR") + " TL aştı!"
+        });
+      }
+    }
+
+    // Anormal artış kontrolü (geçen aya göre %50+ artış)
+    for (var kat in buAyToplam) {
+      var onceki = oncekiAyToplam[kat] || 0;
+      if (onceki === 0) continue;
+      var artis = ((buAyToplam[kat] - onceki) / onceki) * 100;
+      if (artis >= 50) {
+        alarmlar.push({
+          tip      : "ANORMAL_ARTIS",
+          kategori : kat,
+          harcanan : Math.round(buAyToplam[kat]),
+          onceki   : Math.round(onceki),
+          artisYuzde: Math.round(artis),
+          mesaj    : kat + " geçen aya göre %" + Math.round(artis) + " arttı!"
+        });
+      }
+    }
+
+    alarmlar.sort(function(a, b) { return b.harcanan - a.harcanan; });
+
+    return {
+      ok         : true,
+      alarmlar   : alarmlar,
+      alarmSayisi: alarmlar.length,
+      buAyGider  : buAyToplam,
+      oncekiAyGider: oncekiAyToplam
+    };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+
+function api_yapayzeka_harcamaAnalizi() {
+  try {
+    var GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) return { ok: false, msg: "API_KEY tanımlı değil" };
+
+    // Kaçak radar verisini al
+    var radar = api_kacakRadariKontrol();
+    if (!radar.ok) return { ok: false, msg: radar.msg };
+
+    // Kar/zarar verisini al
+    var karZarar = api_karZararHesapla("aylik");
+    if (!karZarar.ok) return { ok: false, msg: karZarar.msg };
+
+    // Gemini'ye gönderilecek özet
+    var ozet = "Bu ay gelir: " + karZarar.gelir.toLocaleString("tr-TR") + " TL\n"
+      + "Bu ay gider: " + karZarar.gider.toLocaleString("tr-TR") + " TL\n"
+      + "Net kar/zarar: " + karZarar.net.toLocaleString("tr-TR") + " TL\n"
+      + "Geçen aya göre değişim: %" + karZarar.degisim + "\n\n"
+      + "Kategori bazlı giderler:\n";
+
+    for (var kat in radar.buAyGider) {
+      ozet += "- " + kat + ": " + Math.round(radar.buAyGider[kat]).toLocaleString("tr-TR") + " TL";
+      if (radar.oncekiAyGider[kat]) {
+        ozet += " (geçen ay: " + Math.round(radar.oncekiAyGider[kat]).toLocaleString("tr-TR") + " TL)";
+      }
+      ozet += "\n";
+    }
+
+    if (radar.alarmlar.length > 0) {
+      ozet += "\nTespit edilen alarmlar:\n";
+      radar.alarmlar.forEach(function(a) {
+        ozet += "- " + a.mesaj + "\n";
+      });
+    }
+
+    var prompt = "Sen bir şirket mali müşavirisin. Aşağıdaki OSGB şirketinin bu ayki mali verilerini analiz et.\n\n"
+      + ozet + "\n\n"
+      + "Lütfen şunları yap:\n"
+      + "1. Kritik uyarıları listele\n"
+      + "2. Tasarruf önerilerini listele\n"
+      + "3. Genel mali sağlık değerlendirmesi yap\n"
+      + "Türkçe, kısa ve net cevap ver. Madde madde yaz.";
+
+    var url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + GEMINI_API_KEY;
+    var payload = {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 1024 }
+    };
+
+    var response = UrlFetchApp.fetch(url, {
+      method: "POST",
+      contentType: "application/json",
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+
+    var json = JSON.parse(response.getContentText());
+    if (!json || !json.candidates || !json.candidates[0]) {
+  Logger.log("AvrupaBirAI yanıtı: " + response.getContentText());
+  return { ok: false, msg: "AvrupaAI yanıt vermedi: " + response.getContentText().substring(0, 200) };
+}
+var analiz = json.candidates[0].content.parts[0].text;
+
+    // Sonucu logla
+    logYaz("YZ_ANALIZ", "Harcama analizi tamamlandı. Alarm sayısı: " + radar.alarmSayisi, "FINANS", "", "", "");
+
+    return {
+      ok        : true,
+      analiz    : analiz,
+      alarmlar  : radar.alarmlar,
+      karZarar  : karZarar,
+      olusturmaTarihi: Utilities.formatDate(new Date(), "Europe/Istanbul", "dd.MM.yyyy HH:mm")
+    };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}

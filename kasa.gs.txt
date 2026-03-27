@@ -1,0 +1,441 @@
+// ============================================================
+//  KASA.GS — Nakit Kasa Modülü
+//  Tüm nakit giriş/çıkışlar buraya kaydedilir.
+//  Her kayıt sonrası bakiye otomatik hesaplanır.
+// ============================================================
+
+// ── KASA OKUMA ───────────────────────────────────────────────
+
+/**
+ * Kasanın anlık bakiyesini döner.
+ * KASA sheet'inin son satırındaki bakiye sütununu okur.
+ */
+function kasaBakiyesiAl() {
+  const sheet = getSheet(SHEETS.KASA);
+  const sonSatir = sheet.getLastRow();
+  if (sonSatir <= 1) return 0; // Sadece başlık
+  return sheet.getRange(sonSatir, COL.KASA.BAKIYE).getValue() || 0;
+}
+
+/**
+ * Kasa hareketlerini döner.
+ * @param {number} limit - Kaç satır getirilsin (0 = hepsi)
+ */
+function kasaHareketleriAl(limit = 0) {
+  const sheet = getSheet(SHEETS.KASA);
+  const sonSatir = sheet.getLastRow();
+  if (sonSatir <= 1) return [];
+
+  const baslangic = limit > 0 ? Math.max(2, sonSatir - limit + 1) : 2;
+  const satirSayisi = sonSatir - baslangic + 1;
+  if (satirSayisi <= 0) return [];
+
+  const data = sheet.getRange(baslangic, 1, satirSayisi, 9).getValues();
+
+  return data.map(r => ({
+    id          : r[COL.KASA.ID - 1],
+    tarih       : tarihFormat(r[COL.KASA.TARIH - 1]),
+    aciklama    : r[COL.KASA.ACIKLAMA - 1],
+    tip         : r[COL.KASA.TIP - 1],
+    kategori    : r[COL.KASA.KATEGORI - 1],
+    tutar       : r[COL.KASA.TUTAR - 1],
+    bakiye      : r[COL.KASA.BAKIYE - 1],
+    belgeNo     : r[COL.KASA.BELGE_NO - 1],
+    kaynakId    : r[COL.KASA.KAYNAK_ID - 1],
+  })).reverse(); // En yeni üste
+}
+
+// ── KASA YAZMA ───────────────────────────────────────────────
+
+/**
+ * Kasaya yeni hareket ekler ve bakiyeyi günceller.
+ *
+ * @param {Object} params
+ * @param {string} params.aciklama   - Hareket açıklaması
+ * @param {string} params.tip        - 'Giriş' veya 'Çıkış'
+ * @param {string} params.kategori   - Tahsilat, Gider, Kasa Devir vb.
+ * @param {number} params.tutar      - Tutar (pozitif sayı)
+ * @param {string} [params.belgeNo]  - Fiş/makbuz no (opsiyonel)
+ * @param {string} [params.kaynakId] - İlgili kayıt ID (opsiyonel)
+ * @param {Date|string} [params.tarih] - Tarih (boş = bugün)
+ * @returns {string} Oluşturulan kasa kaydının ID'si
+ */
+function kasaHareketiEkle(params) {
+  const { aciklama, tip, kategori, tutar, belgeNo = '', kaynakId = '', tarih } = params;
+
+  // Validasyon
+  if (!['Giriş', 'Çıkış'].includes(tip)) throw new Error(`Geçersiz tip: "${tip}". "Giriş" veya "Çıkış" olmalı.`);
+  if (typeof tutar !== 'number' || tutar <= 0) throw new Error('Tutar pozitif bir sayı olmalıdır.');
+
+  const sheet = getSheet(SHEETS.KASA);
+  const mevcutBakiye = kasaBakiyesiAl();
+
+  // Yeni bakiye hesapla
+  const yeniBakiye = tip === 'Giriş'
+    ? mevcutBakiye + tutar
+    : mevcutBakiye - tutar;
+
+  // Negatif bakiye kontrolü (opsiyonel — aktif etmek istersen yorumu kaldır)
+  // if (yeniBakiye < 0) throw new Error(`Yetersiz kasa bakiyesi. Mevcut: ${paraBirim(mevcutBakiye)}, Çekilecek: ${paraBirim(tutar)}`);
+
+  const id = yeniID('K', sheet);
+  const kayitTarihi = tarih ? tarihFormat(tarih) : bugun();
+
+  sheet.appendRow([
+    id,
+    kayitTarihi,
+    aciklama,
+    tip,
+    kategori,
+    tutar,
+    yeniBakiye,
+    belgeNo,
+    kaynakId,
+  ]);
+  var logDetay = `${tip} işlemi: ${aciklama} (${tutar} TL). Yeni Bakiye: ${yeniBakiye} TL`;
+  logYaz("KASA_HAREKET", logDetay, "KASA", id, "", "");
+  Logger.log(`💵 Kasa ${tip}: ${paraBirim(tutar)} | Yeni bakiye: ${paraBirim(yeniBakiye)} | ID: ${id}`);
+  return id;
+}
+
+/**
+ * Kasaya nakit GİRİŞ ekler (kısayol).
+ */
+function kasaGiris(aciklama, tutar, kategori = 'Tahsilat', belgeNo = '', kaynakId = '') {
+  return kasaHareketiEkle({ aciklama, tip: 'Giriş', kategori, tutar, belgeNo, kaynakId });
+}
+
+/**
+ * Kasadan nakit ÇIKIŞ ekler (kısayol).
+ */
+function kasaCikis(aciklama, tutar, kategori = 'Gider', belgeNo = '', kaynakId = '') {
+  return kasaHareketiEkle({ aciklama, tip: 'Çıkış', kategori, tutar, belgeNo, kaynakId });
+}
+
+// ── KASA RAPOR ───────────────────────────────────────────────
+
+/**
+ * Belirli bir tarihe ait kasa özetini döner.
+ * @param {string} [tarih] - GG.AA.YYYY formatında (boş = bugün)
+ */
+function kasaGunlukOzet(tarih) {
+  const arananTarih = tarih || bugun();
+  const hareketler = kasaHareketleriAl();
+
+  const gunHareketler = hareketler.filter(h => h.tarih === arananTarih);
+  const toplamGiris = gunHareketler.filter(h => h.tip === 'Giriş').reduce((s, h) => s + h.tutar, 0);
+  const toplamCikis = gunHareketler.filter(h => h.tip === 'Çıkış').reduce((s, h) => s + h.tutar, 0);
+
+  return {
+    tarih,
+    toplamGiris,
+    toplamCikis,
+    net          : toplamGiris - toplamCikis,
+    anlikBakiye  : kasaBakiyesiAl(),
+    hareketSayisi: gunHareketler.length,
+  };
+}
+
+/**
+ * Belirli bir aydaki kasa özetini döner.
+ * @param {string} [yilAy] - YYYY-MM formatında (boş = bu ay)
+ */
+function kasaAylikOzet(yilAy) {
+  const buAy = yilAy || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
+  const hareketler = kasaHareketleriAl();
+
+  // Tarihi YYYY-MM formatına çevir karşılaştırma için
+  const ayHareketler = hareketler.filter(h => {
+    if (!h.tarih) return false;
+    const parts = h.tarih.split('.');
+    if (parts.length < 3) return false;
+    const yilAyStr = `${parts[2]}-${parts[1]}`;
+    return yilAyStr === buAy;
+  });
+
+  const toplamGiris = ayHareketler.filter(h => h.tip === 'Giriş').reduce((s, h) => s + h.tutar, 0);
+  const toplamCikis = ayHareketler.filter(h => h.tip === 'Çıkış').reduce((s, h) => s + h.tutar, 0);
+
+  return {
+    donem        : buAy,
+    toplamGiris,
+    toplamCikis,
+    net          : toplamGiris - toplamCikis,
+    anlikBakiye  : kasaBakiyesiAl(),
+  };
+}
+
+// ── KASA DÜZELTME ────────────────────────────────────────────
+
+/**
+ * Kasa sayımı sonrası gerçek bakiyeyi sisteme işler.
+ * Fark varsa otomatik "Kasa Sayım Farkı" hareketi oluşturur.
+ * @param {number} gercekBakiye - Elle sayılan gerçek nakit miktarı
+ */
+function kasaSayimDuzenle(gercekBakiye) {
+  const sistemBakiye = kasaBakiyesiAl();
+  const fark = gercekBakiye - sistemBakiye;
+
+  if (fark === 0) {
+    Logger.log('✅ Kasa sayımı eşleşti, fark yok.');
+    return;
+  }
+  logYaz("KASA_SAYIM", `Sayım farkı işlendi. Fark: ${fark} TL. Gerçek Bakiye: ${gercekBakiye} TL`, "KASA", "SAYIM", "", "");
+  if (fark > 0) {
+    kasaGiris(`Kasa sayım fazlası`, fark, 'Sayım Düzeltme');
+  } else {
+    kasaCikis(`Kasa sayım eksiği`, Math.abs(fark), 'Sayım Düzeltme');
+  }
+
+  Logger.log(`⚖️ Kasa sayım düzeltmesi: ${paraBirim(fark)} | Yeni bakiye: ${paraBirim(gercekBakiye)}`);
+}
+
+// ── UI / SIDEBAR ──────────────────────────────────────────────
+
+/**
+ * Dashboard için kasa verilerini JSON olarak döner.
+ * dashboard.gs veya HTML sidebar tarafından çağrılır.
+ */
+function kasaDashboardVerisi() {
+  return {
+    anlikBakiye  : kasaBakiyesiAl(),
+    gunlukOzet   : kasaGunlukOzet(),
+    sonHareketler: kasaHareketleriAl(10),
+  };
+}
+
+function api_kasaAcilisKaydet(p) {
+  try {
+    var kasaAdi = String(p.kasaAdi || "").trim();
+    var kasaTip = String(p.kasaTip || "NAKİT");
+    var bakiye  = parseFloat(p.bakiye || 0);
+    if (!kasaAdi) return { ok: false, msg: "Kasa adı zorunludur." };
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_KASA");
+    if (!sh) {
+      sh = ss.insertSheet("FİNANS_KASA");
+      sh.appendRow(["KasaAdi","KasaTip","AcilisTarihi","Bakiye","GuncelTarih"]);
+      sh.getRange(1,1,1,5).setFontWeight("bold").setBackground("#1e293b").setFontColor("white");
+    }
+    var data = sh.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim().toLowerCase() === kasaAdi.toLowerCase())
+        return { ok: false, msg: "Bu kasa zaten mevcut: " + kasaAdi };
+    }
+    var tarih = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd.MM.yyyy HH:mm");
+    sh.appendRow([kasaAdi, kasaTip, tarih, bakiye, tarih]);
+    return { ok: true, msg: kasaAdi + " kasası oluşturuldu." };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+
+function api_kasaGuncelle_(kasaAdi, tip, tutar) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_KASA");
+    if (!sh) return;
+    var data = sh.getDataRange().getValues();
+    var tarih = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd.MM.yyyy HH:mm");
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim().toUpperCase() === String(kasaAdi).trim().toUpperCase()) {
+        var mevcut = parseFloat(data[i][3]) || 0;
+        var yeni = (tip === "GELİR" || tip === "GELIR") ? mevcut + tutar : mevcut - tutar;
+        sh.getRange(i+1, 4).setValue(yeni);
+        sh.getRange(i+1, 5).setValue(tarih);
+        return;
+      }
+    }
+    sh.appendRow([kasaAdi, "NAKİT", tarih, (tip === "GELİR" || tip === "GELIR") ? tutar : -tutar, tarih]);
+  } catch(e) { Logger.log("api_kasaGuncelle_ hata: " + e.message); }
+}
+
+function api_kasaListesiGetir() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_KASA");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, kasalar: [] };
+    var data = sh.getDataRange().getValues();
+    var kasalar = [];
+    for (var i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      kasalar.push({ kasa: String(data[i][0]||""), tip: String(data[i][1]||""), bakiye: parseFloat(data[i][3])||0 });
+    }
+    return { ok: true, kasalar: kasalar };
+  } catch(e) { return { ok: false, kasalar: [], msg: e.message }; }
+}
+
+function api_nakitPozisyonu() {
+  try {
+    var kasaData = api_kasaListesiGetir();
+    var toplamKasa = 0;
+    (kasaData.kasalar || []).forEach(function(k) { toplamKasa += k.bakiye || 0; });
+    return { ok: true, toplamBanka: 0, toplamKasa: toplamKasa, toplamNakit: toplamKasa, bankaListesi: [], kasaListesi: kasaData.kasalar || [] };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+
+function api_kasaHareketleri(kasaAdi, donemAy, donemYil) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_CARİ");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, hareketler: [], gelirToplam: 0, giderToplam: 0 };
+    var data = sh.getDataRange().getValues();
+    var hareketler = [], gelirToplam = 0, giderToplam = 0;
+    var buAy  = donemAy  ? parseInt(donemAy) - 1  : new Date().getMonth();
+    var buYil = donemYil ? parseInt(donemYil)      : new Date().getFullYear();
+    for (var i = data.length - 1; i >= 1; i--) {
+      if (!data[i][0]) continue;
+      var dt = data[i][1] instanceof Date ? data[i][1] : new Date(String(data[i][1]).split(".").reverse().join("-"));
+      if (isNaN(dt) || dt.getMonth() !== buAy || dt.getFullYear() !== buYil) continue;
+      var tip = String(data[i][2] || "").toUpperCase();
+      var tutar = parseFloat(data[i][6]) || 0;
+      if (tip.indexOf("GEL") > -1 || tip.indexOf("TAH") > -1) gelirToplam += tutar;
+      else giderToplam += tutar;
+      var dt2 = data[i][1] instanceof Date ? data[i][1] : new Date(String(data[i][1]).split(".").reverse().join("-"));
+var tarihStr = isNaN(dt2) ? String(data[i][1]||"") : ('0'+dt2.getDate()).slice(-2) + '.' + ('0'+(dt2.getMonth()+1)).slice(-2) + '.' + dt2.getFullYear();
+hareketler.push({ 
+  id       : String(data[i][0]||""), 
+  tarih    : tarihStr, 
+  tip      : tip, 
+  kategori : String(data[i][3]||""),
+  kasa     : String(data[i][4]||""),
+  aciklama : String(data[i][5]||""),
+  tutar    : tutar 
+});
+    }
+    return { ok: true, hareketler: hareketler, gelirToplam: gelirToplam, giderToplam: giderToplam };
+  } catch(e) { return { ok: false, hareketler: [], gelirToplam: 0, giderToplam: 0, msg: e.message }; }
+}
+
+function api_muhasebeKpiKartlari() {
+  try {
+    var kasaData = api_kasaListesiGetir();
+    var toplamKasa = 0;
+    (kasaData.kasalar || []).forEach(function(k) { toplamKasa += k.bakiye || 0; });
+    var buAy = new Date().getMonth();
+    var buYil = new Date().getFullYear();
+    var h = api_kasaHareketleri(null, buAy + 1, buYil);
+    return { ok: true, ayGelir: h.gelirToplam||0, ayGider: h.giderToplam||0, ayNet: (h.gelirToplam||0)-(h.giderToplam||0), toplamNakit: toplamKasa, toplamKasa: toplamKasa, toplamBanka: 0, acikAlacak: 0, bekleyenCek: 0 };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+
+function toplamBankaBakiyesi() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_KASA");
+    if (!sh || sh.getLastRow() < 2) return 0;
+    var data = sh.getDataRange().getValues();
+    var toplam = 0;
+    for (var i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      toplam += parseFloat(data[i][3]) || 0;
+    }
+    return toplam;
+  } catch(e) {
+    return 0;
+  }
+}
+
+function posTahsilatiEkle(params) {
+  try {
+    var sheet = getSheet(SHEETS.POS);
+    var id = yeniID('P', sheet);
+    var tutar = params.tutar || 0;
+    var komisyon = params.komisyon || 0;
+    var netTutar = tutar - komisyon;
+    sheet.appendRow([
+      id,
+      params.tarih || bugun(),
+      params.aciklama || '',
+      tutar,
+      komisyon,
+      netTutar,
+      params.kaynakId || ''
+    ]);
+    Logger.log('💳 POS tahsilat: ' + paraBirim(tutar) + ' | ID: ' + id);
+    return id;
+  } catch(e) {
+    Logger.log('POS tahsilat hatası: ' + e.message);
+    return null;
+  }
+}
+
+function eftGiris(bankaKod, tutar, aciklama, karsiHesap, kaynakId) {
+  try {
+    var sheet = getSheet(SHEETS.BANKA_HAREKET);
+    var mevcutBakiye = bankaBakiyesiAl(bankaKod);
+    var yeniBakiye = mevcutBakiye + tutar;
+    var id = yeniID('BH', sheet);
+    sheet.appendRow([
+      id, bugun(), bankaKod, aciklama,
+      'Giriş', tutar, yeniBakiye,
+      karsiHesap || '', kaynakId || ''
+    ]);
+    Logger.log('🏦 EFT Giriş: ' + bankaKod + ' | ' + paraBirim(tutar));
+    return id;
+  } catch(e) {
+    Logger.log('EFT giriş hatası: ' + e.message);
+    return null;
+  }
+}
+
+function eftCikis(bankaKod, tutar, aciklama, karsiHesap, kaynakId) {
+  try {
+    var sheet = getSheet(SHEETS.BANKA_HAREKET);
+    var mevcutBakiye = bankaBakiyesiAl(bankaKod);
+    var yeniBakiye = mevcutBakiye - tutar;
+    var id = yeniID('BH', sheet);
+    sheet.appendRow([
+      id, bugun(), bankaKod, aciklama,
+      'Çıkış', tutar, yeniBakiye,
+      karsiHesap || '', kaynakId || ''
+    ]);
+    Logger.log('🏦 EFT Çıkış: ' + bankaKod + ' | ' + paraBirim(tutar));
+    return id;
+  } catch(e) {
+    Logger.log('EFT çıkış hatası: ' + e.message);
+    return null;
+  }
+}
+
+function bankaBakiyesiAl(bankaKod) {
+  try {
+    var sheet = getSheet(SHEETS.BANKA_HAREKET);
+    var sonSatir = sheet.getLastRow();
+    if (sonSatir <= 1) return 0;
+    var data = sheet.getDataRange().getValues();
+    var bakiye = 0;
+    for (var i = data.length - 1; i >= 1; i--) {
+      if (String(data[i][COL.BANKA_HAREKET.BANKA_KOD - 1]) === String(bankaKod)) {
+        bakiye = data[i][COL.BANKA_HAREKET.BAKIYE - 1] || 0;
+        break;
+      }
+    }
+    return bakiye;
+  } catch(e) {
+    return 0;
+  }
+}
+
+function api_bankaHesaplariListele() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_KASA");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, liste: [] };
+    var data = sh.getDataRange().getValues();
+    var liste = [];
+    for (var i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      var tip = String(data[i][1] || "").toUpperCase();
+      if (tip === "NAKİT") continue; // Sadece banka hesapları
+      liste.push({
+        hesapAdi : String(data[i][0] || ""),
+        banka    : String(data[i][1] || ""),
+        bakiye   : parseFloat(data[i][3]) || 0,
+        durum    : "AKTİF"
+      });
+    }
+    return { ok: true, liste: liste };
+  } catch(e) {
+    return { ok: false, liste: [], msg: e.message };
+  }
+}
+

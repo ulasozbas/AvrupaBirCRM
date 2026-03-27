@@ -1,0 +1,1181 @@
+// ==========================================
+// SABİTLER
+// ==========================================
+var ESKI_CRM_SHEET_ID = "1kXex1NzL9DePQJSjFn84nQhNjKhJYuqgReBB7k_GcKQ";
+var ESKI_TEKLIF_TABLO = "TEKLIFLER";
+var FIRMA_ISLEM_SHEET = "FIRMA_ISLEM_LOG";
+
+// ==========================================
+// YARDIMCI FONKSİYONLAR
+// ==========================================
+function escapeHtml(s) {
+  return String(s || "")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+function formatNotes_(txt) {
+  txt = String(txt || "").trim();
+  if (!txt) return "";
+  var lines = txt.split(/\r?\n/).map(function(x){ return x.trim(); }).filter(Boolean);
+  if (lines.length <= 1) return "<div style='white-space:pre-wrap;'>" + escapeHtml(txt) + "</div>";
+  var items = lines.map(function(l){ l = l.replace(/^[•\-\*]\s*/, ""); return "<li>" + escapeHtml(l) + "</li>"; }).join("");
+  return "<ul style='margin:0; padding-left:16px;'>" + items + "</ul>";
+}
+
+function sanitizeFileName_(name) {
+  name = String(name || "").trim();
+  if (!name) name = "TEKLIF";
+  name = name.replace(/[\\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim();
+  if (name.length > 120) name = name.slice(0, 120).trim();
+  return name;
+}
+
+function prettyNameFromEmail_(email) {
+  email = String(email || "").trim().toLowerCase();
+  if (!email || email.indexOf("@") < 0) return "";
+  var local = email.split("@")[0].replace(/[._-]+/g, " ").replace(/\s+/g, " ").trim();
+  return local.split(" ").map(function(w){ return w ? w.charAt(0).toUpperCase() + w.slice(1) : ""; }).join(" ");
+}
+
+function normFirma_(s) {
+  s = String(s || "").toLowerCase().trim()
+    .replace(/ı/g,"i").replace(/ğ/g,"g").replace(/ü/g,"u")
+    .replace(/ş/g,"s").replace(/ö/g,"o").replace(/ç/g,"c");
+  return s.replace(/[^a-z0-9]+/g," ").replace(/\s+/g," ").trim();
+}
+
+function getFirmaIslemSheet_() {
+  var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+  var sh = ss.getSheetByName(FIRMA_ISLEM_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(FIRMA_ISLEM_SHEET);
+    sh.getRange(1,1,1,7).setValues([["NormFirma","FirmaUnvani","IslemZamani","Kullanici","TeklifNo","FileId","Kaynak"]]);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function pad5_(n) { n = Number(n) || 0; return ("00000" + n).slice(-5); }
+
+function initials_(adSoyad) {
+  adSoyad = String(adSoyad || "").trim();
+  if (!adSoyad) return "XX";
+  var parts = adSoyad.split(/\s+/).filter(Boolean);
+  var a = (parts[0] || "")[0] || "X";
+  var b = (parts.length > 1 ? parts[parts.length - 1][0] : "") || "X";
+  return (a + b).toUpperCase();
+}
+
+function TEKLIF_nextSeq_() {
+  var props = PropertiesService.getScriptProperties();
+  var n = Number(props.getProperty("TEKLIF_SEQ") || "99");
+  n = n + 1;
+  props.setProperty("TEKLIF_SEQ", String(n));
+  return n;
+}
+
+function newTeklifNo_() {
+  var props = PropertiesService.getScriptProperties();
+  var year = new Date().getFullYear();
+  var key = "TEKLIF_NO_SEQ_" + year;
+  var n = Number(props.getProperty(key) || "0") + 1;
+  props.setProperty(key, String(n));
+  var seq = String(n).padStart(6, "0");
+  return "AB-" + year + "-" + seq;
+}
+
+function num_(v, def) {
+  if (v === "" || v === null || typeof v === "undefined") return (typeof def === "undefined" ? 0 : def);
+  var n = Number(String(v).replace(",", "."));
+  return isFinite(n) ? n : (typeof def === "undefined" ? 0 : def);
+}
+
+function fmtDateTR_(d) {
+  var dd = String(d.getDate()).padStart(2,"0");
+  var mm = String(d.getMonth()+1).padStart(2,"0");
+  return dd + "." + mm + "." + d.getFullYear();
+}
+
+function appendByHeader_(sh, obj) {
+  var lc = sh.getLastColumn();
+  var headers = sh.getRange(1,1,1,lc).getDisplayValues()[0].map(function(x){ return String(x||"").trim(); });
+  var row = new Array(headers.length).fill("");
+  for (var i=0; i<headers.length; i++) {
+    var key = headers[i];
+    if (!key) continue;
+    if (Object.prototype.hasOwnProperty.call(obj, key)) row[i] = obj[key];
+  }
+  sh.appendRow(row);
+}
+
+function ensureSheet_(ss, name, headers) {
+  var sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    sh.getRange(1,1,1,headers.length).setValues([headers]);
+    sh.setFrozenRows(1);
+    return sh;
+  }
+  var lc = sh.getLastColumn();
+  var existing = sh.getRange(1,1,1,Math.max(lc,1)).getDisplayValues()[0].map(function(x){ return String(x||"").trim(); });
+  var have = {};
+  existing.filter(Boolean).forEach(function(h){ have[h] = true; });
+  var add = headers.filter(function(h){ return !have[h]; });
+  if (add.length) {
+    sh.getRange(1, existing.length + 1, 1, add.length).setValues([add]);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function findSheetByHeader_(ss, mustHaveHeaders) {
+  var want = mustHaveHeaders.map(function(h){ return String(h).trim(); });
+  var sheets = ss.getSheets();
+  for (var s=0; s<sheets.length; s++) {
+    var sh = sheets[s];
+    if (sh.getLastColumn() < 1 || sh.getLastRow() < 1) continue;
+    var header = sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0].map(function(x){ return String(x||"").trim(); });
+    var ok = true;
+    for (var w=0; w<want.length; w++) { if (header.indexOf(want[w]) < 0) { ok = false; break; } }
+    if (ok) return sh;
+  }
+  return null;
+}
+
+function buildMapById_(sh, idHeader, valueHeaderCandidates) {
+  if (!sh) return {};
+  if (sh.getLastColumn() < 1 || sh.getLastRow() < 2) return {};
+  var v = sh.getRange(1,1,sh.getLastRow(),sh.getLastColumn()).getDisplayValues();
+  var h = v[0].map(function(x){ return String(x||"").trim(); });
+  var iId = h.indexOf(idHeader);
+  if (iId < 0) return {};
+  var iVal = -1;
+  for (var n=0; n<valueHeaderCandidates.length; n++) { iVal = h.indexOf(valueHeaderCandidates[n]); if (iVal >= 0) break; }
+  if (iVal < 0) return {};
+  var out = {};
+  for (var r=1; r<v.length; r++) {
+    var id = String(v[r][iId] || "").trim();
+    if (!id) continue;
+    out[id] = String(v[r][iVal] || "").trim();
+  }
+  return out;
+}
+
+function KDV_OSGB_GUVENLIK_(grup, hizmetAdi) {
+  if (String(grup) !== "OSGB") return 10;
+  var t = String(hizmetAdi || "").toLowerCase()
+    .replace(/ı/g,"i").replace(/ğ/g,"g").replace(/ü/g,"u")
+    .replace(/ş/g,"s").replace(/ö/g,"o").replace(/ç/g,"c")
+    .replace(/[^a-z0-9]/g,"");
+  if (t.includes("isguven")||t.includes("uzman")||t.includes("risk")||t.includes("egitim")||t.includes("danisman")||t.includes("acileylem")||t.includes("ilkyardim")) return 20;
+  return 10;
+}
+
+function getImageDataUri_(fileId) {
+  try {
+    var file = DriveApp.getFileById(fileId);
+    var blob = file.getBlob();
+    var mime = blob.getContentType() || "image/png";
+    var name = (file.getName() || "").toLowerCase();
+    if (name.endsWith(".jpg") || name.endsWith(".jpeg")) mime = "image/jpeg";
+    else if (name.endsWith(".png")) mime = "image/png";
+    var b64 = Utilities.base64Encode(blob.getBytes());
+    return "data:" + mime + ";base64," + b64;
+  } catch(e) { return ""; }
+}
+
+// ==========================================
+// KATALOG SERVİSİ
+// ==========================================
+function KAT_inferKdv_(kategori, hizmet) {
+  var k = String(kategori || "").toUpperCase();
+  var h = String(hizmet || "").toUpperCase();
+  var isOsgb = k.includes("OSGB");
+  var is20 = isOsgb && (h.includes("İŞ GÜVENLİĞİ")||h.includes("IS GUVENLIGI")||h.includes("RİSK ANALİZ")||h.includes("RISK ANALIZ")||h.includes("ACİL EYLEM")||h.includes("ACIL EYLEM")||h.includes("EĞİTİM")||h.includes("EGITIM"));
+  return is20 ? 20 : 10;
+}
+
+function KAT_readCatalog_() {
+  var sh = SpreadsheetApp.openById(CRM_SHEET_ID).getSheetByName("HIZMET_KATALOG");
+  if (!sh) throw new Error("HIZMET_KATALOG sekmesi bulunamadı.");
+  var values = sh.getDataRange().getValues();
+  if (values.length < 2) return [];
+  var header = values[0].map(function(h){ return String(h || "").trim(); });
+  var idx = function(name){ return header.indexOf(name); };
+  var iKategori = idx("Unnamed: 0"), iHizmet = idx("Test"), iMaliyet = idx("MALİYET FİYATI"), iSatis = idx("SATIŞ FİYATI");
+  if (iKategori < 0 || iHizmet < 0 || iMaliyet < 0 || iSatis < 0) throw new Error("HIZMET_KATALOG başlıkları beklenen formatta değil.");
+  var out = [];
+  for (var r=1; r<values.length; r++) {
+    var row = values[r];
+    var kategori = String(row[iKategori] || "").trim();
+    var hizmet = String(row[iHizmet] || "").trim();
+    if (!kategori || !hizmet) continue;
+    out.push({ kategori: kategori, hizmet: hizmet, maliyet: Number(row[iMaliyet]||0), satis: Number(row[iSatis]||0), kdv: KAT_inferKdv_(kategori, hizmet) });
+  }
+  return out;
+}
+
+function KAT_getCatalogCached_() {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get("CATALOG_V1");
+  if (cached) return JSON.parse(cached);
+  var list = KAT_readCatalog_();
+  cache.put("CATALOG_V1", JSON.stringify(list), 6*60*60);
+  return list;
+}
+
+function KAT_clearCatalogCache_() { CacheService.getScriptCache().remove("CATALOG_V1"); return "OK"; }
+
+var CatalogService = (function() {
+  function norm_(s) {
+    if (s === null || s === undefined) return "";
+    s = String(s).trim().toLowerCase()
+      .replace(/ğ/g,"g").replace(/ü/g,"u").replace(/ş/g,"s")
+      .replace(/ı/g,"i").replace(/ö/g,"o").replace(/ç/g,"c");
+    s = s.replace(/\s+/g,"_").replace(/[^\w]/g,"_").replace(/_+/g,"_").replace(/^_+|_+$/g,"");
+    return s;
+  }
+  function toNumber_(v) {
+    if (v === null || v === undefined || v === "") return 0;
+    if (typeof v === "number") return v;
+    var s = String(v).trim();
+    if (s.indexOf(",") > -1) s = s.replace(/\./g,"").replace(",",".");
+    s = s.replace(/[^\d.-]/g,"");
+    var n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+  }
+  function truthy_(v) { var s = norm_(v); return (s==="1"||s==="true"||s==="evet"||s==="aktif"||s==="yes"); }
+  var FIELD_ALIASES = {
+    group: ["grup","grubu","kategori","kategorİ","kategori_grup","servis_grup"],
+    serviceName: ["hizmet","hizmet_adi","adi","hizmet_ad","urun","kalem","islem","tetkik","tetkik_adi"],
+    salePrice: ["satis","satıs","satis_fiyat","satis_fiyati","2025_fiyat","fiyat","birim_fiyat","liste_fiyat"],
+    cost: ["maliyet","mali̇yet","cost","birim_maliyet"],
+    unit: ["birim","unit"],
+    code: ["kod","hizmet_kodu","sku","code"],
+    category: ["kategori","tur","tip","sinif","hizmet_turu"],
+    active: ["aktif","durum","pasif","status","enabled"]
+  };
+  function buildHeaderIndex_(headers) {
+    var index = {}, headerMap = {};
+    headers.forEach(function(h,i){ var key = norm_(h); if (key) headerMap[key] = i; });
+    Object.keys(FIELD_ALIASES).forEach(function(field) {
+      var aliases = FIELD_ALIASES[field];
+      for (var a=0; a<aliases.length; a++) {
+        var key = norm_(aliases[a]);
+        if (headerMap.hasOwnProperty(key)) { index[field] = headerMap[key]; break; }
+      }
+    });
+    var missing = [];
+    ["serviceName","group","salePrice","cost"].forEach(function(f){ if (index[f] == null) missing.push(f); });
+    return { index: index, missing: missing };
+  }
+  function getCatalogSheet_() {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("HIZMET_KATALOG");
+    if (!sh) throw new Error("HIZMET_KATALOG sheet bulunamadı.");
+    return sh;
+  }
+  function readCatalog_(opts) {
+    opts = opts || {};
+    var onlyActive = (opts.onlyActive !== false);
+    var sh = getCatalogSheet_();
+    var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
+    if (lastRow < 2 || lastCol < 1) return [];
+    var values = sh.getRange(1,1,lastRow,lastCol).getValues();
+    var meta = buildHeaderIndex_(values[0]);
+    if (meta.missing.length) throw new Error("HIZMET_KATALOG başlıkları eksik: " + meta.missing.join(", "));
+    var idx = meta.index;
+    var out = [];
+    for (var r=1; r<values.length; r++) {
+      var row = values[r];
+      var name = row[idx.serviceName], group = row[idx.group];
+      if (!name || !group) continue;
+      var active = true;
+      if (idx.active !== undefined) active = truthy_(row[idx.active]);
+      if (onlyActive && idx.active !== undefined && !active) continue;
+      out.push({ code: idx.code!==undefined?row[idx.code]:"", group: String(group).trim(), category: idx.category!==undefined?String(row[idx.category]).trim():"", name: String(name).trim(), unit: idx.unit!==undefined?String(row[idx.unit]).trim():"", salePrice: toNumber_(row[idx.salePrice]), cost: toNumber_(row[idx.cost]), active: active });
+    }
+    return out;
+  }
+  function getCatalog(opts) {
+    opts = opts || {};
+    var cacheKey = "CATALOG_V1_ONLYACTIVE_" + (opts.onlyActive !== false ? "1" : "0");
+    var cache = CacheService.getScriptCache();
+    var cached = cache.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+    var list = readCatalog_(opts);
+    cache.put(cacheKey, JSON.stringify(list), 21600);
+    return list;
+  }
+  function clearCatalogCache() { CacheService.getScriptCache().removeAll(["CATALOG_V1_ONLYACTIVE_1","CATALOG_V1_ONLYACTIVE_0"]); }
+  function isOsgbService_(item) {
+    var t = norm_((item.group||"")+" "+(item.category||"")+" "+(item.name||"")+" "+(item.code||""));
+    var keys = ["isyeri_hekimi","hekim","dsp","diger_saglik_personeli","is_guvenligi","isg_uzmani","uzman","a_sinifi","b_sinifi","c_sinifi","osgb"];
+    for (var i=0; i<keys.length; i++) { if (t.indexOf(keys[i]) > -1) return true; }
+    if (t.indexOf("isg") > -1 && t.indexOf("uzman") > -1) return true;
+    return false;
+  }
+  function isTestItem_(item) {
+    var t = norm_((item.group||"")+" "+(item.category||"")+" "+(item.name||"")+" "+(item.code||""));
+    var keys = ["tetkik","test","laboratuvar","lab","kan","hemogram","biyokimya","idrar","portor","rontgen","akciğer","grafi","ekg","odyometri","spirometri","goz","isitme","audiometri","saglik_taramasi","mobil"];
+    for (var i=0; i<keys.length; i++) { if (t.indexOf(keys[i]) > -1) return true; }
+    if (t.indexOf("ise") > -1 && t.indexOf("giris") > -1) return true;
+    return false;
+  }
+  function searchCatalog(query, group, limit) {
+    query = (query || "").toString().trim().toLowerCase();
+    group = String(group || "").trim();
+    limit = Number(limit || 2000);
+    var list = getCatalog({ onlyActive: true });
+    if (group === "OSGB") list = list.filter(isOsgbService_);
+    else if (group === "MOBIL" || group === "ISE_GIRIS") list = list.filter(isTestItem_);
+    if (!query) { list.sort(function(a,b){ return String(a.name||"").localeCompare(String(b.name||""),"tr"); }); return list.slice(0, limit); }
+    var qn = norm_(query), out = [];
+    for (var i=0; i<list.length; i++) {
+      var hay = norm_((list[i].name||"")+" "+(list[i].code||"")+" "+(list[i].category||"")+" "+(list[i].group||""));
+      if (hay.indexOf(qn) > -1) { out.push(list[i]); if (out.length >= limit) break; }
+    }
+    return out;
+  }
+  return { getCatalog: getCatalog, searchCatalog: searchCatalog, clearCatalogCache: clearCatalogCache };
+})();
+
+function api_katalogAra(q, grup) {
+  var res = CatalogService.searchCatalog(String(q||"").trim(), String(grup||"").trim(), 200);
+  return res.map(function(x){ return { kategori: x.group, hizmet: x.name, maliyet: x.cost, satis: x.salePrice, kdv: KAT_inferKdv_(x.group, x.name) }; });
+}
+
+function api_clearCatalogCache() { CatalogService.clearCatalogCache(); return "OK"; }
+
+// ==========================================
+// PDF OLUŞTURMA
+// ==========================================
+function buildPdfHtml_(p) {
+  p = p || {};
+  var musteri = p.musteri || {};
+  p.meta = p.meta || {};
+  var meta = p.meta;
+  meta.hazirlayan = "Avrupa Bir OSGB";
+  meta.hazirlayanTel = "0549 483 83 82";
+  meta.hazirlayanMail = "www.avrupabir.com.tr";
+  var hazirlayanAdSoyad = String(meta.hazirlayan || "").trim();
+  var hazirlayanMail = String(meta.hazirlayanMail || "").trim();
+  var hazirlayanTel = String(meta.hazirlayanTel || "").trim();
+  var onayFirma = String(musteri.firma || "").trim();
+  var sartlar = String(p.sartlar || "").trim();
+  var iskonto = Number(p.iskonto || 0);
+  var antetSrc = "";
+  try { antetSrc = getImageDataUri_(LOGO_FILE_ID); } catch(e) {}
+  var kdvDahil = p.kdvDahil !== false;
+  var kdvSatirGoster = p.kdvSatirGoster !== false;
+  var rowsAll = [].concat((p.osgb||[]).map(function(r){ return Object.assign({},r,{grup:"OSGB"}); }))
+    .concat((p.mobil||[]).map(function(r){ return Object.assign({},r,{grup:"MOBİL"}); }))
+    .concat((p.iseGiris||[]).map(function(r){ return Object.assign({},r,{grup:"İŞE GİRİŞ"}); }));
+  var rowCount = (p.osgb||[]).length + (p.mobil||[]).length + (p.iseGiris||[]).length;
+  var scale = 1;
+  if (rowCount > 18) scale = 18 / rowCount;
+  if (scale < 0.55) scale = 0.55;
+  var money = function(n){ return (Number(n)||0).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}); };
+  var netSatis = 0, toplamKdv = 0;
+  rowsAll.forEach(function(r) {
+    var adet = Number(r.adet||0), birim = Number(r.birim||0), kdv = Number(r.kdv||0);
+    var satirNet = adet * birim;
+    netSatis += satirNet;
+    toplamKdv += satirNet * (kdv/100);
+  });
+  var netIskontoSonrasi = Math.max(0, netSatis - iskonto);
+  var kdvIskontoSonrasi = (netSatis > 0) ? (toplamKdv * (netIskontoSonrasi / netSatis)) : 0;
+  var genelToplam = kdvDahil ? (netIskontoSonrasi + kdvIskontoSonrasi) : netIskontoSonrasi;
+
+  function renderTable(title, list) {
+    list = list || [];
+    if (!list.length) return "";
+    var body = list.map(function(r) {
+      var adet=Number(r.adet||0), birim=Number(r.birim||0), kdv=Number(r.kdv||0);
+      var net=adet*birim, kdvTutar=net*(kdv/100);
+      var toplam=kdvDahil?(net+kdvTutar):net;
+      return "<tr><td>"+escapeHtml(String(r.ad||""))+"</td><td class='num'>"+money(adet)+"</td><td class='num'>"+money(birim)+" ₺</td>"+(kdvSatirGoster?"<td class='num'>%"+kdv+"</td>":"")+"<td class='num'>"+money(toplam)+" ₺</td></tr>";
+    }).join("");
+    return "<div class='section'><div class='sectionTitle'>"+escapeHtml(title)+"</div><table class='tbl'><colgroup><col style='width:"+(kdvSatirGoster?"280px":"340px")+"'><col style='width:60px'><col style='width:90px'>"+(kdvSatirGoster?"<col style='width:60px'>":"")+"<col style='width:110px'></colgroup><thead><tr><th>Hizmet / Tetkik</th><th class='num'>Adet</th><th class='num'>Birim</th>"+(kdvSatirGoster?"<th class='num'>KDV</th>":"")+"<th class='num'>Tutar</th></tr></thead><tbody>"+body+"</tbody></table></div>";
+  }
+
+  return "<!doctype html><html lang='tr'><head><meta charset='utf-8'/><style>@page{size:A4;margin:0;}.page{width:21cm;height:29.7cm;overflow:hidden;position:relative;background:#fff;}.scaleLayer{transform:scale("+scale+");transform-origin:top left;width:21cm;height:29.7cm;}body{font-family:Arial,sans-serif;font-size:11px;margin:0;padding:0;color:#111;}.antet{width:21cm;height:4cm;display:block;object-fit:cover;}.wrap{padding:16px 18px 14px 18px;}.top{display:flex;justify-content:space-between;margin-top:6px;}.leftInfo{width:62%;}.rightMeta{width:34%;text-align:right;}.hr{border-top:2px solid #111;margin:10px 0 12px;}.title{text-align:center;font-weight:700;margin:6px 0 8px;font-size:13px;}.section{border:1px solid #d6d6d6;padding:10px 10px 6px;margin:10px 0;}.sectionTitle{text-align:center;font-weight:700;margin:0 0 6px;}table{width:100%;border-collapse:collapse;}th{padding:6px;border-bottom:1px solid #cfcfcf;text-align:left;}td{padding:6px;border-bottom:1px solid #efefef;}.num{text-align:right;white-space:nowrap;}.bottomArea{display:flex;justify-content:space-between;align-items:flex-end;margin-top:10px;}.sumBox{width:34%;border:1px solid #d6d6d6;padding:8px;}.sumRow{display:flex;justify-content:space-between;margin:4px 0;}.sumBig{margin-top:6px;padding-top:6px;border-top:2px solid #111;font-weight:800;}.footer{position:relative;margin-top:12px;display:flex;justify-content:space-between;}.footerCol{width:48%;}.footerLine{border-top:1px solid #111;margin-bottom:6px;}.center{text-align:center;}.small{font-size:10px;}</style></head><body><div class='page'><div class='scaleLayer'>"+(antetSrc?"<img class='antet' src='"+antetSrc+"'>":"<div style='height:4cm;'></div>")+"<div class='wrap'><div class='top'><div class='leftInfo'><div><b>Firma:</b> "+escapeHtml(musteri.firma||"")+"</div><div><b>Yetkili:</b> "+escapeHtml(musteri.yetkili||"")+"</div><div><b>Telefon:</b> "+escapeHtml(musteri.tel||"")+"</div><div><b>E-Posta:</b> "+escapeHtml(musteri.mail||"")+"</div></div><div class='rightMeta'><div><b>Teklif No:</b> "+escapeHtml(meta.no||"")+"</div><div><b>Tarih:</b> "+escapeHtml(meta.tarih||"")+"</div></div></div><div class='hr'></div><div class='title'>TEKLİF</div>"+renderTable("OSGB",p.osgb||[])+renderTable("MOBİL",p.mobil||[])+renderTable("İŞE GİRİŞ",p.iseGiris||[])+"<div class='section'><div class='sectionTitle'>NOTLAR</div><div style='font-size:8px;line-height:1.45;color:#444;'>"+(sartlar?formatNotes_(sartlar):"<div>—</div>")+"</div></div><div class='bottomArea'><div style='width:62%'></div><div class='sumBox'><div class='sumRow'><div>Satış (KDV hariç)</div><div><b>"+money(netSatis)+" ₺</b></div></div>"+(iskonto>0?"<div class='sumRow'><div>İskonto</div><div><b>-"+money(iskonto)+" ₺</b></div></div>":"")+(kdvSatirGoster?"<div class='sumRow'><div>KDV</div><div><b>"+money(kdvIskontoSonrasi)+" ₺</b></div></div>":"")+"<div class='sumRow sumBig'><div>GENEL TOPLAM</div><div>"+money(genelToplam)+" ₺</div></div><div class='small' style='margin-top:6px;color:#666;'>"+(kdvDahil?"Toplamlar KDV dahildir.":"Toplamlar KDV hariçtir.")+"</div></div></div><div class='footer'><div class='footerCol'><div class='footerLine'></div><div class='center small'><b>Hazırlayan</b></div><div class='center' style='margin-top:8px;font-weight:700;'>"+escapeHtml(hazirlayanAdSoyad||"—")+"</div><div class='center small' style='margin-top:4px;color:#444;'>"+escapeHtml(hazirlayanMail||"—")+"</div><div class='center small' style='margin-top:2px;color:#444;'>"+escapeHtml(hazirlayanTel||"—")+"</div></div><div class='footerCol'><div class='footerLine'></div><div class='center small'><b>Onay</b></div><div class='center' style='margin-top:12px;font-weight:700;'>"+escapeHtml(onayFirma||"—")+"</div></div></div></div></div></div></body></html>";
+}
+
+function makePdf_(data) {
+  var html = buildPdfHtml_(data);
+  return Utilities.newBlob(html, "text/html", "Teklif.html").getAs("application/pdf").setName(data.fileName);
+}
+
+// ==========================================
+// TEKLIF TAKİP
+// ==========================================
+function TRACK_getSheet_() {
+  var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+  var sh = ss.getSheetByName("TEKLIF_TAKIP");
+  if (!sh) {
+    sh = ss.insertSheet("TEKLIF_TAKIP");
+    sh.appendRow(["TeklifNo","Firma","To","Cc","SentAt","ViewToken","FirstViewedAt","LastViewedAt","ViewCount"]);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function TRACK_logSent_(payload, token) {
+  var sh = TRACK_getSheet_();
+  sh.appendRow([
+    String((payload.meta&&payload.meta.no)||""),
+    String((payload.musteri&&payload.musteri.firma)||""),
+    String((payload.mail&&payload.mail.to)||(payload.musteri&&payload.musteri.mail)||""),
+    String((payload.mail&&payload.mail.cc)||""),
+    new Date(), token, "", "", 0
+  ]);
+}
+
+function TRACK_findRowByToken_(token) {
+  var sh = TRACK_getSheet_();
+  var last = sh.getLastRow();
+  if (last < 2) return null;
+  var tokens = sh.getRange(2,6,last-1,1).getValues();
+  for (var i=0; i<tokens.length; i++) { if (String(tokens[i][0]||"") === token) return 2+i; }
+  return null;
+}
+
+function TRACK_markViewed_(token) {
+  token = String(token||"").trim();
+  if (!token) return;
+  var sh = TRACK_getSheet_();
+  var row = TRACK_findRowByToken_(token);
+  if (!row) return;
+  var first = sh.getRange(row,7).getValue();
+  var cnt = Number(sh.getRange(row,9).getValue()||0);
+  var now = new Date();
+  if (!first) sh.getRange(row,7).setValue(now);
+  sh.getRange(row,8).setValue(now);
+  sh.getRange(row,9).setValue(cnt+1);
+}
+
+function TRACK_viewPage_(token) {
+  TRACK_markViewed_(token);
+  return HtmlService.createHtmlOutput("<div style='font-family:system-ui;padding:18px'><h2>Teklif görüntülendi ✅</h2></div>").setTitle("Teklif Takip");
+}
+
+// ==========================================
+// TEKLIF NO ÜRETİCİ
+// ==========================================
+function api_generateTeklifNo(senderEmail) {
+  senderEmail = String(senderEmail||"").trim().toLowerCase();
+  if (!senderEmail) throw new Error("senderEmail boş");
+  var u = AUTH_getUserProfile_(senderEmail) || { adSoyad: "" };
+  var init = initials_(u.adSoyad);
+  var seq = TEKLIF_nextSeq_();
+  var no = "AB " + init + " " + pad5_(seq);
+  return { no: no, seq: seq, initials: init };
+}
+
+// ==========================================
+// PDF API'LERİ
+// ==========================================
+function api_pdfBase64(payload) {
+  if (!payload) throw new Error("payload boş");
+  payload.meta = payload.meta || {};
+  if (!payload.fileName) {
+    var firma = String((payload.musteri&&payload.musteri.firma)||"").trim().replace(/[\\\/:*?"<>|]/g,"-").replace(/\s+/g," ").trim();
+    payload.fileName = (firma?firma:"teklif") + ".pdf";
+  }
+  var pdfBlob = makePdf_(payload);
+  var b64 = Utilities.base64Encode(pdfBlob.getBytes());
+  try {
+    var folderId = (typeof DRIVE_PDF_FOLDER_ID !== "undefined" && DRIVE_PDF_FOLDER_ID) ? DRIVE_PDF_FOLDER_ID : "";
+    var file;
+    if (folderId) { file = DriveApp.getFolderById(folderId).createFile(pdfBlob).setName(payload.fileName); }
+    else { file = DriveApp.createFile(pdfBlob).setName(payload.fileName); }
+    Drive.Permissions.create({role:"reader",type:"anyone"}, file.getId(), {supportsAllDrives:true});
+    if (payload.teklifId) api_teklifPdfIdGuncelle_({teklifId:payload.teklifId, fileId:file.getId()});
+  } catch(e) { Logger.log("Drive kayıt hatası: " + e.message); }
+  return { name: pdfBlob.getName(), b64: b64 };
+}
+
+function api_pdfDriveKaydet(payload) {
+  if (!payload) throw new Error("payload boş");
+  payload.musteri = payload.musteri || {};
+  payload.meta = payload.meta || {};
+  var firmaAdi = sanitizeFileName_(payload.musteri.firma || "teklif");
+  payload.fileName = firmaAdi + ".pdf";
+  var pdfBlob = makePdf_(payload);
+  var folderId = (typeof TEKLIF_PDF_FOLDER_ID !== "undefined" && TEKLIF_PDF_FOLDER_ID) ? TEKLIF_PDF_FOLDER_ID : "";
+  var file;
+  if (folderId) { file = DriveApp.getFolderById(folderId).createFile(pdfBlob).setName(payload.fileName); }
+  else { file = DriveApp.createFile(pdfBlob).setName(payload.fileName); }
+  try { Drive.Permissions.create({role:"reader",type:"anyone"}, file.getId(), {supportsAllDrives:true}); } catch(e) {}
+  return { ok:true, fileId:file.getId(), fileUrl:"https://drive.google.com/file/d/"+file.getId()+"/view", name:file.getName(), url:file.getUrl() };
+}
+
+function api_teklifPdfOlustur(p) {
+  if (!p) throw new Error("Payload boş");
+  var pdfBlob = makePdf_(p);
+  var name = (p.fileName || ((p.meta&&p.meta.no)||"teklif") + ".pdf");
+  var folderId = (typeof DRIVE_PDF_FOLDER_ID !== "undefined" && DRIVE_PDF_FOLDER_ID) ? DRIVE_PDF_FOLDER_ID : "";
+  var file;
+  try {
+    if (folderId) { file = DriveApp.getFolderById(folderId).createFile(pdfBlob).setName(name); }
+    else { file = DriveApp.createFile(pdfBlob).setName(name); }
+  } catch(e) { throw new Error("Drive kayıt hatası: " + e.message); }
+  try { Drive.Permissions.create({role:"reader",type:"anyone"}, file.getId(), {supportsAllDrives:true}); } catch(e) {}
+  if (p.teklifId) api_teklifPdfIdGuncelle_({teklifId:p.teklifId, fileId:file.getId()});
+  return { url:"https://drive.google.com/file/d/"+file.getId()+"/view", downloadUrl:"https://drive.google.com/uc?export=download&id="+file.getId(), fileId:file.getId(), name:name };
+}
+
+function api_teklifPdfIdGuncelle_(p) {
+  var teklifId = String(p.teklifId||"").trim();
+  var fileId = String(p.fileId||"").trim();
+  if (!teklifId || !fileId) return;
+  var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+  var sh = ss.getSheetByName(TEKLIF_TABLO);
+  if (!sh) return;
+  var vals = sh.getDataRange().getValues();
+  var head = vals[0];
+  var iTeklifID = head.indexOf("TeklifID"), iPdf = head.indexOf("PdfDriveFileId");
+  if (iTeklifID < 0 || iPdf < 0) return;
+  for (var r=1; r<vals.length; r++) { if (String(vals[r][iTeklifID]||"").trim() === teklifId) { sh.getRange(r+1, iPdf+1).setValue(fileId); return; } }
+}
+
+// ==========================================
+// TEKLIF MAIL GÖNDER
+// ==========================================
+function api_teklifMailGonder(payload) {
+  payload = payload || {};
+  var to = String((payload.mail&&payload.mail.to)||(payload.musteri&&payload.musteri.mail)||"").trim();
+  var cc = String((payload.mail&&payload.mail.cc)||"").trim();
+  if (!to) throw new Error("Alıcının e-posta adresi boş bırakılamaz.");
+  if (!payload.fileName) payload.fileName = ((payload.meta&&payload.meta.no)||"Guncel_Teklif_Dokumani") + ".pdf";
+  var pdfBlob = makePdf_(payload);
+  var firma = String((payload.musteri&&payload.musteri.firma)||"").trim();
+  var no = String((payload.meta&&payload.meta.no)||"-").trim();
+  var yetkili = String((payload.musteri&&payload.musteri.yetkili)||"Yetkili").trim();
+  var subject = "İş Birliği Teklifi ve Dijital Onay - " + firma;
+  var token = Utilities.getUuid().replace(/-/g,"");
+  var baseUrl = ScriptApp.getService().getUrl();
+  var viewUrl = baseUrl + "?view=" + encodeURIComponent(token);
+  var OzelVipGelisYolAyi = baseUrl + "?action=VIPOnayDondurYansisiniBaskan&tnz=" + encodeURIComponent(no);
+  var gonderenAd = String(payload.senderAdSoyad||(payload.meta&&payload.meta.hazirlayan)||"AvrupaBir OSGB").trim();
+  var gonderenMail = String(payload.senderEmail||"kurumsal_isg_partneri@avrupabir.com.tr").trim();
+  var gonderenTel = String((payload.meta&&payload.meta.hazirlayanTel)||"0549 483 83 82").trim();
+  var trackUrl = baseUrl + "?track=" + encodeURIComponent(token) + "&t=" + new Date().getTime();
+  var trackPixel = "<img src='"+trackUrl+"' width='1' height='1' style='display:none;' alt=''>";
+  var teklifTarih = String((payload.meta&&payload.meta.tarih)||Utilities.formatDate(new Date(),"Europe/Istanbul","dd.MM.yyyy"));
+  var gecerliTarih = "";
+  try { var gt=new Date(); gt.setDate(gt.getDate()+15); gecerliTarih=Utilities.formatDate(gt,"Europe/Istanbul","dd.MM.yyyy"); } catch(e) {}
+  var htmlMesaj = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body style='margin:0;padding:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;'>";
+  htmlMesaj += "<table width='100%' cellpadding='0' cellspacing='0' style='max-width:600px;margin:30px auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;'>";
+  htmlMesaj += "<tr><td style='background:#1e3a8a;border-radius:8px 8px 0 0;padding:24px 30px;'><p style='color:#ffffff;font-size:20px;font-weight:900;margin:0;'>AvrupaBir OSGB</p><p style='color:#93c5fd;font-size:12px;margin:4px 0 0;'>İş Sağlığı ve Güvenliği Hizmetleri</p></td></tr>";
+  htmlMesaj += "<tr><td style='padding:30px;'><p style='font-size:15px;color:#1e293b;margin:0 0 16px;'>Sayın <strong>" + yetkili + "</strong>,</p>";
+  htmlMesaj += "<p style='font-size:14px;color:#475569;line-height:1.8;margin:0 0 20px;'>Firmanız <strong>" + firma + "</strong> için hazırladığımız teklif ekte sunulmaktadır.</p>";
+  htmlMesaj += "<table width='100%' cellpadding='0' cellspacing='0' style='background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;margin-bottom:20px;'><tr><td style='padding:16px 20px;'><p style='margin:0 0 6px;font-size:13px;color:#1e40af;'><strong>Teklif No:</strong> " + no + " &nbsp;&nbsp; <strong>Tarih:</strong> " + teklifTarih + "</p>";
+  if (gecerliTarih) htmlMesaj += "<p style='margin:0;font-size:13px;color:#64748b;'>Geçerlilik: " + gecerliTarih + " tarihine kadar geçerlidir.</p>";
+  htmlMesaj += "</td></tr></table>";
+  htmlMesaj += "<table width='100%' cellpadding='0' cellspacing='0'><tr><td align='center' style='padding:10px 0 20px;'><a href='"+OzelVipGelisYolAyi+"' style='background:#16a34a;color:#ffffff;padding:14px 36px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:15px;display:inline-block;'>✅ TEKLİFİ ONAYLA</a></td></tr></table>";
+  htmlMesaj += "<hr style='border:none;border-top:1px solid #e2e8f0;margin:0 0 16px;'>";
+  htmlMesaj += "<p style='margin:0;font-size:14px;font-weight:bold;color:#0f172a;'>" + gonderenAd + "</p>";
+  htmlMesaj += "<p style='margin:3px 0;font-size:13px;color:#64748b;'>AvrupaBir OSGB</p>";
+  htmlMesaj += "<p style='margin:3px 0;font-size:13px;color:#3b82f6;'>📞 " + gonderenTel + "</p>";
+  htmlMesaj += "<p style='margin:3px 0;font-size:13px;color:#3b82f6;'>✉️ " + gonderenMail + "</p>";
+  htmlMesaj += "</td></tr><tr><td style='background:#1e293b;border-radius:0 0 8px 8px;padding:16px 30px;text-align:center;'><p style='color:#94a3b8;font-size:11px;margin:0;'>© " + new Date().getFullYear() + " AvrupaBir OSGB</p></td></tr></table>" + trackPixel + "</body></html>";
+  try {
+    MailApp.sendEmail({ to:to, cc:cc, subject:subject, htmlBody:htmlMesaj, name:gonderenAd+" | AvrupaBir OSGB", replyTo:gonderenMail, attachments:[pdfBlob.setName("Teklif_"+no+".pdf")] });
+  } catch(e) { throw new Error("Mail gönderilemedi: " + e.message); }
+  TRACK_logSent_(payload, token);
+  chatBildir_("📋 *Yeni Teklif Gönderildi*\nFirma: " + ((payload.musteri&&payload.musteri.firma)||"") + "\nGönderen: " + (gonderenAd||""));
+  try {
+    var ss2 = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var shHat = ss2.getSheetByName("Hatirlatmalar");
+    if (shHat) {
+  // ✅ Aynı teklif no için açık hatırlatma var mı kontrol et
+  var mevcutHatVar = false;
+  var hatData = shHat.getDataRange().getValues();
+  for (var h = 1; h < hatData.length; h++) {
+    var hatNot   = String(hatData[h][4]||"").toLowerCase();
+    var hatDurum = String(hatData[h][7]||"").toUpperCase();
+    if (hatDurum !== "TAMAMLANDI" && hatNot.indexOf(no.toLowerCase()) > -1) {
+      mevcutHatVar = true;
+      break;
+    }
+  }
+  
+  if (!mevcutHatVar) {
+    var hat3gun = new Date();
+    hat3gun.setDate(hat3gun.getDate() + 3);
+    var hat3str = Utilities.formatDate(hat3gun, "Europe/Istanbul", "yyyy-MM-dd");
+    shHat.appendRow([
+      "HAT_" + new Date().getTime(),
+      String((payload.musteri&&payload.musteri.firmaId)||""),
+      String((payload.musteri&&payload.musteri.firma)||""),
+      hat3str,
+      "Teklif takibi — " + no + " no'lu teklif gönderildi",
+      gonderenMail,
+      ADMIN_EMAIL,
+      "BEKLIYOR",
+      Utilities.formatDate(new Date(), "Europe/Istanbul", "dd.MM.yyyy HH:mm")
+    ]);
+  }
+} // if (shHat) kapanışı
+  } catch(e) {} // try kapanışı
+} // api_teklifMailGonder kapanışı
+
+function api_teklifOnayIste(payload) {
+  try {
+    payload = payload || {};
+    var to = String((payload.mail&&payload.mail.to)||(payload.musteri&&payload.musteri.mail)||"").trim();
+    var cc = String((payload.mail&&payload.mail.cc)||"").trim();
+    if (!to) return { ok:false, msg:"Alıcı mail adresi boş!" };
+    var firma = String((payload.musteri&&payload.musteri.firma)||"").trim();
+    var no = String((payload.meta&&payload.meta.no)||"-").trim();
+    var yetkili = String((payload.musteri&&payload.musteri.yetkili)||"Yetkili").trim();
+    var baseUrl = ScriptApp.getService().getUrl();
+    var onayUrl = baseUrl + "?action=VIPOnayDondurYansisiniBaskan&tnz=" + encodeURIComponent(no);
+    var html = "<table width='100%' cellpadding='0' cellspacing='0' style='background:#f8fafc;padding:30px;font-family:Arial,sans-serif;'><tr><td align='center'><table width='100%' cellpadding='0' cellspacing='0' style='max-width:600px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;'><tr><td style='padding:35px 30px;'><h2 style='color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:15px;margin-top:0;'>AvrupaBir İş Sağlığı ve Güvenliği</h2><p>Sayın <b>" + yetkili + "</b>,</p><p>" + firma + " firması için <b>" + no + "</b> no'lu teklif onayınızı bekliyor.</p><table width='100%'><tr><td align='center' style='padding:25px 0;'><a href='"+onayUrl+"' style='background:#16a34a;color:#fff;padding:15px 35px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;display:inline-block;'>TEKLİFİ ONAYLA</a></td></tr></table></td></tr></table></td></tr></table>";
+    MailApp.sendEmail({ to:to, cc:cc, subject:"Teklif Onay Talebi - "+firma+" (No: "+no+")", htmlBody:html, name:"AvrupaBir Operasyon Merkezi" });
+    return { ok:true };
+  } catch(e) { return { ok:false, msg:e.message }; }
+}
+
+// ==========================================
+// TEKLIF KAYDET / GÜNCELLE
+// ==========================================
+function crmTeklifKaydet_(data, pdfFileId) {
+  var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+  var teklifler = ss.getSheetByName("TEKLIFLER");
+  if (!teklifler) throw new Error("TEKLIFLER sheet yok");
+  function calcOzet_(p) {
+    p = p || {};
+    var kdvDahil = p.kdvDahil !== false;
+    var iskonto = Number(p.iskonto||0);
+    var items = [].concat(p.osgb||[]).concat(p.mobil||[]).concat(p.iseGiris||[]);
+    var araToplam=0, kdv10=0, kdv20=0;
+    items.forEach(function(r){ var adet=Number(r.adet||0),birim=Number(r.birim||0),kdv=Number(r.kdv||0),net=adet*birim; araToplam+=net; var kt=net*(kdv/100); if(kdv===20) kdv20+=kt; else kdv10+=kt; });
+    var araToplamIskonto = Math.max(0, araToplam - iskonto);
+    var oran = (araToplam>0) ? (araToplamIskonto/araToplam) : 0;
+    kdv10*=oran; kdv20*=oran;
+    var genelToplam = kdvDahil ? (araToplamIskonto+kdv10+kdv20) : araToplamIskonto;
+    return { araToplam:araToplam, iskonto:iskonto, kdv10:kdv10, kdv20:kdv20, genelToplam:genelToplam };
+  }
+  var ozet = (data&&data.ozet) ? data.ozet : calcOzet_(data);
+  var teklifId = Utilities.getUuid();
+  var now = new Date();
+  var user = String((data&&data.senderEmail)||Session.getActiveUser().getEmail()||"").trim();
+  appendByHeader_(teklifler, {
+    TeklifID:teklifId, TeklifNo:(data&&data.meta&&data.meta.no)||"", Tarih:(data&&data.meta&&data.meta.tarih)||"",
+    FirmaID:(data&&data.musteri&&data.musteri.firma)||"", YetkiliKisiID:(data&&data.musteri&&data.musteri.yetkiliKisiId)||"",
+    Durum:"KAYDEDILDI", AraToplam:ozet.araToplam, Iskonto:ozet.iskonto, Kdv10:ozet.kdv10, Kdv20:ozet.kdv20,
+    GenelToplam:ozet.genelToplam, PdfDriveFileId:pdfFileId||"", MailTo:(data&&data.musteri&&data.musteri.mail)||"",
+    ReplyTo:user, Olusturan:user, OlusturmaTarihi:now,
+    FirmaAdi:(data&&data.musteri&&data.musteri.firma)||"", YetkiliAdi:(data&&data.musteri&&data.musteri.yetkili)||""
+  });
+  var satirSheet = ss.getSheetByName("TEKLIF_SATIRLARI");
+  if (satirSheet) {
+    function appendLines(grupAdi, arr) {
+      (arr||[]).forEach(function(r,idx){ satirSheet.appendRow([Utilities.getUuid(),teklifId,grupAdi,String(r.ad||""),Number(r.adet||0),Number(r.birim||0),Number(r.adet||0)*Number(r.birim||0),Number(r.kdv||0),"",user,now,idx+1]); });
+    }
+    appendLines("OSGB",data.osgb||[]); appendLines("MOBIL",data.mobil||[]); appendLines("ISE_GIRIS",data.iseGiris||[]);
+  }
+  return teklifId;
+}
+
+function api_teklifKaydet(p) {
+  try {
+    p = p || {};
+    var _firmaId = String((p.musteri&&p.musteri.firmaId)||p.firmaId||p.FirmaID||"").trim();
+    var _yapan = String(p.senderEmail||(p.meta&&p.meta.senderEmail)||"").toLowerCase().trim();
+    if (_firmaId && _yapan) {
+      var _kontrol = firmaIslemYapabilirMi_(_firmaId, _yapan, null);
+      if (!_kontrol.ok) return { ok:false, msg:_kontrol.msg };
+    }
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName(TEKLIF_TABLO);
+    if (!sh) throw new Error("TEKLIFLER sheet yok");
+    var now = new Date();
+    var teklifId = String((p.meta&&p.meta.teklifId)||Utilities.getUuid()).trim();
+    var teklifNo = String((p.meta&&p.meta.no)||p.teklifNo||Utilities.getUuid().substring(0,8)).trim();
+    var rowObj = {
+      TeklifID:teklifId, TeklifNo:teklifNo, Tarih:String((p.meta&&p.meta.tarih)||""),
+      FirmaID:String((p.musteri&&p.musteri.firmaId)||"").trim(), YetkiliKisiID:String((p.musteri&&p.musteri.yetkiliKisiId)||""),
+      Durum:"KAYDEDILDI", AraToplam:Number((p._calc&&p._calc.salesExclVat)||0), Iskonto:Number(p.iskonto||0),
+      Kdv10:Number((p._calc&&p._calc.vat10)||0), Kdv20:Number((p._calc&&p._calc.vat20)||0),
+      GenelToplam:Number((p._calc&&p._calc.totalInclVat)||0), PdfDriveFileId:String(p.pdfDriveFileId||p.fileId||""),
+      MailTo:String((p.mail&&p.mail.to)||p.mailTo||""), ReplyTo:String(p.replyTo||p.senderEmail||Session.getActiveUser().getEmail()||""),
+      Olusturan:String(p.senderEmail||Session.getActiveUser().getEmail()||""),
+      OlusturmaTarihi:Utilities.formatDate(now,"Europe/Istanbul","dd.MM.yyyy HH:mm:ss"),
+      AsilTeklifNo: String(p.asilTeklifNo || ""),
+      FirmaAdi:String((p.musteri&&p.musteri.firma)||"").trim(), YetkiliAdi:String((p.musteri&&p.musteri.yetkili)||"")
+    };
+    var data = sh.getDataRange().getValues();
+    var headers = data[0];
+    var idIndex = headers.indexOf("TeklifID");
+    var rowIndex = -1;
+    if (idIndex > -1 && teklifId) { for (var i=1; i<data.length; i++) { if (String(data[i][idIndex]) === teklifId) { rowIndex = i+1; break; } } }
+    if (rowIndex > -1) {
+      var rowValues = sh.getRange(rowIndex,1,1,headers.length).getValues()[0];
+      for (var key in rowObj) { var colIdx = headers.indexOf(key); if (colIdx > -1) rowValues[colIdx] = rowObj[key]; }
+      sh.getRange(rowIndex,1,1,headers.length).setValues([rowValues]);
+    } else { appendByHeader_(sh, rowObj); }
+    // TEKLIF_SATIRLARI kaydı
+try {
+  var ss2 = SpreadsheetApp.openById(CRM_SHEET_ID);
+  var shSatir = ss2.getSheetByName("TEKLIF_SATIRLARI");
+  if (!shSatir) {
+    shSatir = ss2.insertSheet("TEKLIF_SATIRLARI");
+    shSatir.appendRow(["SatirID","TeklifID","TeklifNo","Grup","HizmetAdi","Adet","BirimFiyat","KDV","SatisTutar","MaliyetBirim","MaliyetTutar","Olusturan","Tarih"]);
+    shSatir.getRange(1,1,1,13).setFontWeight("bold").setBackground("#1e293b").setFontColor("white");
+  }
+  var satirTarih = Utilities.formatDate(now, "Europe/Istanbul", "dd.MM.yyyy HH:mm:ss");
+  function satirEkle(grup, liste) {
+    (liste || []).forEach(function(r) {
+      var adet = Number(r.adet || 0);
+      var birim = Number(r.birim || 0);
+      var kdv = Number(r.kdv || 0);
+      var satisTutar = adet * birim;
+      var maliyetBirim = Number(r.maliyet || 0);
+      var maliyetTutar = adet * maliyetBirim;
+      shSatir.appendRow([
+        Utilities.getUuid(), teklifId, teklifNo,
+        grup, String(r.ad || "").trim(),
+        adet, birim, kdv, satisTutar,
+        maliyetBirim, maliyetTutar,
+        rowObj.Olusturan, satirTarih
+      ]);
+    });
+  }
+  satirEkle("OSGB", p.osgb || []);
+  satirEkle("MOBIL", p.mobil || []);
+  satirEkle("ISE_GIRIS", p.iseGiris || []);
+} catch(e) { Logger.log("Satır kayıt hatası: " + e.message); }
+    try { api_aktiviteKaydet({ firmaId:rowObj.FirmaID, firmaUnvani:rowObj.FirmaAdi, kullaniciEmail:rowObj.Olusturan, kanal:"SİSTEM", islem:"TEKLIF", asama:(rowIndex>-1?"GÜNCELLENDİ":"YENİ KAYIT"), not:"Teklif No: "+teklifNo+" sisteme işlendi.", kaynak:"WEBAPP" }); } catch(e) {}
+    chatBildir_("📋 *Teklif Kaydedildi*\nFirma: " + rowObj.FirmaAdi + "\nTeklif No: " + teklifNo + "\nTutar: " + Number(rowObj.GenelToplam||0).toLocaleString("tr-TR") + " TL\nKaydeden: " + rowObj.Olusturan);
+    logYaz("TEKLIF_OLUSTUR", "Yeni teklif hazırlandı.", "TEKLIF", teklifNo, firmaAdi);
+    if (p.asilTeklifNo) {
+  var data2 = sh.getDataRange().getValues();
+  var head2 = data2[0];
+  var iNo2 = head2.indexOf("TeklifNo");
+  var iDur2 = head2.indexOf("Durum");
+  if (iNo2 > -1 && iDur2 > -1) {
+    for (var i2 = 1; i2 < data2.length; i2++) {
+      if (String(data2[i2][iNo2]).trim() === String(p.asilTeklifNo).trim()) {
+        sh.getRange(i2+1, iDur2+1).setValue("REVİZE EDİLDİ");
+        break;
+      }
+    }
+  }
+}
+    return { ok:true, teklifId:teklifId, teklifNo:teklifNo };
+  } catch(e) { return { ok:false, msg:e.toString() }; }
+}
+
+function api_teklifResmiKaydet(payload) {
+  if (!payload) throw new Error("payload boş");
+  var sender = String(payload.senderEmail||Session.getEffectiveUser().getEmail()||Session.getActiveUser().getEmail()||"").toLowerCase().trim();
+  if (!sender) throw new Error("senderEmail bulunamadı");
+  var u = AUTH_requirePerm_(sender, "canSave");
+  payload.meta = payload.meta || {};
+  payload.musteri = payload.musteri || {};
+  payload.meta.hazirlayan = payload.meta.hazirlayan || u.adSoyad || u.email;
+  payload.meta.hazirlayanMail = payload.meta.hazirlayanMail || u.hazMail || u.email;
+  payload.meta.hazirlayanTel = payload.meta.hazirlayanTel || u.tel || "";
+  var firma = sanitizeFileName_(payload.musteri&&payload.musteri.firma?payload.musteri.firma:"TEKLIF");
+  payload.fileName = firma + ".pdf";
+  var folderId = (typeof TEKLIF_PDF_FOLDER_ID !== "undefined" && TEKLIF_PDF_FOLDER_ID) ? TEKLIF_PDF_FOLDER_ID : "";
+  var file;
+  var pdfBlob = makePdf_(payload);
+  pdfBlob.setName(payload.fileName);
+  if (folderId) {
+    var folder = DriveApp.getFolderById(folderId);
+    payload.fileName = makeUniqueFileName_(folder, payload.fileName);
+    pdfBlob.setName(payload.fileName);
+    file = folder.createFile(pdfBlob);
+  } else {
+    file = DriveApp.createFile(pdfBlob).setName(payload.fileName);
+  }
+  try { Drive.Permissions.create({role:"reader",type:"anyone"}, file.getId(), {supportsAllDrives:true}); } catch(e) {}
+  var teklifId = "";
+  if (typeof crmTeklifKaydet_ === "function") teklifId = crmTeklifKaydet_(payload, file.getId());
+  try { api_firmaIslemLogla({ firma:firma, senderEmail:sender, teklifNo:String(payload.meta.no||"").trim(), fileId:file.getId(), kaynak:"TEKLIF_OLUSTURMA" }); } catch(e) {}
+  return { ok:true, teklifId:teklifId, fileId:file.getId(), fileUrl:file.getUrl(), fileName:file.getName(), to:String(payload.to||payload.musteri.mail||"").trim() };
+}
+
+// ==========================================
+// TEKLIF LİSTELEME
+// ==========================================
+function api_teklifGecmisi() {
+  var yeni = api_teklifGecmisi_yeni_();
+  if (yeni && yeni.length) return yeni;
+  return api_teklifGecmisi_eski();
+}
+
+function api_teklifGecmisi_yeni_() {
+  var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+  var sh = ss.getSheetByName("TEKLIFLER");
+  if (!sh) return [];
+  var values = sh.getDataRange().getDisplayValues();
+  if (!values || values.length < 2) return [];
+  function normKey_(s) { return String(s||"").replace(/^\uFEFF/,"").trim().toLocaleUpperCase("tr-TR").replace(/İ/g,"I").replace(/ı/g,"I").replace(/\s+/g,"").replace(/[^A-Z0-9]/g,""); }
+  var head = values[0], idx = {};
+  for (var c=0; c<head.length; c++) { var k = normKey_(head[c]); if (k) idx[k] = c; }
+  var ALIAS = {
+    TeklifID:["TEKLIFID"], TeklifNo:["TEKLIFNO","NO"], Tarih:["TARIH","TEKLIFTARIH"],
+    FirmaID:["FIRMAID"], FirmaAdi:["FIRMAADI","FIRMA","FIRMAUNVANI","FIRMAUNVAN"],
+    YetkiliAdi:["YETKILIADI","YETKILI"], Durum:["DURUM"], AraToplam:["ARATOPLAM"],
+    Iskonto:["ISKONTO"], Kdv10:["KDV10"], Kdv20:["KDV20"], GenelToplam:["GENELTOPLAM"],
+    PdfDriveFileId:["PDFDRIVEFILEID"], MailTo:["MAILTO"], Olusturan:["OLUSTURAN","SENDEREMAIL"],
+    OlusturmaTarihi:["OLUSTURMATARIHI"]
+  };
+  function colIndex_(logicalName) {
+    var keys = ALIAS[logicalName] || [normKey_(logicalName)];
+    for (var i=0; i<keys.length; i++) { if (idx.hasOwnProperty(keys[i])) return idx[keys[i]]; }
+    return null;
+  }
+  function get_(row, name) { var ci = colIndex_(name); if (ci==null) return ""; return String(row[ci]||"").trim(); }
+  function parseTRDate_(s) { s=String(s||"").trim(); var m=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/); if(!m) return new Date(0); return new Date(+m[3],+m[2]-1,+m[1]); }
+  var map = {}, out = [];
+  for (var r=values.length-1; r>=1; r--) {
+    var row = values[r];
+    var teklifNo = get_(row,"TeklifNo"), firmaAdi = get_(row,"FirmaAdi"), gToplam = get_(row,"GenelToplam");
+    if (!teklifNo && !firmaAdi) continue;
+    if (teklifNo && teklifNo.length > 20) continue;
+    var key = teklifNo ? teklifNo : firmaAdi;
+    if (map[key]) {
+      var existing = map[key];
+      if ((Number(existing.genelToplam)===0||!existing.genelToplam) && Number(gToplam)>0) { existing.genelToplam=gToplam; if(!existing.PdfDriveFileId||existing.PdfDriveFileId.length<10) existing.PdfDriveFileId=get_(row,"PdfDriveFileId"); }
+      continue;
+    }
+    var nObj = { teklifId:get_(row,"TeklifID"), teklifNo:teklifNo, tarih:get_(row,"Tarih"), firmaId:get_(row,"FirmaID"), firma:firmaAdi, yetkili:get_(row,"YetkiliAdi"), durum:get_(row,"Durum"), araToplam:get_(row,"AraToplam"), iskonto:get_(row,"Iskonto"), kdv10:get_(row,"Kdv10"), kdv20:get_(row,"Kdv20"), genelToplam:gToplam, PdfDriveFileId:get_(row,"PdfDriveFileId"), mailTo:get_(row,"MailTo"), olusturan:get_(row,"Olusturan"), olusturmaTarihi:get_(row,"OlusturmaTarihi") };
+    map[key] = nObj;
+    out.push(nObj);
+  }
+  try {
+    var shTakip = ss.getSheetByName("TEKLIF_TAKIP");
+    if (shTakip && shTakip.getLastRow() > 1) {
+      var takipData = shTakip.getDataRange().getValues();
+      var takipMap = {};
+      for (var t=1; t<takipData.length; t++) { var tNo=String(takipData[t][0]||"").trim(); if (!tNo) continue; takipMap[tNo]={viewCount:Number(takipData[t][8]||0),firstViewedAt:takipData[t][6]?Utilities.formatDate(new Date(takipData[t][6]),"Europe/Istanbul","dd.MM.yyyy HH:mm"):"",lastViewedAt:takipData[t][7]?Utilities.formatDate(new Date(takipData[t][7]),"Europe/Istanbul","dd.MM.yyyy HH:mm"):""}; }
+      out.forEach(function(o){ var tk=takipMap[o.teklifNo]; if(tk){o.viewCount=tk.viewCount;o.firstViewedAt=tk.firstViewedAt;o.lastViewedAt=tk.lastViewedAt;}else{o.viewCount=0;o.firstViewedAt="";o.lastViewedAt="";} });
+    }
+  } catch(te) {}
+  out.sort(function(a,b){ return parseTRDate_(b.tarih)-parseTRDate_(a.tarih); });
+  return out;
+}
+
+function api_teklifGecmisi_eski() {
+  var ss = SpreadsheetApp.openById(ESKI_CRM_SHEET_ID);
+  var sh = ss.getSheetByName(ESKI_TEKLIF_TABLO);
+  if (!sh) return [];
+  var values = sh.getDataRange().getDisplayValues();
+  if (!values || values.length < 2) return [];
+  function normKey_(s) { return String(s||"").replace(/^\uFEFF/,"").trim().toLocaleUpperCase("tr-TR").replace(/İ/g,"I").replace(/ı/g,"I").replace(/\s+/g,"").replace(/[^A-Z0-9]/g,""); }
+  var head = values[0], idx = {};
+  for (var c=0; c<head.length; c++) { var k=normKey_(head[c]); if(k) idx[k]=c; }
+  var ALIAS = { TeklifNo:["TEKLIFNO","NO"], Tarih:["TARIH"], FirmaAdi:["FIRMAADI","FIRMA","FIRMAUNVANI"], YetkiliAdi:["YETKILIADI","YETKILI"], Durum:["DURUM"], GenelToplam:["GENELTOPLAM"], PdfDriveFileId:["PDFDRIVEFILEID"], MailTo:["MAILTO"], Olusturan:["OLUSTURAN"] };
+  function colIndex_(logicalName) { var keys=ALIAS[logicalName]||[normKey_(logicalName)]; for(var i=0;i<keys.length;i++){if(idx.hasOwnProperty(keys[i])) return idx[keys[i]];} return null; }
+  function get_(row,name){var ci=colIndex_(name);if(ci==null)return "";return String(row[ci]||"").trim();}
+  function parseTRDate_(s){s=String(s||"").trim();var m=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);if(!m)return new Date(0);return new Date(+m[3],+m[2]-1,+m[1]);}
+  var out=[];
+  for(var r=1;r<values.length;r++){var row=values[r];var teklifNo=get_(row,"TeklifNo"),firmaAdi=get_(row,"FirmaAdi");if(!teklifNo&&!firmaAdi)continue;out.push({teklifId:get_(row,"TeklifID"),teklifNo:teklifNo,tarih:get_(row,"Tarih"),firmaId:get_(row,"FirmaID"),firma:firmaAdi,yetkili:get_(row,"YetkiliAdi"),durum:get_(row,"Durum"),genelToplam:get_(row,"GenelToplam"),PdfDriveFileId:get_(row,"PdfDriveFileId"),mailTo:get_(row,"MailTo"),olusturan:get_(row,"Olusturan"),olusturmaTarihi:get_(row,"OlusturmaTarihi")});}
+  out.sort(function(a,b){return parseTRDate_(b.tarih)-parseTRDate_(a.tarih);});
+  return out;
+}
+
+function api_teklifListe(opts) {
+  opts = opts || {};
+  var limit = Math.min(500, Math.max(1, Number(opts.limit||200)||200));
+  var qFirma = String(opts.firma||"").toLowerCase().trim();
+  var qYil = Number(opts.yil||0)||0;
+  var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+  var sh = ss.getSheetByName("TEKLIFLER");
+  if (!sh) return [];
+  var lastRow = sh.getLastRow();
+  if (lastRow < 2) return [];
+  var values = sh.getRange(1,1,lastRow,sh.getLastColumn()).getDisplayValues();
+  var head = values[0].map(String);
+  var iNo=head.indexOf("TeklifNo"), iTarih=head.indexOf("Tarih"), iFirma=head.indexOf("FirmaID"), iMailTo=head.indexOf("MailTo"), iGenel=head.indexOf("GenelToplam"), iPdfId=head.indexOf("PdfDriveFileId");
+  function yearFrom_(t){ var m=String(t||"").match(/(\d{4})/); return m?Number(m[1]):0; }
+  var out=[];
+  for(var r=lastRow-1;r>=1&&out.length<limit;r--){
+    var row=values[r];
+    var tarih=(iTarih>=0?row[iTarih]:"");
+    if(qYil&&yearFrom_(tarih)!==qYil) continue;
+    var firma=(iFirma>=0?row[iFirma]:"");
+    if(qFirma&&String(firma).toLowerCase().indexOf(qFirma)===-1) continue;
+    var pdfId=(iPdfId>=0?String(row[iPdfId]||"").trim():"");
+    var pdfUrl="";
+    if(pdfId){try{pdfUrl=DriveApp.getFileById(pdfId).getUrl();}catch(e){}}
+    out.push({tarih:tarih,no:(iNo>=0?row[iNo]:""),firma:firma,mailTo:(iMailTo>=0?row[iMailTo]:""),genelToplamText:(iGenel>=0?row[iGenel]:""),pdfUrl:pdfUrl});
+  }
+  return out;
+}
+
+function api_teklifBackfillFirmaYetkili() {
+  var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+  var shFirma = findSheetByHeader_(ss,["FirmaID"]);
+  var shYetkili = findSheetByHeader_(ss,["YetkiliKisiID"]);
+  var firmaMap = buildMapById_(shFirma,"FirmaID",["FirmaUnvani","Firma","Unvan"]);
+  var yetkiliMap = buildMapById_(shYetkili,"YetkiliKisiID",["AdiSoyadi","AdSoyad","Yetkili"]);
+  var sh = ss.getSheetByName("TEKLIFLER");
+  if (!sh) throw new Error("TEKLIFLER sayfası yok");
+  var lastRow=sh.getLastRow(), lastCol=sh.getLastColumn();
+  if(lastRow<2) return {ok:true,updated:0,checked:0};
+  var values=sh.getRange(1,1,lastRow,lastCol).getDisplayValues();
+  var head=values[0].map(function(x){return String(x||"").trim();});
+  var iFirmaID=head.indexOf("FirmaID"), iYetkiliID=head.indexOf("YetkiliKisiID"), iFirmaAdi=head.indexOf("FirmaAdi"), iYetkiliAdi=head.indexOf("YetkiliAdi");
+  if(iFirmaAdi<0||iYetkiliAdi<0) throw new Error("TEKLIFLER başlıklarında FirmaAdi / YetkiliAdi yok");
+  var firmaAdiRange=sh.getRange(2,iFirmaAdi+1,lastRow-1,1), yetkiliAdiRange=sh.getRange(2,iYetkiliAdi+1,lastRow-1,1);
+  var firmaAdiVals=firmaAdiRange.getDisplayValues(), yetkiliAdiVals=yetkiliAdiRange.getDisplayValues();
+  var updated=0,checked=0;
+  for(var r=2;r<=lastRow;r++){
+    checked++;
+    var row=values[r-1];
+    var newFirma=String(firmaAdiVals[r-2][0]||"").trim(), newYetkili=String(yetkiliAdiVals[r-2][0]||"").trim();
+    if(!newFirma&&iFirmaID>=0){var fid=String(row[iFirmaID]||"").trim();if(fid&&firmaMap[fid]) newFirma=String(firmaMap[fid]||"").trim();}
+    if(!newYetkili&&iYetkiliID>=0){var yid=String(row[iYetkiliID]||"").trim();if(yid&&yetkiliMap[yid]) newYetkili=String(yetkiliMap[yid]||"").trim();}
+    if(newFirma!==String(firmaAdiVals[r-2][0]||"").trim()){firmaAdiVals[r-2][0]=newFirma;}
+    if(newYetkili!==String(yetkiliAdiVals[r-2][0]||"").trim()){yetkiliAdiVals[r-2][0]=newYetkili;}
+    if(newFirma!==String(firmaAdiVals[r-2][0]||"")||newYetkili!==String(yetkiliAdiVals[r-2][0]||"")) updated++;
+  }
+  firmaAdiRange.setValues(firmaAdiVals);
+  yetkiliAdiRange.setValues(yetkiliAdiVals);
+  return {ok:true, checked:checked, updated:updated};
+}
+
+// ==========================================
+// TOPLU MAİL
+// ==========================================
+function api_tanitimMailGonder(p) {
+  if (!p) throw new Error("payload boş");
+  var senderEmail = String(p.senderEmail||"").trim().toLowerCase();
+  if (!senderEmail) throw new Error("Kimlik doğrulanamadı!");
+  var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+  var sh = ss.getSheetByName("Kullanicilar");
+  if (!sh) throw new Error("Kullanicilar sayfası yok");
+  var rows = sh.getDataRange().getDisplayValues();
+  var ok = false;
+  for(var i=1;i<rows.length;i++){if(String(rows[i][0]||"").toLowerCase().trim()===senderEmail){ok=true;break;}}
+  if (!ok) throw new Error("Yetki yok");
+  var firma=String(p.firma||"").trim(), to=String(p.to||"").trim(), cc=String(p.cc||"").trim();
+  if (!to) throw new Error("Mail adresi boş");
+  var subject = String(p.subject||"AvrupaBİR İSG Tanıtım").trim();
+  var senderAdSoyad = String(p.senderAdSoyad||p.replyToName||p.senderEmail||"AvrupaBir OSGB").trim();
+  var senderTel = String(p.senderTel||"0549 483 83 82").trim();
+  var logoUrl2 = "https://drive.google.com/uc?export=view&id=" + LOGO_FILE_ID;
+  var mailMetni = String(p.mailMetni || "İşe giriş sağlık tetkikleri ve mobil sağlık taraması ile ilgili sizinle görüşmek isterim. Konum olarak size yakın ve ulaşım açısından oldukça merkezi bir lokasyonda bulunmamızın yanı sıra, birçok işlemi kendi bünyemizde gerçekleştirdiğimiz için fiyat konusunda sizin için uygun seçenekler ve zaman tasarrufu sunabileceğimizi düşünüyorum.\n\nUygun olduğunuz bir zaman diliminde kısa bir randevu oluşturabilirsek, size özel hazırladığımız hizmet detaylarımızı ve avantajlarımızı memnuniyetle aktarmak isterim.\n\nTalep ettiğiniz işe giriş sağlık tetkiklerini iletirseniz sizlere fiyat teklifi iletmek isterim.");
+var htmlBody = '<div style="font-family:Tahoma,Geneva,sans-serif;max-width:620px;margin:0 auto;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">' +
+  '<div style="background:white;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #1e3a8a;">' +
+  '<img src="https://drive.google.com/uc?export=view&id=' + LOGO_FILE_ID + '" width="1200" height="200" style="object-fit:contain;" alt="Avrupa Bir OSGB">' +
+  '<div style="text-align:right;"></div></div>' +
+  '<div style="background:#f0f7ff;padding:16px 32px;border-bottom:3px solid #1e3a8a;">' +
+  '<div style="font-size:12px;color:#1e3a8a;font-weight:bold;">📋 KURUMSAL TANITIM</div>' +
+  '</div>' +
+  '<div style="padding:32px;background:#ffffff;line-height:1.8;color:#1e293b;font-size:14px;">' +
+  '<p style="margin:0 0 16px;">Merhaba,</p>' +
+  '<p style="margin:0 0 16px;">Avrupa Bir İş Sağlığı ve Güvenliği Hizmetlerinden <b>' + senderAdSoyad + '</b> olarak sizinle iletişime geçiyorum.</p>' +
+  '<p style="margin:0 0 16px;">' + mailMetni.replace(/\n/g,"<br>") + '</p>' +
+  '<p style="margin:24px 0 0;">İyi çalışmalar dilerim,</p>' +
+  '<p style="margin:8px 0 0;font-weight:bold;color:#1e3a8a;">' + senderAdSoyad + '</p>' +
+'<p style="margin:4px 0 0;font-size:13px;color:#475569;">📞 ' + senderTel + ' &nbsp;|&nbsp; ✉️ ' + senderEmail + '</p>' +
+  '</div>' +
+  '<div style="background:#1e3a8a;padding:20px 32px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
+  '<div style="color:white;font-size:12px;">📞 0850 259 44 55 &nbsp;|&nbsp; 🌐 www.avrupabir.com.tr</div>' +
+  '<div style="color:#93c5fd;font-size:11px;">© 2026 Avrupa Bir İş Sağlığı ve Güvenliği</div>' +
+  '</div></div>';
+  var opt = { htmlBody:htmlBody, name:"Avrupa Bir OSGB", replyTo:senderEmail };
+  if (cc) opt.cc = cc;
+  MailApp.sendEmail(to, subject, "Lütfen HTML destekleyen bir e-posta istemcisi kullanınız.", opt);
+  try {
+    logHareketByHeader_("HAREKETLER", { id:Utilities.getUuid(), tarih:Utilities.formatDate(new Date(),"Europe/Istanbul","dd.MM.yyyy HH:mm:ss"), firmaId:String((p&&p.firmaId)||"").trim(), firmaUnvani:String(firma||"").trim(), kullaniciEmail:senderEmail, kanal:"MAIL", islem:"TANITIM", asama:"TANITIM", not:"Mail: "+String(to||""), sonrakiTarih:"", kaynak:"WEBAPP" });
+  } catch(e) {}
+  return { ok:true, from:senderEmail, to:to, cc:cc, subject:subject };
+}
+
+function api_topluMailListesiKaziyici() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var gecmisSayfasi = ss.getSheetByName("TOPLU_MAIL_GECMISI");
+    var atilanlarMap = {};
+    var bugun = new Date();
+    if (gecmisSayfasi) {
+      var gVeriler = gecmisSayfasi.getDataRange().getValues();
+      for(var k=1;k<gVeriler.length;k++){
+        var kMail=String(gVeriler[k][0]||"").trim().toLowerCase();
+        var kDate=(gVeriler[k][1] instanceof Date)?gVeriler[k][1]:new Date(gVeriler[k][1]);
+        if(isFinite(kDate)&&kMail&&((bugun-kDate)/(1000*60*60*24))<=15) atilanlarMap[kMail]=true;
+      }
+    }
+    var sh = ss.getSheetByName("FİRMALAR") || ss.getSheetByName("FIRMALAR");
+    if (!sh) return [];
+    var data = sh.getDataRange().getValues();
+    if(data.length<2) return [];
+    var head=data[0];
+    var colFirma=-1,colMail=-1,colSektor=-1,colDurum=-1;
+    for(var i=0;i<head.length;i++){var b=String(head[i]||"").trim().toLowerCase();if(b==="firmaadi"||b==="firmaunvani")colFirma=i;if(b==="email"||b==="mail")colMail=i;if(b==="sektor"||b==="sektör")colSektor=i;if(b==="durum")colDurum=i;}
+    var list=[];
+    for(var r=1;r<data.length;r++){
+      var rowMail=(colMail>-1)?String(data[r][colMail]||"").trim():"";
+      if(rowMail.indexOf("@")!==-1&&!atilanlarMap[rowMail.toLowerCase()]){
+        list.push({firma:(colFirma>-1)?String(data[r][colFirma]||"Bilinmeyen").trim():"",email:rowMail,sektor:(colSektor>-1)?String(data[r][colSektor]||"").trim():"",durum:(colDurum>-1)?String(data[r][colDurum]||"POTANSIYEL").trim():"POTANSIYEL"});
+      }
+    }
+    return list;
+  } catch(e) { return []; }
+}
+
+function api_topluMailGonder(p) {
+  try {
+    var kalanKota = MailApp.getRemainingDailyQuota();
+    var epostalar = p.epostalar || [];
+    if(!epostalar.length) return {ok:false,msg:"Hiç mail adresi seçmediniz!"};
+    if(epostalar.length>kalanKota) return {ok:false,msg:"Google Günlük Kota Yetersiz!"};
+    var aktifKullaniciMail = String(Session.getActiveUser().getEmail()||"").toLowerCase();
+    var basariliSayisi=0, basariylaGidenler=[];
+    for(var i=0;i<epostalar.length;i++){
+      var hedefMail=String(epostalar[i]||"").trim();
+      if(hedefMail.indexOf("@")===-1) continue;
+      try { var ekler = {};
+if (p.ekBrosur) {
+  try {
+    var brosurDosya = DriveApp.getFileById(p.ekBrosur);
+    ekler.attachments = [brosurDosya.getAs(MimeType.PDF)];
+  } catch(e) {}
+}
+MailApp.sendEmail(hedefMail, p.konu, "Lütfen HTML destekleyici istemci kullanınız.", Object.assign({htmlBody:p.icerik, name:"AvrupaBir Kurumsal Hizmetler", replyTo:aktifKullaniciMail}, ekler)); basariliSayisi++; basariylaGidenler.push(hedefMail); Utilities.sleep(150); } catch(e) {}
+    }
+    if(basariylaGidenler.length>0){
+      var ss=SpreadsheetApp.openById(CRM_SHEET_ID);
+      var sGecmis=ss.getSheetByName("TOPLU_MAIL_GECMISI");
+      if(!sGecmis){sGecmis=ss.insertSheet("TOPLU_MAIL_GECMISI");sGecmis.appendRow(["Email Adresi","Gönderim Tarihi","Konu"]);}
+      var logDizisi=[];
+      var kayitTarihi=new Date();
+      for(var j=0;j<basariylaGidenler.length;j++) logDizisi.push([basariylaGidenler[j],kayitTarihi,p.konu]);
+      sGecmis.getRange(sGecmis.getLastRow()+1,1,logDizisi.length,3).setValues(logDizisi);
+    }
+    return {ok:true,msg:"Toplam "+basariliSayisi+" firmaya başarıyla gönderildi!"};
+  } catch(e) { return {ok:false,msg:"Sunucu hatası: "+e.message}; }
+}
+
+// ==========================================
+// MALİYET HESAPLAMA
+// ==========================================
+function api_maliyetHesapla(payload) {
+  payload = payload || {};
+  if (!payload.senderEmail) payload.senderEmail = Session.getActiveUser().getEmail() || "";
+  payload.senderEmail = String(payload.senderEmail||"").toLowerCase().trim();
+  if (!payload.senderEmail) throw new Error("Yetki yok: senderEmail boş");
+  var email = payload.senderEmail;
+  var yetkiliEmailler = ["ulas.ozbas@avrupabir.com.tr","dilara.bayrakdar@avrupabir.com.tr","kurumsal@avrupabir.com.tr","neslihan.karatas@avrupabir.com.tr","gulbahar.gultekin@avrupabir.com.tr","yasemin.orbay@avrupabir.com.tr"];
+  var yetkili = false;
+  for(var y=0;y<yetkiliEmailler.length;y++){if(email===yetkiliEmailler[y]){yetkili=true;break;}}
+  if(!yetkili) throw new Error("Yetki yok: "+email);
+  var katalog = CatalogService.getCatalog({onlyActive:true}).map(function(x){return{hizmet:x.name,kategori:x.group,maliyet:x.cost,satis:x.salePrice,kdv:KAT_inferKdv_(x.group,x.name)};});
+  var map = {};
+  katalog.forEach(function(x){map[x.hizmet]=x;});
+  var items = [].concat(payload.osgb||[]).concat(payload.mobil||[]).concat(payload.iseGiris||[]);
+  var salesExclVat=0,vat10=0,vat20=0,costTotal=0;
+  items.forEach(function(it){
+    var ad=String(it.ad||"").trim(), adet=Number(it.adet||0);
+    var k=map[ad];
+    var satisBirim=(it.birim!=null&&it.birim!=="")?Number(it.birim):Number((k&&k.satis)||0);
+    var maliyetBirim=(it.maliyet!=null&&it.maliyet!=="")?Number(it.maliyet):Number((k&&k.maliyet)||0);
+    var kdv=KDV_OSGB_GUVENLIK_(it.grup||"OSGB",ad);
+    var satirSatis=adet*satisBirim, satirMaliyet=adet*maliyetBirim;
+    salesExclVat+=satirSatis; costTotal+=satirMaliyet;
+    if(kdv===10) vat10+=satirSatis*0.10;
+    else if(kdv===20) vat20+=satirSatis*0.20;
+  });
+  var iskonto=Number(payload.iskonto||0);
+  var netSalesExclVat=salesExclVat-iskonto;
+  var profit=netSalesExclVat-costTotal;
+  var margin=netSalesExclVat>0?(profit/netSalesExclVat)*100:0;
+  return {salesExclVat:salesExclVat,iskonto:iskonto,netSalesExclVat:netSalesExclVat,vat10:vat10,vat20:vat20,totalInclVat:netSalesExclVat+vat10+vat20,costTotal:costTotal,profit:profit,margin:margin};
+}
+
+// ==========================================
+// E-ONAY SİSTEMİ
+// ==========================================
+function musterimTekLifleAnlsOlrAsinaSarsilanTutusM_Mlm(tNo) {
+  var htm = "<!DOCTYPE html><html lang='tr'><head><meta charset='UTF-8'><title>E-Onay Portalı</title><meta name='viewport' content='width=device-width, initial-scale=1'>";
+  htm += "<style>body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background-color:#f1f5f9;margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;}.bgKutuAlan{background:#ffffff;max-width:650px;width:100%;border-radius:12px;padding:45px 35px;box-shadow:0 10px 25px rgba(0,0,0,0.08);border-top:6px solid #2563eb;text-align:center;}.btYesil{background-color:#10b981;color:#ffffff;padding:18px 25px;font-size:15px;border:none;border-radius:8px;cursor:pointer;font-weight:bold;width:100%;margin-top:20px;}</style></head><body>";
+  htm += "<div class='bgKutuAlan' id='divEkranAlaniMerkez'>";
+  htm += "<h2 style='color:#1e3a8a;margin-top:0;'>AVRUPABİR İŞBİRLİĞİ & E-ONAY</h2>";
+  htm += "<p style='color:#475569;font-size:16px;margin-bottom:25px;'><b>[" + (tNo||"-") + "]</b> numaralı teklif onayınızı beklemektedir.</p>";
+  htm += "<div style='background:#fefce8;border:1px solid #fef08a;padding:15px;text-align:left;color:#854d0e;font-size:14px;margin-bottom:25px;'><b>📌 Ticari Tasdik Bildirimi:</b><br>Onay butonuna basmanız, teklifteki değerlerin kabul edildiği anlamına gelir.</div>";
+  htm += "<div id='sistemCevapYazisi'></div>";
+  htm += "<button id='btnKabulOnayDugmesi' class='btYesil' onclick='sendApproveSignal()'>✓ SÖZLEŞMEYİ ONAYLIYORUM</button>";
+  htm += "</div><script>function sendApproveSignal(){var btn=document.getElementById('btnKabulOnayDugmesi');var statusDiv=document.getElementById('sistemCevapYazisi');btn.disabled=true;btn.innerHTML='İşleniyor ⏳';google.script.run.withSuccessHandler(function(res){if(res&&res.ok){document.getElementById('divEkranAlaniMerkez').innerHTML='<h2 style=\"color:#16a34a;\">🤝 ONAY BAŞARILI</h2><p>Onayınız sistemimize iletildi. Teşekkürler.</p>';}else{btn.disabled=false;btn.innerHTML='TEKRAR DENEYİN';statusDiv.innerHTML='<div style=\"background:#fee2e2;border-left:4px solid #ef4444;padding:10px;color:#991b1b;\">'+(res.msg||'Hata')+'</div>';}}).withFailureHandler(function(){btn.disabled=false;btn.innerHTML='TEKRAR DENEYİN';}).api_kurumsal_MusteriDijitalHemenOnaylaBombaPatlatYahuIslemGecsInZntrMnt(\"" + tNo + "\");}";
+  htm += "</script></body></html>";
+  return htm;
+}
+
+function api_kurumsal_MusteriDijitalHemenOnaylaBombaPatlatYahuIslemGecsInZntrMnt(tNo) {
+  try {
+    var strNmm = String(tNo||"").trim();
+    if (!strNmm) return {ok:false,msg:"Teklif numarası boş"};
+    function normStr_(s){ return String(s||"").trim().toUpperCase().replace(/İ/g,"I").replace(/Ö/g,"O").replace(/Ü/g,"U").replace(/Ş/g,"S").replace(/Ç/g,"C").replace(/Ğ/g,"G").replace(/[^A-Z0-9]/g,""); }
+    var hdfDuzen = normStr_(strNmm);
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("TEKLIFLER") || ss.getSheetByName("TEKLİFLER");
+    if (!sh) return {ok:false,msg:"TEKLIFLER sheet yok"};
+    var alldata = sh.getDataRange().getValues();
+    var head = alldata[0];
+    var hNumrInd=-1, hIndDurm=-1, hIndFirmaAdi=-1, hIndFirmaId=-1, hIndSahip=-1;
+    for(var z=0;z<head.length;z++){var cn=String(head[z]).toLowerCase().replace(/\s/g,"");if(cn==="teklifno")hNumrInd=z;if(cn==="firma"||cn==="firmaadi")hIndFirmaAdi=z;if(cn==="firmaid")hIndFirmaId=z;if(cn==="durum")hIndDurm=z;if(cn==="olusturan")hIndSahip=z;}
+    if (hNumrInd===-1) return {ok:false,msg:"TeklifNo sütunu bulunamadı"};
+    var rowIdx=-1, firmaAdi="", firmaId="", sahip="";
+    for(var r=1;r<alldata.length;r++){
+      if(normStr_(String(alldata[r][hNumrInd]))==hdfDuzen){rowIdx=r+1;if(hIndFirmaAdi!==-1)firmaAdi=String(alldata[r][hIndFirmaAdi]||"");if(hIndFirmaId!==-1)firmaId=String(alldata[r][hIndFirmaId]||"");if(hIndSahip!==-1)sahip=String(alldata[r][hIndSahip]||"");break;}
+    }
+    if(rowIdx===-1) return {ok:false,msg:"Teklif bulunamadı: "+strNmm};
+    if(hIndDurm!==-1) sh.getRange(rowIdx,hIndDurm+1).setValue("KAZANILDI ✅");
+    var shHR=ss.getSheetByName("HAREKETLER");
+    if(shHR&&firmaId){ shHR.appendRow([Utilities.getUuid(),Utilities.formatDate(new Date(),"Europe/Istanbul","dd.MM.yyyy HH:mm:ss"),firmaId,firmaAdi,sahip,"E-ONAY","TEKLİF KAZANILDI","OLUMLU","Müşteri ["+strNmm+"] nolu teklifi e-onay portalından onayladı.","","DIJITAL_ONAY"]); }
+    var uyariSh=ss.getSheetByName("PATRONUYARI");
+    if(!uyariSh){uyariSh=ss.insertSheet("PATRONUYARI");uyariSh.appendRow(["ID","Tarih","Tip","Baslik","Mesaj","Okundu"]);}
+    var tarih=Utilities.formatDate(new Date(),"Europe/Istanbul","dd.MM.yyyy HH:mm");
+    uyariSh.appendRow(["B_"+new Date().getTime(),tarih,"MÜJDE","🤝 Teklif Onaylandı!",firmaAdi+" firması ["+strNmm+"] nolu teklifi onayladı — "+tarih,false]);
+    return {ok:true};
+  } catch(e) { return {ok:false,msg:e.message}; }
+}
+
+function logoTest() {
+  try {
+    var file = DriveApp.getFileById(LOGO_FILE_ID);
+    Logger.log("✅ Dosya: " + file.getName());
+    var blob = file.getBlob();
+    Logger.log("✅ Boyut: " + blob.getBytes().length + " byte");
+    Logger.log("✅ MIME: " + blob.getContentType());
+    Logger.log("🎉 Logo yüklendi, PDF'de görünmeli.");
+  } catch(e) {
+    Logger.log("❌ HATA: " + e.message);
+  }
+}
+
+function api_teklifSatirlariniGetir(teklifNo) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("TEKLIF_SATIRLARI");
+    if (!sh || sh.getLastRow() < 2) return [];
+    var vals = sh.getDataRange().getValues();
+    var head = vals[0];
+    var idx = {};
+    head.forEach(function(h, i) { idx[String(h||"").trim()] = i; });
+    var out = [];
+    for (var r = 1; r < vals.length; r++) {
+      if (String(vals[r][idx["TeklifNo"]]||"").trim() === String(teklifNo).trim()) {
+        out.push({
+          grup:        String(vals[r][idx["Grup"]]||""),
+          ad:          String(vals[r][idx["HizmetAdi"]]||""),
+          adet:        Number(vals[r][idx["Adet"]]||0),
+          birim:       Number(vals[r][idx["BirimFiyat"]]||0),
+          kdv:         Number(vals[r][idx["KDV"]]||0),
+          maliyet:     Number(vals[r][idx["MaliyetBirim"]]||0)
+        });
+      }
+    }
+    return out;
+  } catch(e) { return []; }
+}

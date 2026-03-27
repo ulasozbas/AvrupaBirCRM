@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<style>
+/* Koyu tema renkleri sadece .ceo-wrapper içine etki edecek şekilde kısıtlandı */
+.ceo-wrapper {
+  --bg: #07090f;
+  --s1: #0d1117;
+  --s2: #111827;
+  --s3: #1a2235;
+  --border: #1e2d3d;
+  --border2: #243044;
+  --blue: #3b82f6;
+  --green: #10b981;
+  --yellow: #f59e0b;
+  --red: #ef4444;
+  --purple: #8b5cf6;
+  --cyan: #06b6d4;
+  --pink: #ec4899;
+  --text: #f1f5f9;
+  --muted: #64748b;
+  --light: #94a3b8;
+  --mid: #475569;
+
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Arial', sans-serif;
+  min-height: 85vh;
+  position: relative;
+  overflow-x: hidden;
+  border-radius: 16px;
+  padding-bottom: 20px;
+}
+
+.ceo-wrapper * { box-sizing: border-box; }
+
+.ceo-wrapper::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 40% at 10% 10%, rgba(59,130,246,0.05) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 30% at 90% 90%, rgba(16,185,129,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 50% at 50% 50%, rgba(139,92,246,0.02) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+  border-radius: 16px;
+}
+
+/* LAYOUT */
+.ceo-wrapper .app { display:flex; flex-direction:column; position:relative; z-index:1; }
+
+/* TOP BAR */
+.ceo-wrapper .topbar {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 28px;
+  background:rgba(13,17,23,0.95);
+  border-bottom:1px solid var(--border);
+  border-radius: 16px 16px 0 0;
+}
+.ceo-wrapper .topbar-left { display:flex; align-items:center; gap:20px; }
+.ceo-wrapper .logo { font-size:22px; font-weight:700; letter-spacing:-0.5px; }
+.ceo-wrapper .logo span { color:var(--blue); }
+.ceo-wrapper .live-badge { display:flex; align-items:center; gap:5px; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.2); color:#34d399; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+.ceo-wrapper .topbar-right { display:flex; align-items:center; gap:16px; }
+.ceo-wrapper .clock-box { text-align:right; }
+.ceo-wrapper .clock-time { font-size:20px; font-weight:700; line-height:1; }
+.ceo-wrapper .clock-date { font-size:10px; color:var(--muted); margin-top:2px; }
+.ceo-wrapper .refresh-btn { background:var(--s3); border:1px solid var(--border); color:var(--light); padding:6px 12px; border-radius:8px; font-size:11px; cursor:pointer; transition:all 0.2s; }
+.ceo-wrapper .refresh-btn:hover { border-color:var(--blue); color:var(--blue); }
+
+/* MAIN */
+.ceo-wrapper .main { padding:20px 28px; display:flex; flex-direction:column; gap:16px; }
+
+/* SECTION HEADER */
+.ceo-wrapper .sec-hdr { display:flex; align-items:center; gap:8px; margin-bottom:4px; margin-top:10px; }
+.ceo-wrapper .sec-hdr h2 { font-size:12px; text-transform:uppercase; letter-spacing:2px; color:var(--muted); font-weight:700; margin:0; }
+.ceo-wrapper .sec-hdr::after { content:''; flex:1; height:1px; background:var(--border); }
+
+/* GRID SYSTEM */
+.ceo-wrapper .row { display:grid; gap:12px; }
+.ceo-wrapper .r-5 { grid-template-columns:repeat(5,1fr); }
+.ceo-wrapper .r-4 { grid-template-columns:repeat(4,1fr); }
+.ceo-wrapper .r-3 { grid-template-columns:repeat(3,1fr); }
+.ceo-wrapper .r-2 { grid-template-columns:repeat(2,1fr); }
+.ceo-wrapper .r-auto { grid-template-columns:2fr 1.2fr 1fr; }
+.ceo-wrapper .r-main { grid-template-columns:1.4fr 1fr 1fr; }
+.ceo-wrapper .r-bottom { grid-template-columns:1fr 1fr 1fr 1.2fr; }
+
+/* CARD */
+.ceo-wrapper .ceo-card {
+  background:var(--s1);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:18px;
+  position:relative;
+  overflow:hidden;
+  transition:border-color 0.2s;
+}
+.ceo-wrapper .ceo-card:hover { border-color:var(--border2); }
+.ceo-wrapper .card-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.ceo-wrapper .card-title { font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); font-weight:700; }
+
+/* KPI */
+.ceo-wrapper .kpi { text-align:left; }
+.ceo-wrapper .kpi .val { font-size:32px; font-weight:700; letter-spacing:-1.5px; line-height:1; margin-bottom:4px; margin-top:10px; }
+.ceo-wrapper .kpi .lbl { font-size:11px; color:var(--muted); }
+.ceo-wrapper .kpi .trend { display:inline-flex; align-items:center; gap:3px; font-size:11px; font-weight:600; padding:2px 7px; border-radius:10px; margin-top:6px; }
+.ceo-wrapper .trend-up  { background:rgba(16,185,129,0.12); color:#34d399; }
+.ceo-wrapper .trend-dn  { background:rgba(239,68,68,0.12);  color:#f87171; }
+.ceo-wrapper .trend-neu { background:rgba(100,116,139,0.15); color:var(--light); }
+
+.ceo-wrapper .card-blue   { background:linear-gradient(135deg,#0f2847,#172d4a);  border-color:rgba(59,130,246,0.25); }
+.ceo-wrapper .card-green  { background:linear-gradient(135deg,#052e1a,#073d22);  border-color:rgba(16,185,129,0.25); }
+.ceo-wrapper .card-purple { background:linear-gradient(135deg,#1e1040,#251352);  border-color:rgba(139,92,246,0.25); }
+.ceo-wrapper .card-yellow { background:linear-gradient(135deg,#2d1f05,#3a2906);  border-color:rgba(245,158,11,0.25); }
+
+/* LIST ITEMS */
+.ceo-wrapper .list-item {
+  display:flex; align-items:center; gap:10px;
+  padding:9px 10px; border-radius:8px; background:var(--s2);
+  border:1px solid var(--border); margin-bottom:6px;
+}
+.ceo-wrapper .avatar { width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; flex-shrink:0; }
+.ceo-wrapper .li-info { flex:1; min-width:0; }
+.ceo-wrapper .li-name { font-size:12px; font-weight:700; color:#fff; }
+.ceo-wrapper .li-sub  { font-size:10px; color:var(--muted); margin-top:2px; }
+.ceo-wrapper .li-right { text-align:right; flex-shrink:0; }
+.ceo-wrapper .li-val  { font-size:12px; font-weight:700; color:#fff; }
+.ceo-wrapper .li-date { font-size:10px; color:var(--muted); margin-top:2px; }
+
+/* ALARMS */
+.ceo-wrapper .alarm { display:flex; align-items:flex-start; gap:9px; padding:9px 10px; border-radius:8px; border:1px solid; margin-bottom:6px; }
+.ceo-wrapper .alarm-d { background:rgba(239,68,68,0.08);  border-color:rgba(239,68,68,0.2); }
+.ceo-wrapper .alarm-w { background:rgba(245,158,11,0.08);  border-color:rgba(245,158,11,0.2); }
+.ceo-wrapper .alarm-s { background:rgba(16,185,129,0.08);  border-color:rgba(16,185,129,0.2); }
+.ceo-wrapper .alarm-p { background:rgba(139,92,246,0.08);  border-color:rgba(139,92,246,0.2); }
+.ceo-wrapper .alarm-i { background:rgba(59,130,246,0.08);  border-color:rgba(59,130,246,0.2); }
+.ceo-wrapper .alarm-icon  { font-size:14px; margin-top:1px; }
+.ceo-wrapper .alarm-body  { flex:1; min-width:0; }
+.ceo-wrapper .alarm-title { font-weight:700; font-size:12px; color:#fff; margin-bottom:2px; }
+.ceo-wrapper .alarm-text  { color:var(--light); font-size:11px; line-height:1.4; }
+.ceo-wrapper .alarm-time  { font-size:9px; color:var(--muted); flex-shrink:0; white-space:nowrap; margin-top:2px; }
+
+/* PROGRESS BAR */
+.ceo-wrapper .prog-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.ceo-wrapper .prog-lbl { font-size:11px; color:var(--light); width:75px; }
+.ceo-wrapper .prog-track { flex:1; height:5px; background:var(--s3); border-radius:3px; }
+.ceo-wrapper .prog-fill { height:100%; border-radius:3px; }
+.ceo-wrapper .prog-num { font-size:11px; font-weight:700; width:24px; text-align:right; color:#fff; }
+
+/* STAT GRID */
+.ceo-wrapper .sgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.ceo-wrapper .sitem { background:var(--s2); border:1px solid var(--border); border-radius:9px; padding:10px; text-align:center; }
+.ceo-wrapper .sv { font-size:20px; font-weight:700; line-height:1; }
+.ceo-wrapper .sl { font-size:9px; color:var(--muted); text-transform:uppercase; margin-top:4px; }
+
+/* GOREV */
+.ceo-wrapper .gorev-item { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; background:var(--s2); border:1px solid var(--border); margin-bottom:5px; }
+.ceo-wrapper .gorev-text { flex:1; font-size:12px; color:#fff; }
+
+/* DOT */
+.ceo-wrapper .dot       { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.ceo-wrapper .dot-green { background:#10b981; }
+.ceo-wrapper .dot-red   { background:#ef4444; }
+.ceo-wrapper .dot-gray  { background:#475569; }
+
+/* OTHERS */
+.ceo-wrapper .scroll-area { overflow-y:auto; max-height:260px; padding-right:4px; }
+.ceo-wrapper .scroll-area::-webkit-scrollbar { width:4px; }
+.ceo-wrapper .scroll-area::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
+.ceo-wrapper .hdiv  { height:1px; background:var(--border); margin:12px 0; }
+.ceo-wrapper .empty { text-align:center; color:var(--muted); font-size:12px; padding:20px 0; }
+
+.ceo-wrapper .tag        { display:inline-block; font-size:9px; padding:2px 7px; border-radius:5px; font-weight:700; text-transform:uppercase; }
+.ceo-wrapper .tag-blue   { background:rgba(59,130,246,0.15);  color:#60a5fa; }
+.ceo-wrapper .tag-green  { background:rgba(16,185,129,0.15);  color:#34d399; }
+.ceo-wrapper .tag-yellow { background:rgba(245,158,11,0.15);  color:#fbbf24; }
+.ceo-wrapper .tag-red    { background:rgba(239,68,68,0.15);   color:#f87171; }
+.ceo-wrapper .tag-purple { background:rgba(139,92,246,0.15);  color:#a78bfa; }
+.ceo-wrapper .tag-cyan   { background:rgba(6,182,212,0.15);   color:#22d3ee; }
+.ceo-wrapper .tag-gray   { background:rgba(100,116,139,0.15); color:var(--light); }
+
+@media(max-width:1200px){
+  .ceo-wrapper .r-5, .ceo-wrapper .r-4 { grid-template-columns:repeat(3,1fr); }
+  .ceo-wrapper .r-auto, .ceo-wrapper .r-main { grid-template-columns:1fr; }
+  .ceo-wrapper .r-bottom { grid-template-columns:1fr 1fr; }
+}
+@media(max-width:768px){
+  .ceo-wrapper .r-5, .ceo-wrapper .r-4, .ceo-wrapper .r-3, .ceo-wrapper .r-2,
+  .ceo-wrapper .r-auto, .ceo-wrapper .r-main, .ceo-wrapper .r-bottom { grid-template-columns:1fr; }
+}
+
+.ceo-wrapper .ceo-donem-btn {
+  background:var(--s3);color:var(--light);border:1px solid var(--border);
+  padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;
+}
+.ceo-wrapper .ceo-donem-btn.aktif { background:var(--blue);color:#fff;border-color:var(--blue); }
+.ceo-wrapper .ceo-radar-item {
+  padding:8px 10px;border-radius:7px;margin-bottom:5px;font-size:11px;
+  background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);
+}
+.ceo-wrapper .ceo-radar-item.anormal {
+  background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.2);
+}
+.ceo-wrapper .ceo-yz-kutu {
+  font-size:11px;line-height:1.7;color:var(--light);
+  white-space:pre-wrap;max-height:200px;overflow-y:auto;
+}
+
+</style>
+</head>
+<body>
+
+<div class="ceo-wrapper">
+<div class="app">
+
+<div class="topbar-right">
+    <button id="btnCeoOzet" style="background:#7c3aed;color:#fff;border:none;padding:8px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;margin-right:8px;">Bu Haftanın Özeti</button>
+    <button class="refresh-btn" onclick="if(typeof loadCEODashboard==='function'){loadCEODashboard();}else{location.reload();}">&#8635; Yenile</button>
+    <div class="clock-box">
+      <div class="clock-time" id="clock">--:--</div>
+      <div class="clock-date" id="dateDisp">--</div>
+    </div>
+  </div>
+
+<div class="main">
+
+<!-- ROW 1: ANA KPIler -->
+<div class="sec-hdr"><h2>Anlik Gostergeler</h2></div>
+<div class="row r-5">
+
+  <div class="ceo-card card-blue kpi">
+    <div class="card-title">Kasa Bakiyesi</div>
+    <div class="val" id="kasaVal" style="color:#60a5fa">-</div>
+    <div class="lbl">Tum kasalar birlesik</div>
+    <div class="trend trend-up" id="kasaTrend">Yukleniyor...</div>
+  </div>
+
+  <div class="ceo-card kpi">
+    <div class="card-title">Teklifler</div>
+    <div class="val" id="teklifToplam" style="color:var(--yellow)">-</div>
+    <div class="lbl">Toplam aktif teklif</div>
+    <div class="trend trend-up" id="teklifAcik">- bekliyor</div>
+  </div>
+
+  <div class="ceo-card card-green kpi">
+    <div class="card-title">Aktif Firmalar</div>
+    <div class="val" id="firmaAktif" style="color:#34d399">-</div>
+    <div class="lbl">Toplam musteri sayisi</div>
+    <div class="trend trend-up" id="firmaYeni">- bu ay yeni</div>
+  </div>
+
+  <div class="ceo-card kpi">
+    <div class="card-title">Personel</div>
+    <div class="val" id="personelAktif" style="color:var(--purple)">-</div>
+    <div class="lbl">Aktif calisan</div>
+    <div class="trend trend-neu" id="personelIzin">- izinde</div>
+  </div>
+
+  <div class="ceo-card card-yellow kpi">
+    <div class="card-title">Uyarilar</div>
+    <div class="val" id="uyariSayi" style="color:#fbbf24">-</div>
+    <div class="lbl">Bekleyen uyari</div>
+    <div class="trend trend-dn" id="uyariCritical">- kritik</div>
+  </div>
+
+</div>
+
+<!-- ROW 1B: EK KPIler -->
+<div class="row r-4">
+  <div class="ceo-card kpi">
+    <div class="card-title">Bu Ay Yeni Firma</div>
+    <div class="val" id="buAyYeniVal" style="color:#34d399">-</div>
+    <div class="lbl">Bu ay sisteme eklenen</div>
+    <div class="trend trend-neu" id="buAyYeniAlt">Hesaplaniyor...</div>
+  </div>
+  <div class="ceo-card kpi">
+    <div class="card-title">ISG Hizmet Firmasi</div>
+    <div class="val" id="isgFirmaVal" style="color:#06b6d4">-</div>
+    <div class="lbl">Aktif OSGB sozlesmesi</div>
+    <div class="trend trend-neu">Toplam kayit</div>
+  </div>
+  <div class="ceo-card kpi">
+    <div class="card-title">Acik Teklif Tutari</div>
+    <div class="val" id="acikTeklifVal" style="color:#f59e0b">-</div>
+    <div class="lbl">Bekleyen + gorusmede</div>
+    <div class="trend trend-neu" id="acikTeklifAlt">Hesaplaniyor...</div>
+  </div>
+  <div class="ceo-card kpi">
+    <div class="card-title">Bekleyen Talepler</div>
+    <div class="val" id="bekleyenTalepVal" style="color:#ef4444">-</div>
+    <div class="lbl">Onay bekleyen islemler</div>
+    <div class="trend trend-dn" id="bekleyenTalepAlt">Yukleniyor...</div>
+  </div>
+</div>
+
+<!-- ROW KASA & BANKA -->
+<div class="row r-4">
+  <div class="ceo-card card-green kpi">
+    <div class="card-title">Nakit Kasa</div>
+    <div class="val" id="ceoNakitBakiye" style="color:#34d399;font-size:22px;">-</div>
+    <div class="lbl">Guncel nakit bakiye</div>
+  </div>
+  <div class="ceo-card card-blue kpi">
+    <div class="card-title">Banka (Kullanilabilir)</div>
+    <div class="val" id="ceoBankaAktif" style="color:#60a5fa;font-size:22px;">-</div>
+    <div class="lbl">Aktif hesap toplami</div>
+  </div>
+  <div class="ceo-card kpi" style="background:linear-gradient(135deg,#1a0a0a,#2d0f0f);border-color:rgba(239,68,68,0.25);">
+    <div class="card-title">Bloke</div>
+    <div class="val" id="ceoBankaBloke" style="color:#f87171;font-size:22px;">-</div>
+    <div class="lbl">Kullanilamaz bakiye</div>
+  </div>
+  <div class="ceo-card card-purple kpi">
+    <div class="card-title">Toplam Kullanilabilir</div>
+    <div class="val" id="ceoToplamKullanilabilir" style="color:#a78bfa;font-size:22px;">-</div>
+    <div class="lbl">Nakit + Aktif Banka</div>
+  </div>
+  <div class="ceo-card kpi" style="background:linear-gradient(135deg,#1a0a2e,#2d1a4a);border-color:rgba(251,191,36,0.25);">
+  <div class="card-title">Kredi Karti (POS)</div>
+  <div class="val" id="ceoKkartiPOS" style="color:#fbbf24;font-size:22px;">-</div>
+  <div class="lbl">33 gunde gelecek tutar</div>
+</div>
+</div>
+
+<!-- BANKA HESAPLARI -->
+<div class="ceo-card">
+  <div class="card-hdr">
+    <span class="card-title">Banka Hesaplari</span>
+  </div>
+  <div id="ceoBankaListesi"><div class="empty">Yukleniyor...</div></div>
+</div>
+
+<!-- ROW 2: PARASUT + FINANS + TEKLIF PIPELINE + AKTIVITE + EKIP -->
+<div class="row r-auto">
+
+  <!-- Parasut Ozet -->
+  <div class="ceo-card card-green kpi">
+    <div class="card-title">Toplam Fatura</div>
+    <div class="val" id="toplamFaturaVal" style="color:#34d399">-</div>
+    <div class="lbl">Parasut satis faturalari</div>
+    <div class="trend trend-up" id="toplamFaturaAlt">Yukleniyor.</div>
+  </div>
+  <div class="ceo-card card-blue kpi">
+    <div class="card-title">Toplam Tahsilat</div>
+    <div class="val" id="toplamTahsilatVal" style="color:#60a5fa">-</div>
+    <div class="lbl">Tahsil edilen toplam</div>
+    <div class="trend trend-up" id="toplamTahsilatAlt">Yukleniyor.</div>
+  </div>
+  <div class="ceo-card card-yellow kpi">
+    <div class="card-title">Kalan Alacak</div>
+    <div class="val" id="kalanAlacakVal" style="color:#fbbf24">-</div>
+    <div class="lbl">Acik bakiye</div>
+    <div class="trend trend-neu" id="kalanAlacakAlt">Yukleniyor.</div>
+  </div>
+
+  <!-- Finans Ozet -->
+  <div class="ceo-card">
+    <div class="card-hdr">
+      <span class="card-title">Finans Ozeti</span>
+      <span class="tag tag-blue" id="finansAy">Bu Ay</span>
+    </div>
+    <div class="row r-3" style="margin-bottom:14px;">
+      <div class="sitem">
+        <div class="sv" style="color:#34d399" id="gelirVal">-</div>
+        <div class="sl">Gelir</div>
+      </div>
+      <div class="sitem">
+        <div class="sv" style="color:#f87171" id="giderVal">-</div>
+        <div class="sl">Gider</div>
+      </div>
+      <div class="sitem">
+        <div class="sv" style="color:#60a5fa" id="netVal">-</div>
+        <div class="sl">Net</div>
+      </div>
+    </div>
+    <div class="card-title" style="margin-bottom:10px;">Son Islemler</div>
+    <div class="scroll-area" id="sonIslemler"><div class="empty">Yukleniyor...</div></div>
+  </div>
+
+  <!-- Teklif Pipeline -->
+  <div class="ceo-card">
+    <div class="card-hdr">
+      <span class="card-title">Teklif Pipeline</span>
+      <span class="tag tag-yellow" id="teklifTutar">-</span>
+    </div>
+    <div class="prog-row">
+      <div class="prog-lbl">Bekliyor</div>
+      <div class="prog-track"><div class="prog-fill" style="background:var(--yellow);width:0%" id="pb1"></div></div>
+      <div class="prog-num" id="pc1">0</div>
+    </div>
+    <div class="prog-row">
+      <div class="prog-lbl">Gorusmede</div>
+      <div class="prog-track"><div class="prog-fill" style="background:var(--blue);width:0%" id="pb2"></div></div>
+      <div class="prog-num" id="pc2">0</div>
+    </div>
+    <div class="prog-row">
+      <div class="prog-lbl">Kazanildi</div>
+      <div class="prog-track"><div class="prog-fill" style="background:var(--green);width:0%" id="pb3"></div></div>
+      <div class="prog-num" id="pc3">0</div>
+    </div>
+    <div class="prog-row">
+      <div class="prog-lbl">Kaybedildi</div>
+      <div class="prog-track"><div class="prog-fill" style="background:var(--red);width:0%" id="pb4"></div></div>
+      <div class="prog-num" id="pc4">0</div>
+    </div>
+    <div class="prog-row">
+      <div class="prog-lbl">Gonderildi</div>
+      <div class="prog-track"><div class="prog-fill" style="background:var(--cyan);width:0%" id="pb5"></div></div>
+      <div class="prog-num" id="pc5">0</div>
+    </div>
+    <div class="hdiv"></div>
+    <div class="card-title" style="margin-bottom:8px;">Son Teklifler</div>
+    <div id="teklifDonusum"></div>
+    <div class="scroll-area" id="sonTeklifler"><div class="empty">Yukleniyor...</div></div>
+  </div>
+
+  <!-- Son Aktiviteler -->
+  <div class="ceo-card">
+    <div class="card-hdr">
+      <span class="card-title">Son Aktiviteler</span>
+      <span class="tag tag-blue">Son 8</span>
+    </div>
+    <div class="scroll-area" id="sonAktivitelerListesi"><div class="empty">Yukleniyor...</div></div>
+  </div>
+
+  <!-- Ekip Durumu -->
+  <div class="ceo-card">
+    <div class="card-hdr">
+      <span class="card-title">Ekip Durumu</span>
+      <div style="display:flex;gap:5px;">
+        <span class="tag tag-cyan"  id="sahadaSayi">0 sahada</span>
+        <span class="tag tag-gray"  id="ofisteSayi">0 ofiste</span>
+        <span class="tag tag-yellow" id="izinliSayi">0 izinli</span>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px;">
+      <div>
+        <div style="font-size:10px;color:#22d3ee;font-weight:700;margin-bottom:6px;letter-spacing:1px;">SAHADA</div>
+        <div id="sahadaListesi"><div class="empty" style="font-size:11px;">Veri bekleniyor</div></div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--muted);font-weight:700;margin-bottom:6px;letter-spacing:1px;">OFISTE</div>
+        <div id="ofisteListesi"><div class="empty" style="font-size:11px;">Veri bekleniyor</div></div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:#fbbf24;font-weight:700;margin-bottom:6px;letter-spacing:1px;">IZINLI</div>
+        <div id="izinliListesi"><div class="empty" style="font-size:11px;">Veri bekleniyor</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ROW 3: UYARILAR + FIRMA + IK -->
+<div class="row r-main">
+
+  <!-- Sirket Uyari Merkezi -->
+  <div class="ceo-card">
+    <div class="card-hdr">
+      <span class="card-title">Sirket Uyari Merkezi</span>
+      <div style="display:flex;gap:5px;">
+        <span class="tag tag-red"    id="uyariAlarm">0 Alarm</span>
+        <span class="tag tag-yellow" id="uyariFinans">0 Finans</span>
+        <span class="tag tag-purple" id="uyariPersonel">0 Personel</span>
+      </div>
+    </div>
+    <div class="scroll-area" style="max-height:300px;" id="uyariListesi">
+      <div class="empty">Yukleniyor...</div>
+    </div>
+  </div>
+
+  <!-- Musteri Portfoyu -->
+  <div class="ceo-card">
+    <div class="card-hdr">
+      <span class="card-title">Musteri Portfoyu</span>
+      <span class="tag tag-blue" id="firmaToplam">- firma</span>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:15px;">
+      <div class="sitem" style="flex:1;"><div class="sv" style="color:var(--green)" id="firmaAktifS">-</div><div class="sl">Aktif</div></div>
+      <div class="sitem" style="flex:1;"><div class="sv" style="color:var(--muted)" id="firmaPasif">-</div><div class="sl">Pasif</div></div>
+    </div>
+    <div class="card-title" style="margin-bottom:6px;">Son Eklenen Firmalar</div>
+    <div class="scroll-area" style="max-height:200px;" id="sonFirmalar">
+      <div class="empty">Yukleniyor...</div>
+    </div>
+  </div>
+
+  <!-- IK ve Maas -->
+  <div class="ceo-card">
+    <div class="card-hdr">
+      <span class="card-title">IK ve Maas Ozeti</span>
+      <span class="tag tag-purple">Bu Ay</span>
+    </div>
+    <div class="sitem" style="text-align:left;margin-bottom:10px;background:var(--s3);">
+      <div style="font-size:10px;color:var(--muted);margin-bottom:4px;">TOPLAM MAAS ODEMESI</div>
+      <div style="font-size:24px;font-weight:700;color:var(--purple);" id="toplamMaas">Bekleniyor</div>
+    </div>
+    <div class="card-title" style="margin-bottom:6px;margin-top:15px;">BEKLEYEN ATAMALAR</div>
+    <div id="atamaTalepler"><div class="empty">Bekleyen atama yok</div></div>
+  </div>
+
+  <!-- Mobil Saglik -->
+  <div class="ceo-card" style="border-top:4px solid #0ea5e9;">
+    <div class="card-hdr">
+      <span class="card-title" style="color:#0ea5e9;">Mobil Saglik (Bu Ay)</span>
+      <span class="tag" style="background:#e0f2fe;color:#0284c7;">Canli</span>
+    </div>
+    <div class="sitem" style="text-align:left;margin-bottom:10px;background:var(--s3);">
+      <div style="font-size:10px;color:var(--muted);margin-bottom:4px;">YAPILAN CIRO</div>
+      <div style="font-size:24px;font-weight:900;color:#38bdf8;" id="mobilCiroVal">Yukleniyor...</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;border-bottom:1px dashed var(--border);padding-bottom:4px;">
+      <span style="color:var(--muted)">Toplam Operasyon:</span> <b id="mobilOpSayi">-</b>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;border-bottom:1px dashed var(--border);padding-bottom:4px;">
+      <span style="color:var(--yellow)">Bekleyen Tahliller:</span> <b id="mobilBekleyen">-</b>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;">
+      <span style="color:var(--green)">Teslim Edilen:</span> <b id="mobilTeslim">-</b>
+    </div>
+<div id="mobilAylarKarsilastirma" style="display:flex;gap:6px;margin-top:10px;"></div>
+  </div>
+
+</div>
+
+<!-- SOZLESME YENILEME -->
+<div class="sec-hdr"><h2>Sozlesme Yenileme</h2></div>
+<div class="row r-2">
+  <div class="ceo-card">
+    <div class="card-hdr"><span class="card-title">Yaklasan Sozlesmeler</span><span class="tag tag-yellow" id="sozYaklaşanSayi">-- adet</span></div>
+    <div class="scroll-area" style="max-height:200px;" id="sozYaklasanListesi"><div class="empty">Yukleniyor...</div></div>
+  </div>
+  <div class="ceo-card">
+    <div class="card-hdr"><span class="card-title">Suresi Dolanlar</span><span class="tag tag-red" id="sozBitenSayi">-- adet</span></div>
+    <div class="scroll-area" style="max-height:200px;" id="sozBitenListesi"><div class="empty">Yukleniyor...</div></div>
+  </div>
+</div>
+<!-- FIRMA CIRO ANALIZI -->
+<div class="sec-hdr"><h2>Firma Ciro Analizi</h2></div>
+<div class="ceo-card">
+  <div class="card-hdr"><span class="card-title">En Cok Gelir Getiren Firmalar</span><span class="tag tag-green" id="ciroToplamSayi">-- firma</span></div>
+  <div class="scroll-area" style="max-height:300px;" id="firmaCiroListesi"><div class="empty">Yukleniyor...</div></div>
+</div>
+<!-- TERK EDEN FIRMALAR -->
+<div class="sec-hdr"><h2>Terk Eden Firmalar</h2></div>
+<div class="ceo-card">
+  <div class="card-hdr"><span class="card-title">Pasife Dusen Firmalar</span><span class="tag tag-red" id="terkToplamSayi">-- firma</span></div>
+  <div class="scroll-area" style="max-height:250px;" id="terkFirmaListesi"><div class="empty">Yukleniyor...</div></div>
+</div>
+<!-- MEMNUNIYET SKORU -->
+<div class="sec-hdr"><h2>Musteri Memnuniyeti</h2></div>
+<div class="ceo-card">
+  <div class="card-hdr"><span class="card-title">Firma Bazli Memnuniyet Skorlari</span><span class="tag tag-blue" id="memnuniyetOrtalama">Ort: --</span></div>
+  <div class="scroll-area" style="max-height:250px;" id="memnuniyetListesi"><div class="empty">Yukleniyor...</div></div>
+</div>
+
+<!-- MALİ SAĞLIK & YAPAY ZEKA UYARILARI -->
+<div class="sec-hdr"><h2>Mali Sağlık & Yapay Zeka</h2></div>
+<div class="row r-3">
+
+  <!-- Kar/Zarar Özeti -->
+  <div class="ceo-card">
+    <div class="card-hdr">
+      <span class="card-title">Kar/Zarar Özeti</span>
+      <div style="display:flex;gap:4px;">
+        <button onclick="ceoKarZararYukle('aylik')"  id="ceoBtn_ay"  class="ceo-donem-btn aktif">Aylık</button>
+        <button onclick="ceoKarZararYukle('yillik')" id="ceoBtn_yil" class="ceo-donem-btn">Yıllık</button>
+      </div>
+    </div>
+    <div id="ceoKarZararDiv"><div class="empty">Yükleniyor...</div></div>
+  </div>
+
+  <!-- Kaçak Radar -->
+  <div class="ceo-card">
+    <div class="card-hdr">
+      <span class="card-title">Kaçak Radar</span>
+      <button onclick="ceoRadarYukle()" style="background:#f59e0b;color:#fff;border:none;padding:3px 10px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">🔄 Tara</button>
+    </div>
+    <div id="ceoRadarDiv"><div class="empty">Taramak için butona tıklayın.</div></div>
+  </div>
+
+  <!-- Yapay Zeka Uyarıları -->
+  <div class="ceo-card">
+    <div class="card-hdr">
+      <span class="card-title">YZ Mali Analiz</span>
+      <button onclick="ceoYZAnalizYukle()" style="background:#8b5cf6;color:#fff;border:none;padding:3px 10px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">✨ Analiz Et</button>
+    </div>
+    <div id="ceoYZDiv"><div class="empty">Analiz için butona tıklayın.</div></div>
+  </div>
+
+</div>
+
+<!-- BUGUNUN SAHA PROGRAMI -->
+<div class="sec-hdr"><h2>Bugunun Saha Programi</h2></div>
+<div class="row r-3">
+
+  <!-- ISG Ziyaret Plani -->
+  <div class="ceo-card">
+    <div class="card-hdr">
+      <span class="card-title">ISG Ziyaret Plani</span>
+      <span class="tag tag-blue" id="isgPlanTarih">Bugun</span>
+    </div>
+    <div class="scroll-area" style="max-height:300px;" id="isgPlanListesi">
+      <div class="empty">Yukleniyor...</div>
+    </div>
+  </div>
+
+  <!-- Gerceklesen Ziyaretler -->
+  <div class="ceo-card">
+    <div class="card-hdr">
+      <span class="card-title">Gerceklesen Ziyaretler</span>
+      <span class="tag tag-green" id="ziyaretSayiBadge">0 ziyaret</span>
+    </div>
+    <div class="scroll-area" style="max-height:300px;" id="ziyaretListesi">
+      <div class="empty">Yukleniyor...</div>
+    </div>
+  </div>
+
+  <!-- Mobil Saha Bugun -->
+  <div class="ceo-card">
+    <div class="card-hdr">
+      <span class="card-title">Mobil Saha Bugun</span>
+      <span class="tag tag-cyan" id="mobilBugunSayiBadge">0 operasyon</span>
+    </div>
+    <div class="scroll-area" style="max-height:300px;" id="mobilBugunListesi">
+      <div class="empty">Yukleniyor...</div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+</div><!-- /app -->
+</div><!-- /ceo-wrapper -->
+
+<div id="ceoOzetModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#0d1117;border:1px solid #1e2d3d;border-radius:16px;padding:28px;width:min(600px,90vw);max-height:80vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h3 style="margin:0;color:#f1f5f9;font-size:18px;">Bu Haftanın Özeti</h3>
+      <button onclick="document.getElementById('ceoOzetModal').style.display='none'" style="background:#1e2d3d;color:#94a3b8;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:18px;">✕</button>
+    </div>
+    <div id="ceoOzetIcerik"><div style="color:#64748b;text-align:center;padding:40px;">Yükleniyor...</div></div>
+  </div>
+</div>
+
+</body>
+</html>

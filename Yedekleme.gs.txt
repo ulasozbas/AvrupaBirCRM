@@ -1,0 +1,396 @@
+/**
+ * ========================================
+ * GOOGLE APPS SCRIPT PROJE YEDEKLEYİCİ
+ * ========================================
+ * Bu script, mevcut GAS projesindeki TÜM dosyaları
+ * Google Drive'a yedekler.
+ * 
+ * KURULUM:
+ * 1. Bu kodu GAS editörüne yapıştır (yeni bir .gs dosyası olarak)
+ * 2. Apps Script API'yi etkinleştir (aşağıdaki adımları takip et)
+ * 3. yedekle() fonksiyonunu çalıştır
+ */
+
+// ============ YAPILANDIRMA ============
+const CONFIG = {
+  // Yedeklerin kaydedileceği ana klasör adı
+  BACKUP_FOLDER_NAME: "GAS_Yedekler",
+  
+  // Her yedek için alt klasör oluşturulsun mu?
+  CREATE_DATED_SUBFOLDER: true,
+  
+  // Dosya uzantıları
+  EXTENSIONS: {
+    "server_js": ".gs",
+    "html": ".html",
+    "json": ".json"
+  }
+};
+
+/**
+ * ANA YEDEKLEME FONKSİYONU
+ * Bu fonksiyonu çalıştırarak yedekleme başlatın
+ */
+function yedekle() {
+  try {
+    Logger.log("🚀 Yedekleme başlatılıyor...");
+    
+    // 1. Script ID'yi al
+    const scriptId = ScriptApp.getScriptId();
+    Logger.log("📋 Script ID: " + scriptId);
+    
+    // 2. Proje dosyalarını çek
+    const files = getProjectFiles(scriptId);
+    Logger.log("📁 " + files.length + " dosya bulundu");
+    
+    // 3. Drive'da yedek klasörü oluştur
+    const backupFolder = createBackupFolder();
+    Logger.log("📂 Yedek klasörü: " + backupFolder.getUrl());
+    
+    // 4. Dosyaları kaydet
+    let savedCount = 0;
+    files.forEach(file => {
+      saveFileToDrive(file, backupFolder);
+      savedCount++;
+      Logger.log("✅ Kaydedildi: " + file.name);
+    });
+    
+    // 5. Manifest dosyasını da kaydet (appsscript.json)
+    saveManifest(scriptId, backupFolder);
+    
+    // 6. Özet rapor oluştur
+    createBackupReport(backupFolder, files);
+    
+    // Başarı mesajı
+    const message = `
+    ✅ YEDEKLEME TAMAMLANDI!
+    ━━━━━━━━━━━━━━━━━━━━━━━
+    📁 Toplam dosya: ${savedCount}
+    📂 Konum: ${backupFolder.getUrl()}
+    🕐 Tarih: ${new Date().toLocaleString('tr-TR')}
+    `;
+    
+    Logger.log(message);
+    SpreadsheetApp.getUi().alert(message);
+    
+    return backupFolder.getUrl();
+    
+  } catch (error) {
+    Logger.log("❌ HATA: " + error.message);
+    Logger.log("Stack: " + error.stack);
+    
+    // Kullanıcıya hata göster
+    SpreadsheetApp.getUi().alert(
+      "❌ Yedekleme Hatası!\n\n" + 
+      error.message + "\n\n" +
+      "Lütfen aşağıdaki adımları kontrol edin:\n" +
+      "1. Apps Script API etkin mi?\n" +
+      "2. Gerekli izinler verildi mi?"
+    );
+    
+    throw error;
+  }
+}
+
+/**
+ * Apps Script API kullanarak proje dosyalarını çeker
+ */
+function getProjectFiles(scriptId) {
+  const url = `https://script.googleapis.com/v1/projects/${scriptId}/content`;
+  
+  const options = {
+    method: "GET",
+    headers: {
+      Authorization: "Bearer " + ScriptApp.getOAuthToken()
+    },
+    muteHttpExceptions: true
+  };
+  
+  const response = UrlFetchApp.fetch(url, options);
+  const responseCode = response.getResponseCode();
+  
+  if (responseCode !== 200) {
+    const errorBody = response.getContentText();
+    
+    if (responseCode === 403) {
+      throw new Error(
+        "Apps Script API etkin değil!\n\n" +
+        "Çözüm için:\n" +
+        "1. https://script.google.com/home/usersettings adresine git\n" +
+        "2. 'Google Apps Script API' seçeneğini AÇ\n" +
+        "3. Tekrar dene"
+      );
+    }
+    
+    throw new Error("API Hatası (" + responseCode + "): " + errorBody);
+  }
+  
+  const data = JSON.parse(response.getContentText());
+  return data.files || [];
+}
+
+/**
+ * Drive'da yedek klasörü oluşturur
+ */
+function createBackupFolder() {
+  const drive = DriveApp;
+  
+  // Ana yedek klasörünü bul veya oluştur
+  let mainFolder;
+  const mainFolders = drive.getFoldersByName(CONFIG.BACKUP_FOLDER_NAME);
+  
+  if (mainFolders.hasNext()) {
+    mainFolder = mainFolders.next();
+  } else {
+    mainFolder = drive.createFolder(CONFIG.BACKUP_FOLDER_NAME);
+    Logger.log("📁 Ana klasör oluşturuldu: " + CONFIG.BACKUP_FOLDER_NAME);
+  }
+  
+  // Tarihli alt klasör oluştur
+  if (CONFIG.CREATE_DATED_SUBFOLDER) {
+    const now = new Date();
+    const projectName = getProjectName();
+    const folderName = `${projectName}_${formatDate(now)}`;
+    return mainFolder.createFolder(folderName);
+  }
+  
+  return mainFolder;
+}
+
+/**
+ * Proje adını alır
+ */
+function getProjectName() {
+  try {
+    const scriptId = ScriptApp.getScriptId();
+    const url = `https://script.googleapis.com/v1/projects/${scriptId}`;
+    
+    const options = {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + ScriptApp.getOAuthToken()
+      },
+      muteHttpExceptions: true
+    };
+    
+    const response = UrlFetchApp.fetch(url, options);
+    if (response.getResponseCode() === 200) {
+      const data = JSON.parse(response.getContentText());
+      return data.title || "GAS_Proje";
+    }
+  } catch (e) {
+    Logger.log("Proje adı alınamadı: " + e.message);
+  }
+  return "GAS_Proje";
+}
+
+/**
+ * Tek bir dosyayı Drive'a kaydeder
+ */
+function saveFileToDrive(file, folder) {
+  const extension = CONFIG.EXTENSIONS[file.type] || ".txt";
+  const fileName = file.name + extension;
+  const content = file.source || "";
+  
+  // Dosyayı oluştur
+  folder.createFile(fileName, content, MimeType.PLAIN_TEXT);
+}
+
+/**
+ * Manifest dosyasını (appsscript.json) kaydeder
+ */
+function saveManifest(scriptId, folder) {
+  try {
+    const url = `https://script.googleapis.com/v1/projects/${scriptId}/content`;
+    
+    const options = {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + ScriptApp.getOAuthToken()
+      },
+      muteHttpExceptions: true
+    };
+    
+    const response = UrlFetchApp.fetch(url, options);
+    if (response.getResponseCode() === 200) {
+      const data = JSON.parse(response.getContentText());
+      
+      // Manifest dosyasını bul
+      const manifest = data.files.find(f => f.name === "appsscript");
+      if (manifest) {
+        folder.createFile("appsscript.json", manifest.source, MimeType.PLAIN_TEXT);
+        Logger.log("✅ Manifest kaydedildi: appsscript.json");
+      }
+    }
+  } catch (e) {
+    Logger.log("⚠️ Manifest kaydedilemedi: " + e.message);
+  }
+}
+
+/**
+ * Yedekleme raporu oluşturur
+ */
+function createBackupReport(folder, files) {
+  const now = new Date();
+  const scriptId = ScriptApp.getScriptId();
+  
+  let report = `
+╔════════════════════════════════════════════════════════════╗
+║             GAS PROJE YEDEKLEME RAPORU                     ║
+╚════════════════════════════════════════════════════════════╝
+
+📅 Tarih: ${now.toLocaleString('tr-TR')}
+🔑 Script ID: ${scriptId}
+📁 Toplam Dosya: ${files.length}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                         DOSYA LİSTESİ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+`;
+
+  files.forEach((file, index) => {
+    const ext = CONFIG.EXTENSIONS[file.type] || ".txt";
+    const size = file.source ? file.source.length : 0;
+    report += `${(index + 1).toString().padStart(2, '0')}. ${file.name}${ext}\n`;
+    report += `    Tür: ${file.type} | Boyut: ${formatBytes(size)}\n\n`;
+  });
+
+  report += `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Bu yedek otomatik olarak oluşturulmuştur.
+Geri yüklemek için dosyaları GAS editörüne kopyalayın.
+`;
+
+  folder.createFile("_YEDEK_RAPORU.txt", report, MimeType.PLAIN_TEXT);
+}
+
+/**
+ * Tarihi formatlı string'e çevirir
+ */
+function formatDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}_${hour}-${minute}`;
+}
+
+/**
+ * Byte'ları okunabilir formata çevirir
+ */
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+/**
+ * MENÜ OLUŞTUR
+ * Sheet açıldığında otomatik menü ekler
+ */
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('🔧 Yedekleme')
+    .addItem('📦 Projeyi Yedekle', 'yedekle')
+    .addItem('📂 Yedek Klasörünü Aç', 'openBackupFolder')
+    .addSeparator()
+    .addItem('ℹ️ Hakkında', 'showAbout')
+    .addToUi();
+}
+
+/**
+ * Yedek klasörünü açar
+ */
+function openBackupFolder() {
+  const folders = DriveApp.getFoldersByName(CONFIG.BACKUP_FOLDER_NAME);
+  if (folders.hasNext()) {
+    const folder = folders.next();
+    const html = HtmlService.createHtmlOutput(
+      `<script>window.open("${folder.getUrl()}", "_blank");google.script.host.close();</script>`
+    ).setWidth(100).setHeight(50);
+    SpreadsheetApp.getUi().showModalDialog(html, 'Yönlendiriliyor...');
+  } else {
+    SpreadsheetApp.getUi().alert('Henüz yedek klasörü oluşturulmamış. Önce yedekleme yapın.');
+  }
+}
+
+/**
+ * Hakkında bilgisi gösterir
+ */
+function showAbout() {
+  const message = `
+  GAS Proje Yedekleyici v1.0
+  ━━━━━━━━━━━━━━━━━━━━━━━━━
+  
+  Bu araç, Google Apps Script projenizdeki
+  TÜM dosyaları (.gs, .html, .json) otomatik
+  olarak Google Drive'a yedekler.
+  
+  Kullanım:
+  1. Menüden "Projeyi Yedekle" seçin
+  2. İzinleri onaylayın
+  3. Yedek Drive'a kaydedilecek
+  
+  📂 Yedekler: Drive > GAS_Yedekler
+  `;
+  
+  SpreadsheetApp.getUi().alert(message);
+}
+
+
+// ============================================
+// OTOMATİK YEDEKLEME (OPSİYONEL)
+// ============================================
+
+/**
+ * Günlük otomatik yedekleme kurar
+ * Bu fonksiyonu bir kere çalıştırın
+ */
+function setupDailyBackup() {
+  // Mevcut trigger'ları temizle
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'yedekle') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+  
+  // Günlük trigger oluştur (her gün saat 02:00'de)
+  ScriptApp.newTrigger('yedekle')
+    .timeBased()
+    .everyDays(1)
+    .atHour(2)
+    .create();
+  
+  SpreadsheetApp.getUi().alert(
+    '✅ Günlük otomatik yedekleme kuruldu!\n\n' +
+    'Proje her gün saat 02:00\'de otomatik yedeklenecek.'
+  );
+}
+
+/**
+ * Otomatik yedeklemeyi iptal eder
+ */
+function cancelDailyBackup() {
+  const triggers = ScriptApp.getProjectTriggers();
+  let removed = 0;
+  
+  triggers.forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'yedekle') {
+      ScriptApp.deleteTrigger(trigger);
+      removed++;
+    }
+  });
+  
+  SpreadsheetApp.getUi().alert(
+    removed > 0 
+      ? '✅ Otomatik yedekleme iptal edildi.' 
+      : 'ℹ️ Zaten aktif bir otomatik yedekleme yoktu.'
+  );
+}

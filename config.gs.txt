@@ -1,0 +1,574 @@
+var CRM_SHEET_ID = "13sNHi5snSNUYxA1OWo0deMEO9s0QHoy8-_7-53umcQ4";
+var ADMIN_EMAIL = "ulas.ozbas@avrupabir.com.tr";
+var LOGO_FILE_ID = "1eScHvyDoUffScFI0XaDsuPmdDGclKv9P";
+
+// ← BU İKİ SATIRI EKLE
+var FIRMA_TABLO = "FIRMALAR";
+var ADMIN_ONLY = [];
+
+// ── PDF / DRIVE KLASÖR ID'LERİ ────────────────────────────────
+// Script Özellikleri'nden okunur. Boşsa Drive kök dizinine kaydedilir.
+var TEKLIF_PDF_FOLDER_ID = (function() {
+  try { return PropertiesService.getScriptProperties().getProperty("TEKLIF_PDF_FOLDER_ID") || ""; } catch(e) { return ""; }
+})();
+var DRIVE_PDF_FOLDER_ID = TEKLIF_PDF_FOLDER_ID;
+const SHEETS = {
+  // Kasa & Banka
+  KASA          : 'KASA',          // Nakit kasa hareketleri
+  BANKA         : 'BANKA',         // Banka hesapları tanımları
+  BANKA_HAREKET : 'BANKA_HAREKET', // Banka giriş/çıkış hareketleri
+  POS           : 'POS',           // POS (kredi kartı) hareketleri
+  CEK_SENET     : 'CEK_SENET',     // Çek ve senet takibi
+
+  // Gelir & Tahsilat
+  TAHSILAT      : 'TAHSILAT',      // Ayaktan müşteri tahsilatları
+  CARI          : 'CARI',          // Firma cari hesap bakiyeleri
+  CARI_HAREKET  : 'CARI_HAREKET',  // Cari alacak/borç hareketleri
+  FATURA        : 'FATURA',        // OSGB / Mobil faturalar
+
+  // Gider
+  GIDER         : 'GIDER',         // Tüm gider kayıtları
+  SABIT_GIDER   : 'SABIT_GIDER',   // Aylık planlanan sabit giderler
+
+  // İK
+  PERSONEL      : 'PERSONEL_IK',      // Personel bilgileri
+  BORDRO        : 'BORDRO',        // Bordro / maaş kayıtları
+  SGK_VERGI     : 'SGK_VERGI',     // SGK & vergi ödeme takibi
+
+  // Tanımlar
+  FIRMA         : 'FIRMA',         // Anlaşmalı firma listesi
+  AYAR          : 'AYAR',          // Sistem ayarları (banka listesi vb.)
+
+  // Raporlar
+  DASHBOARD     : 'DASHBOARD',     // Dashboard verileri (formüllü)
+};
+
+// ── ÖDEME TİPLERİ ────────────────────────────────────────────
+const ODEME_TIPI = {
+  NAKIT   : 'Nakit',
+  KART    : 'Kredi Kartı (POS)',
+  EFT     : 'Havale / EFT',
+  CARI    : 'Cari Hesap',
+};
+
+// ── HİZMET TİPLERİ & KDV ORANLARI ───────────────────────────
+//
+//  %10 → İşyeri Hekimi, DSP (Diğer Sağlık Personeli), Tetkikler
+//  %20 → İş Güvenliği Hizmetleri
+//
+const HIZMET_TIPI = {
+  // %10 KDV'li hizmetler
+  ISYERI_HEKIMI   : 'İşyeri Hekimi',
+  DSP             : 'DSP (Diğer Sağlık Personeli)',
+  TETKIK          : 'Tetkik / Tahlil',
+  ISE_GIRIS_MUA   : 'İşe Giriş Muayenesi',      // Hekim hizmeti → %10
+  PERIYODIK_MUA   : 'Periyodik Muayene',         // Hekim hizmeti → %10
+  MOBILGOZ_MUA    : 'Mobil Göz Muayenesi',       // Hekim hizmeti → %10
+  ODYOMETRI       : 'Odyometri',                 // Tetkik → %10
+  AKCIGER_GF      : 'Akciğer Grafisi',           // Tetkik → %10
+  EKG             : 'EKG',                       // Tetkik → %10
+
+  // %20 KDV'li hizmetler
+  IS_GUVENLIGI    : 'İş Güvenliği Hizmetleri',
+  EGITIM          : 'İş Güvenliği Eğitimi',      // İG hizmeti → %20
+  RISK_DEGERLEND  : 'Risk Değerlendirmesi',       // İG hizmeti → %20
+  ACIL_EYLEM      : 'Acil Eylem Planı',          // İG hizmeti → %20
+  OSGB_PAKET      : 'OSGB Paket Hizmet',         // Karma → ağırlıklı hesap veya %20
+};
+
+// KDV oranı tablosu — hizmet tipine göre otomatik seçilir
+const KDV_ORANLARI = {
+  // %10 grubundaki hizmetler
+  [HIZMET_TIPI.ISYERI_HEKIMI]  : 10,
+  [HIZMET_TIPI.DSP]            : 10,
+  [HIZMET_TIPI.TETKIK]         : 10,
+  [HIZMET_TIPI.ISE_GIRIS_MUA]  : 10,
+  [HIZMET_TIPI.PERIYODIK_MUA]  : 10,
+  [HIZMET_TIPI.MOBILGOZ_MUA]   : 10,
+  [HIZMET_TIPI.ODYOMETRI]      : 10,
+  [HIZMET_TIPI.AKCIGER_GF]     : 10,
+  [HIZMET_TIPI.EKG]            : 10,
+
+  // %20 grubundaki hizmetler
+  [HIZMET_TIPI.IS_GUVENLIGI]   : 20,
+  [HIZMET_TIPI.EGITIM]         : 20,
+  [HIZMET_TIPI.RISK_DEGERLEND] : 20,
+  [HIZMET_TIPI.ACIL_EYLEM]     : 20,
+  [HIZMET_TIPI.OSGB_PAKET]     : 20,
+};
+
+/**
+ * Hizmet tipine göre KDV oranını döner.
+ * Tanımlı değilse AYAR sheet'teki varsayılan oran kullanılır.
+ *
+ * @param {string} hizmetTipi
+ * @returns {number} KDV oranı (10 veya 20)
+ */
+function kdvOraniAl(hizmetTipi) {
+  if (KDV_ORANLARI[hizmetTipi] !== undefined) {
+    return KDV_ORANLARI[hizmetTipi];
+  }
+  // Tanımlı değilse AYAR'daki varsayılana bak, o da yoksa 20
+  const varsayilan = parseFloat(ayarOku('KDV_VARSAYILAN') || '20');
+  Logger.log(`⚠️ "${hizmetTipi}" için KDV oranı tanımlı değil, varsayılan %${varsayilan} kullanılıyor.`);
+  return varsayilan;
+}
+
+/**
+ * Hizmet tipine ve net tutara göre KDV tutarını hesaplar.
+ *
+ * @param {string} hizmetTipi
+ * @param {number} netTutar    - KDV hariç tutar
+ * @returns {{ kdvOrani, kdvTutar, toplam }}
+ */
+function kdvHesapla(hizmetTipi, netTutar) {
+  const kdvOrani = kdvOraniAl(hizmetTipi);
+  const kdvTutar = netTutar * (kdvOrani / 100);
+  return {
+    kdvOrani,
+    kdvTutar,
+    toplam: netTutar + kdvTutar,
+  };
+}
+
+// ── CEK/SENET DURUMLARI ──────────────────────────────────────
+const CEK_DURUM = {
+  BEKLIYOR  : 'Bekliyor',
+  ODENDI    : 'Ödendi',
+  KARSILKSZ : 'Karşılıksız',
+  IPTAL     : 'İptal',
+};
+
+// ── BANKA HESAPLARI (AYAR sheet'ten de okunabilir) ───────────
+// Sabit tanımlamak yerine AYAR sheet kullanılır.
+// Aşağıdakiler sadece varsayılan kurulum için:
+const VARSAYILAN_BANKALAR = [
+  { kod: 'ISBANK_POS',   ad: 'İşbankası POS Hesabı',    iban: '' },
+  { kod: 'ISBANK_VADELI', ad: 'İşbankası Vadeli Hesap', iban: 'TR...' },
+  { kod: 'ISBANK_VADESIZ', ad: 'İşbankası Vadesiz',     iban: 'TR...' },
+];
+
+// ── SHEET SÜTUN TANIMLARI ────────────────────────────────────
+// Her sheet için sütun indeksleri (1-tabanlı).
+// Sheet yapısı değişirse sadece burayı güncellersiniz.
+
+const COL = {
+
+  // KASA sheet sütunları
+  KASA: {
+    ID          : 1,   // Benzersiz ID (K-0001)
+    TARIH       : 2,   // Tarih
+    ACIKLAMA    : 3,   // Açıklama
+    TIP         : 4,   // Giriş / Çıkış
+    KATEGORI    : 5,   // Kategori (Tahsilat, Gider, Kasa Devir...)
+    TUTAR       : 6,   // Tutar (TL)
+    BAKIYE      : 7,   // Kümülatif bakiye
+    BELGE_NO    : 8,   // Fiş / makbuz no
+    KAYNAK_ID   : 9,   // İlgili kayıt ID (tahsilat_id, gider_id vb.)
+  },
+
+  // BANKA_HAREKET sheet sütunları
+  BANKA_HAREKET: {
+    ID          : 1,
+    TARIH       : 2,
+    BANKA_KOD   : 3,   // Hangi banka hesabı
+    ACIKLAMA    : 4,
+    TIP         : 5,   // Giriş / Çıkış
+    TUTAR       : 6,
+    BAKIYE      : 7,   // O hesabın kümülatif bakiyesi
+    KARSI_HESAP : 8,   // Gönderen/alan IBAN veya açıklama
+    KAYNAK_ID   : 9,
+  },
+
+  // POS sheet sütunları
+  POS: {
+    ID          : 1,
+    TARIH       : 2,
+    ACIKLAMA    : 3,
+    TUTAR       : 4,
+    KOMISYON    : 5,   // POS komisyon tutarı (opsiyonel)
+    NET_TUTAR   : 6,   // Tutar - Komisyon
+    KAYNAK_ID   : 7,
+  },
+
+  // CEK_SENET sheet sütunları
+  CEK_SENET: {
+    ID          : 1,
+    DUZENLENME  : 2,   // Düzenleme tarihi
+    VADE        : 3,   // Vade tarihi
+    ALACAKLI    : 4,   // Kime ödenecek
+    BANKA       : 5,   // Hangi bankadan
+    TUTAR       : 6,
+    DURUM       : 7,   // Bekliyor / Ödendi / Karşılıksız / İptal
+    ACIKLAMA    : 8,
+    ODEME_TAR   : 9,   // Fiilen ödendiği tarih
+  },
+
+  // TAHSILAT sheet sütunları
+  TAHSILAT: {
+    ID          : 1,
+    TARIH       : 2,
+    MUSTERI_AD  : 3,
+    TC_KIMLIK   : 4,
+    HIZMET      : 5,   // İşe Giriş, Periyodik Muayene vb.
+    TUTAR       : 6,
+    ODEME_TIPI  : 7,   // Nakit / Kart / EFT / Cari
+    BANKA_KOD   : 8,   // EFT ise hangi banka (boş kalabilir)
+    FIRMA_ID    : 9,   // Cari ise hangi firma
+    ACIKLAMA    : 10,
+    KULLANICI   : 11,  // Kaydı giren kişi
+  },
+
+  // CARI sheet sütunları (bakiye özet)
+  CARI: {
+    ID          : 1,
+    FIRMA_ID    : 2,
+    FIRMA_AD    : 3,
+    TOPLAM_BORC : 4,   // Birikmiş borç (fatura toplamı)
+    TOPLAM_ODEME: 5,   // Yapılan ödemeler toplamı
+    BAKIYE      : 6,   // Borç - Ödeme (formülle de olabilir)
+    SON_HAREKET : 7,
+    NOTLAR      : 8,
+  },
+
+  // CARI_HAREKET sheet sütunları
+  CARI_HAREKET: {
+    ID          : 1,
+    TARIH       : 2,
+    FIRMA_ID    : 3,
+    TIP         : 4,   // Alacak / Tahsilat
+    ACIKLAMA    : 5,
+    TUTAR       : 6,
+    BELGE_NO    : 7,   // Fatura no veya tahsilat ID
+    BAKIYE_SONRA: 8,   // İşlem sonrası bakiye
+  },
+
+  // FATURA sheet sütunları
+  FATURA: {
+    ID          : 1,
+    FATURA_NO   : 2,
+    TARIH       : 3,
+    FIRMA_ID    : 4,
+    FIRMA_AD    : 5,
+    HIZMET_TIPI : 6,   // OSGB / Mobil / Diğer
+    TUTAR       : 7,
+    KDV         : 8,
+    TOPLAM      : 9,
+    DURUM       : 10,  // Açık / Tahsil Edildi
+    TAHSILAT_TAR: 11,
+    PARASUTTEN  : 12,  // TRUE/FALSE — paraşütten çekildi mi
+  },
+
+  // GIDER sheet sütunları
+  GIDER: {
+    ID          : 1,
+    TARIH       : 2,
+    KATEGORI    : 3,   // Kira, Fatura, Kırtasiye, SGK, Maaş vb.
+    ACIKLAMA    : 4,
+    TUTAR       : 5,
+    ODEME_KAYNAGI: 6,  // Kasa / Banka (hangi) / POS / Çek
+    BANKA_KOD   : 7,   // Banka ise hangi hesap
+    BELGE_NO    : 8,
+    KULLANICI   : 9,
+  },
+
+  // SABIT_GIDER sheet sütunları
+  SABIT_GIDER: {
+    ID          : 1,
+    KATEGORI    : 2,
+    ACIKLAMA    : 3,
+    AYLIK_TUTAR : 4,
+    AKTIF       : 5,   // TRUE/FALSE
+    SON_ODEME   : 6,
+    NOTLAR      : 7,
+  },
+
+  // SGK_VERGI sheet sütunları
+  SGK_VERGI: {
+    ID          : 1,
+    DONEM       : 2,   // YYYY-MM
+    TIP         : 3,   // SGK İşveren / SGK İşçi / Muhtasar / KDV / Damga vb.
+    TUTAR       : 4,
+    SON_ODEME_TAR: 5,
+    ODEME_TAR   : 6,
+    DURUM       : 7,   // Ödendi / Bekliyor / Gecikmiş
+    ODEME_KAYNAGI: 8,
+  },
+};
+
+// ── YARDIMCI FONKSİYONLAR ────────────────────────────────────
+
+/**
+ * Spreadsheet nesnesini döner.
+ */
+function getSpreadsheet() {
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
+
+/**
+ * Sheet adına göre sheet nesnesini döner. Yoksa hata fırlatır.
+ */
+function getSheet(sheetAdi) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(sheetAdi);
+  if (!sheet) throw new Error(`"${sheetAdi}" sheet bulunamadı. Lütfen önce kurulum (setup) yapın.`);
+  return sheet;
+}
+
+/**
+ * Bugünün tarihini GG.AA.YYYY formatında döner.
+ */
+function bugun() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy');
+}
+
+/**
+ * Tarih nesnesini GG.AA.YYYY formatına çevirir.
+ */
+function tarihFormat(date) {
+  if (!date) return '';
+  if (typeof date === 'string') return date;
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'dd.MM.yyyy');
+}
+
+/**
+ * Otomatik ID üretir. Prefix + 4 haneli numara (K-0001, B-0001 vb.)
+ * Sheet'in son satırına bakarak bir sonraki numarayı verir.
+ */
+function yeniID(prefix, sheet) {
+  const sonSatir = sheet.getLastRow();
+  if (sonSatir <= 1) return `${prefix}-0001`; // Sadece başlık satırı var
+  const mevcutID = sheet.getRange(sonSatir, 1).getValue().toString();
+  const numara = parseInt(mevcutID.split('-')[1] || '0') + 1;
+  return `${prefix}-${numara.toString().padStart(4, '0')}`;
+}
+
+/**
+ * Tutarı Türk lirası formatında gösterir: 1.250,00 ₺
+ */
+function paraBirim(tutar) {
+  if (isNaN(tutar)) return '0,00 ₺';
+  return tutar.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
+}
+
+/**
+ * Şu an giriş yapmış kullanıcının e-postasını döner.
+ */
+function aktifKullanici() {
+  try {
+    return Session.getActiveUser().getEmail() || 'sistem';
+  } catch(e) {
+    return 'sistem';
+  }
+}
+
+/**
+ * Bir sheet'e başlık satırı yazar (varsa dokunmaz).
+ */
+function baslikYaz(sheet, basliklar) {
+  if (sheet.getLastRow() === 0) {
+    const range = sheet.getRange(1, 1, 1, basliklar.length);
+    range.setValues([basliklar]);
+    range.setFontWeight('bold');
+    range.setBackground('#f3f3f3');
+    sheet.setFrozenRows(1);
+  }
+}
+
+// ── KURULUM ──────────────────────────────────────────────────
+/**
+ * Tüm sheet'leri oluşturur. Zaten varsa atlar.
+ * Apps Script editöründe bir kez çalıştırın.
+ */
+function sistemKurulum() {
+  const ss = getSpreadsheet();
+
+  const sheetTanimlar = [
+    {
+      ad: SHEETS.KASA,
+      basliklar: ['ID', 'Tarih', 'Açıklama', 'Tip', 'Kategori', 'Tutar', 'Bakiye', 'Belge No', 'Kaynak ID']
+    },
+    {
+      ad: SHEETS.BANKA,
+      basliklar: ['Banka Kodu', 'Banka Adı', 'IBAN', 'Başlangıç Bakiyesi', 'Güncel Bakiye', 'Aktif', 'Notlar']
+    },
+    {
+      ad: SHEETS.BANKA_HAREKET,
+      basliklar: ['ID', 'Tarih', 'Banka Kodu', 'Açıklama', 'Tip', 'Tutar', 'Bakiye', 'Karşı Hesap', 'Kaynak ID']
+    },
+    {
+      ad: SHEETS.POS,
+      basliklar: ['ID', 'Tarih', 'Açıklama', 'Tutar', 'Komisyon', 'Net Tutar', 'Kaynak ID']
+    },
+    {
+      ad: SHEETS.CEK_SENET,
+      basliklar: ['ID', 'Düzenleme Tarihi', 'Vade Tarihi', 'Alacaklı', 'Banka', 'Tutar', 'Durum', 'Açıklama', 'Ödeme Tarihi']
+    },
+    {
+      ad: SHEETS.TAHSILAT,
+      basliklar: ['ID', 'Tarih', 'Müşteri Adı', 'TC/Pasaport', 'Hizmet', 'Tutar', 'Ödeme Tipi', 'Banka Kodu', 'Firma ID', 'Açıklama', 'Kullanıcı']
+    },
+    {
+      ad: SHEETS.CARI,
+      basliklar: ['ID', 'Firma ID', 'Firma Adı', 'Toplam Borç', 'Toplam Ödeme', 'Bakiye', 'Son Hareket', 'Notlar']
+    },
+    {
+      ad: SHEETS.CARI_HAREKET,
+      basliklar: ['ID', 'Tarih', 'Firma ID', 'Tip', 'Açıklama', 'Tutar', 'Belge No', 'İşlem Sonrası Bakiye']
+    },
+    {
+      ad: SHEETS.FATURA,
+      basliklar: ['ID', 'Fatura No', 'Tarih', 'Firma ID', 'Firma Adı', 'Hizmet Tipi', 'Tutar', 'KDV', 'Toplam', 'Durum', 'Tahsilat Tarihi', 'Paraşütten']
+    },
+    {
+      ad: SHEETS.GIDER,
+      basliklar: ['ID', 'Tarih', 'Kategori', 'Açıklama', 'Tutar', 'Ödeme Kaynağı', 'Banka Kodu', 'Belge No', 'Kullanıcı']
+    },
+    {
+      ad: SHEETS.SABIT_GIDER,
+      basliklar: ['ID', 'Kategori', 'Açıklama', 'Aylık Tutar', 'Aktif', 'Son Ödeme', 'Notlar']
+    },
+    {
+
+      ad: SHEETS.SGK_VERGI,
+      basliklar: ['ID', 'Dönem', 'Tip', 'Tutar', 'Son Ödeme Tarihi', 'Ödeme Tarihi', 'Durum', 'Ödeme Kaynağı']
+    },
+    {
+      ad: SHEETS.PERSONEL,
+      basliklar: ['ID', 'Ad Soyad', 'TC Kimlik', 'Pozisyon', 'İşe Giriş', 'Brüt Maaş', 'IBAN', 'Durum', 'Telefon', 'E-posta']
+    },
+    {
+      ad: SHEETS.BORDRO,
+      basliklar: ['Dönem', 'Ad Soyad', 'E-Posta', 'Net Maaş', 'Avans', 'Prim', 'Mesai', 'Harcama', 'Yatacak Tutar', 'Durum']
+    },
+    {
+      ad: SHEETS.FIRMA,
+      basliklar: ['ID', 'Firma Adı', 'Vergi No', 'Yetkili', 'Telefon', 'E-posta', 'Adres', 'Anlaşma Tipi', 'Aktif', 'Notlar']
+    },
+    {
+      ad: SHEETS.AYAR,
+      basliklar: ['Anahtar', 'Değer', 'Açıklama']
+    },
+  ];
+  sheetTanimlar.forEach(tanim => {
+    let sheet = ss.getSheetByName(tanim.ad);
+    if (!sheet) {
+      sheet = ss.insertSheet(tanim.ad);
+      Logger.log(`✅ Sheet oluşturuldu: ${tanim.ad}`);
+    } else {
+      Logger.log(`⏭️ Zaten var: ${tanim.ad}`);
+    }
+    baslikYaz(sheet, tanim.basliklar);
+  });
+
+  // AYAR sheet'e varsayılan değerleri ekle
+  _ayarVarsayilanlar();
+
+  Logger.log('🎉 Kurulum tamamlandı! Tüm sheet\'ler oluşturuldu.');
+}
+
+/**
+ * AYAR sheet'ine varsayılan değerleri yazar (yoksa).
+ */
+function _ayarVarsayilanlar() {
+  const sheet = getSheet(SHEETS.AYAR);
+  const mevcutAyarlar = sheet.getDataRange().getValues().slice(1).map(r => r[0]);
+
+  const varsayilanlar = [
+    ['SIRKET_ADI',    'OSGB Şirketi',              'Şirket adı'],
+    ['VERGI_NO',      '',                           'Vergi numarası'],
+    ['ADRES',         '',                           'Şirket adresi'],
+    ['TELEFON',       '',                           'İletişim telefonu'],
+    ['POS_BANKA',     'ISBANK_POS',                 'POS işlemlerinin gittiği banka kodu'],
+    ['KDV_VARSAYILAN', '20',                         'Tanımsız hizmetler için varsayılan KDV (%)'],
+    ['KDV_SAGLIK',    '10',                         'Sağlık hizmetleri KDV (Hekim, DSP, Tetkik)'],
+    ['KDV_ISGUV',     '20',                         'İş güvenliği hizmetleri KDV oranı'],
+    ['PARA_BIRIMI',   'TRY',                        'Para birimi'],
+    ['DONEM',         '',                           'Aktif dönem (YYYY-MM, boş = otomatik)'],
+  ];
+
+  varsayilanlar.forEach(([anahtar, deger, aciklama]) => {
+    if (!mevcutAyarlar.includes(anahtar)) {
+      sheet.appendRow([anahtar, deger, aciklama]);
+    }
+  });
+}
+
+/**
+ * AYAR sheet'ten bir değer okur.
+ */
+function ayarOku(anahtar) {
+  try {
+    const sheet = getSheet(SHEETS.AYAR);
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === anahtar) return data[i][1];
+    }
+    return null;
+  } catch(e) {
+    return null;
+  }
+}
+
+/**
+ * AYAR sheet'e bir değer yazar / günceller.
+ */
+function ayarYaz(anahtar, deger) {
+  const sheet = getSheet(SHEETS.AYAR);
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === anahtar) {
+      sheet.getRange(i + 1, 2).setValue(deger);
+      return;
+    }
+  }
+  sheet.appendRow([anahtar, deger, '']);
+}
+
+// ==========================================
+// ROL HARİTASI — email → rol eşleştirmesi
+// ==========================================
+var FIRMA_TABLO = "FIRMALAR";
+var ADMIN_ONLY = [];
+
+var ROL_HARITASI = {
+  "ulas.ozbas@avrupabir.com.tr":              "ADMIN",
+  "yasemin.orbay@avrupabir.com.tr":           "ADMIN",
+  "kurumsal@avrupabir.com.tr":                "PAZARLAMA",
+  "neslihan.karatas@avrupabir.com.tr":        "PAZARLAMA",
+  "dilara.bayrakdar@avrupabir.com.tr":        "PAZARLAMA",
+  "gulbahar.gultekin@avrupabir.com.tr":       "PAZARLAMA",
+  "ozgur.ozden@avrupabir.com.tr":             "PERSONEL",
+  "dilara.tezeren@avrupabir.com.tr":          "PERSONEL",
+  "esin.kurt@avrupabir.com.tr":               "PERSONEL",
+  "fatma.kurban@avrupabir.com.tr":            "PERSONEL",
+  "gunes.tokdemir@avrupabir.com.tr":          "PERSONEL",
+  "irem.kilic@avrupabir.com.tr":              "PERSONEL",
+  "hasan.senturk@avrupabir.com.tr":           "PERSONEL",
+  "imdat.karayel@avrupabir.com.tr":           "PERSONEL",
+  "melike.gundogdu@avrupabir.com.tr":         "PERSONEL",
+  "metehan.demirel@avrupabir.com.tr":         "PERSONEL",
+  "ibrahim.akpinar@avrupabir.com.tr":         "PERSONEL",
+  "sait.sezgin@avrupabir.com.tr":             "PERSONEL",
+  "muhammet.ozdemir@avrupabir.com.tr":        "PERSONEL",
+  "muharrem.kiraz@avrupabir.com.tr":          "PERSONEL",
+  "muslum.firat@avrupabir.com.tr":            "PERSONEL",
+  "naciye.kesler@avrupabir.com.tr":           "PERSONEL",
+  "nesim.saner@avrupabir.com.tr":             "PERSONEL",
+  "oguz.parlar@avrupabir.com.tr":             "PERSONEL",
+  "onur.sari@avrupabir.com.tr":               "PERSONEL",
+  "osman.acar@avrupabir.com.tr":              "PERSONEL",
+  "omer.ataman@avrupabir.com.tr":             "PERSONEL",
+  "omer.cetin@avrupabir.com.tr":              "PERSONEL",
+  "onder.elitas@avrupabir.com.tr":            "PERSONEL",
+  "reyhan.balcioglu@avrupabir.com.tr":        "PERSONEL",
+  "sadullah.acar@avrupabir.com.tr":           "PERSONEL",
+  "serhat.almast@avrupabir.com.tr":           "PERSONEL",
+  "banko@avrupabir.com.tr":                   "PERSONEL",
+  "gokce.sen@avrupabir.com.tr":               "PERSONEL",
+  "kurumsal_isg_partneri@avrupabir.com.tr":   "PERSONEL"
+};
+
+function getSheet(name) {
+  return SpreadsheetApp.openById(CRM_SHEET_ID).getSheetByName(name);
+}

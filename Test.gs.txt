@@ -1,0 +1,164 @@
+// ════════════════════════════════════════════════════════════
+// TOPLANTI DEBUG + TEST
+// ════════════════════════════════════════════════════════════
+
+function debugToplanti() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    Logger.log("=== TOPLANTI DEBUG BAŞLADI ===");
+    
+    // Sheet var mı?
+    var sh = ss.getSheetByName("Toplantılar");
+    if (!sh) {
+      Logger.log("❌ 'Toplantılar' sheet'i bulunamadı!");
+      var allSheets = ss.getSheets().map(function(s) { return s.getName(); });
+      Logger.log("Mevcut sheets: " + allSheets.join(", "));
+      return;
+    }
+    Logger.log("✅ 'Toplantılar' sheet'i bulundu");
+    
+    // Veri var mı?
+    var lastRow = sh.getLastRow();
+    Logger.log("Toplam satır: " + lastRow);
+    
+    if (lastRow < 2) {
+      Logger.log("❌ Sheet'te veri yok!");
+      return;
+    }
+    
+    var data = sh.getDataRange().getValues();
+    Logger.log("✅ Okunan veri satırları: " + data.length);
+    
+    // Header
+    Logger.log("=== HEADER SATIRI ===");
+    var headerRow = data[0];
+    for (var col = 0; col < Math.min(13, headerRow.length); col++) {
+      Logger.log("[" + col + "] " + headerRow[col]);
+    }
+    
+    // İlk 3 veri satırı
+    Logger.log("=== İLK 3 VERİ SATIRI ===");
+    for (var row = 1; row < Math.min(4, data.length); row++) {
+      Logger.log("--- SATIR " + row + " ---");
+      Logger.log("[0] ID: '" + data[row][0] + "'");
+      Logger.log("[1] Planlayan (EMAIL): '" + data[row][1] + "'");
+      Logger.log("[2] Planlayan Adı: '" + data[row][2] + "'");
+      Logger.log("[3] Firma ID: '" + data[row][3] + "'");
+      Logger.log("[4] Firma Adı: '" + data[row][4] + "'");
+      Logger.log("[5] Tarih: '" + data[row][5] + "'");
+      Logger.log("[6] Saat: '" + data[row][6] + "'");
+      Logger.log("[7] Konu: '" + data[row][7] + "'");
+      Logger.log("[9] Refakatçı (EMAIL): '" + data[row][9] + "'");
+      Logger.log("[10] Refakatçı Adı: '" + data[row][10] + "'");
+      Logger.log("[11] Durum: '" + data[row][11] + "'");
+    }
+    
+    // Şu email için test et
+    var testEmail = "ulas.ozbas@avrupabir.com.tr";
+    Logger.log("=== TEST EMAIL: " + testEmail + " ===");
+    
+    var planlananCount = 0;
+    var davetliCount = 0;
+    
+    for (var i = 1; i < data.length; i++) {
+      var planlayan = String(data[i][1] || "").toLowerCase().trim();
+      var refakatci = String(data[i][9] || "").toLowerCase().trim();
+      
+      if (planlayan === testEmail) {
+        Logger.log("✅ PLANLANAN: " + data[i][4] + " (" + data[i][5] + ")");
+        planlananCount++;
+      }
+      if (refakatci === testEmail) {
+        Logger.log("✅ DAVETLİ: " + data[i][4] + " (" + data[i][5] + ")");
+        davetliCount++;
+      }
+    }
+    
+    Logger.log("=== SONUÇ ===");
+    Logger.log("Planlanan toplantılar: " + planlananCount);
+    Logger.log("Davetli toplantılar: " + davetliCount);
+    
+    if (planlananCount === 0 && davetliCount === 0) {
+      Logger.log("⚠️ Bu email'e ait toplantı yok. Diğer emailleri kontrol edelim:");
+      var emails = {};
+      for (var i = 1; i < Math.min(20, data.length); i++) {
+        var p = String(data[i][1] || "").trim();
+        var r = String(data[i][9] || "").trim();
+        if (p) emails[p] = (emails[p] || 0) + 1;
+        if (r) emails[r] = (emails[r] || 0) + 1;
+      }
+      Logger.log("Sayfadaki emailler:");
+      for (var email in emails) {
+        Logger.log("  " + email + " (" + emails[email] + " kez)");
+      }
+    }
+    
+    Logger.log("=== DEBUG BİTTİ ===");
+    
+  } catch(e) {
+    Logger.log("HATA: " + e.message + " | " + e.stack);
+  }
+}
+function testToplantiApi() {
+  Logger.log("=== API TEST BAŞLADI ===");
+  
+  var result = api_toplantiListeGetir({
+    tip: "planladiklari",
+    email: "ulas.ozbas@avrupabir.com.tr",
+    tarih: "",
+    durum: ""
+  });
+  
+  Logger.log("Sonuç: " + JSON.stringify(result));
+  Logger.log("=== TEST BİTTİ ===");
+}
+/**
+ * AVRUPA BİR CRM - DOSYA BAZLI YEDEKLEME SİSTEMİ (V5)
+ * Her kod dosyası ayrı bir .txt dosyası olarak kaydedilir.
+ */
+function avrupaBir_CRM_DosyaBazliYedekle() {
+  const ANA_KLASOR_ID = "1KdoV6zwEtlteq2TDMIPVkQfBXJxASyvQ"; 
+  const TARIH = Utilities.formatDate(new Date(), "GMT+3", "yyyy-MM-dd_HHmm");
+  const YENI_YEDEK_KLASOR_ADI = "Yedek_" + TARIH;
+
+  try {
+    const anaKlasor = DriveApp.getFolderById(ANA_KLASOR_ID);
+    
+    // 1. O güne özel bir alt klasör oluşturalım (Karışıklığı önler)
+    const yeniAltKlasor = anaKlasor.createFolder(YENI_YEDEK_KLASOR_ADI);
+    console.log("Alt klasör oluşturuldu: " + YENI_YEDEK_KLASOR_ADI);
+
+    // 2. Proje dosyalarını çekelim
+    const scriptId = ScriptApp.getScriptId();
+    const token = ScriptApp.getOAuthToken();
+    const url = "https://script.google.com/feeds/download/export?id=" + scriptId + "&format=json";
+    
+    const response = UrlFetchApp.fetch(url, {
+      headers: { "Authorization": "Bearer " + token },
+      muteHttpExceptions: true
+    });
+
+    if (response.getResponseCode() !== 200) {
+      throw new Error("Kodlar çekilemedi, Drive API erişimini kontrol edin.");
+    }
+
+    const data = JSON.parse(response.getContentText());
+
+    // 3. Her dosyayı döngüyle ayrı ayrı kaydedelim
+    data.files.forEach(function(file) {
+      const uzanti = (file.type === "server_js") ? ".gs.txt" : ".html.txt";
+      const dosyaAdi = file.name + uzanti;
+      const icerik = file.source;
+
+      yeniAltKlasor.createFile(dosyaAdi, icerik, MimeType.PLAIN_TEXT);
+      console.log("Kaydedildi: " + dosyaAdi);
+    });
+
+    console.log("Tüm dosyalar başarıyla yedeklendi.");
+    return "İşlem Tamam: " + data.files.length + " dosya yedeklendi.";
+
+  } catch (e) {
+    console.error("HATA: " + e.message);
+    return "Hata: " + e.message;
+  }
+}
