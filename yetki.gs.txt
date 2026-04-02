@@ -1,0 +1,400 @@
+// ============================================================
+//  YETKI.GS — Rol & İzin Yönetimi
+//
+//  Sistem rolleri: ADMIN, MUDUR, ISG, MUHASEBE, IK, PAZARLAMA, MOBIL, PERSONEL
+//
+//  Sheet: YETKI_ROLLERI
+//  Sütunlar: İzin Anahtarı | Grup | Açıklama | ADMIN | MUDUR | ISG | MUHASEBE | IK | PAZARLAMA | MOBIL | PERSONEL
+// ============================================================
+
+var YETKI_SHEET = "YETKI_ROLLERI";
+
+var SISTEM_ROLLERI = ["ADMIN", "MUDUR", "ISG", "MUHASEBE", "IK", "PAZARLAMA", "MOBIL", "PERSONEL"];
+
+// Tüm izin tanımları — bu liste izin yönetim sayfasında görünür
+var IZIN_TANIMLARI = [
+  // ── Dashboard ──────────────────────────────────────────────
+  { key: "dashboard",               grup: "Dashboard",    etiket: "Dashboard görüntüle" },
+  { key: "ceo_dashboard",           grup: "Dashboard",    etiket: "CEO Dashboard (tam görünüm)" },
+
+  // ── Firma Yönetimi ─────────────────────────────────────────
+  { key: "firmalar_goruntule",      grup: "Firmalar",     etiket: "Firma listesi görüntüle" },
+  { key: "firmalar_ekle",           grup: "Firmalar",     etiket: "Yeni firma ekle" },
+  { key: "firmalar_duzenle",        grup: "Firmalar",     etiket: "Firma bilgisi düzenle" },
+  { key: "firmalar_sil",            grup: "Firmalar",     etiket: "Firma sil / arşivle" },
+  { key: "firmalar_sadece_kendi",   grup: "Firmalar",     etiket: "Sadece sorumlu olduğu firmaları gör" },
+
+  // ── Teklifler ──────────────────────────────────────────────
+  { key: "teklifler_goruntule",     grup: "Teklifler",    etiket: "Teklif listesi görüntüle" },
+  { key: "teklifler_ekle",          grup: "Teklifler",    etiket: "Yeni teklif oluştur" },
+  { key: "teklifler_pdf",           grup: "Teklifler",    etiket: "Teklif PDF oluştur / indir" },
+  { key: "teklifler_onay",          grup: "Teklifler",    etiket: "Teklif onayla / reddet" },
+
+  // ── Finans / Kasa ──────────────────────────────────────────
+  { key: "finans_goruntule",        grup: "Finans",       etiket: "Finans paneli görüntüle" },
+  { key: "kasa_goruntule",          grup: "Finans",       etiket: "Kasa bakiyesini görüntüle" },
+  { key: "kasa_ekle",               grup: "Finans",       etiket: "Kasa hareketi ekle" },
+  { key: "banka_goruntule",         grup: "Finans",       etiket: "Banka hesaplarını görüntüle" },
+  { key: "banka_ekle",              grup: "Finans",       etiket: "Banka hareketi ekle" },
+  { key: "tahsilat_goruntule",      grup: "Finans",       etiket: "Tahsilatları görüntüle" },
+  { key: "tahsilat_ekle",           grup: "Finans",       etiket: "Tahsilat ekle" },
+  { key: "cari_goruntule",          grup: "Finans",       etiket: "Cari hesapları görüntüle" },
+  { key: "cari_tahsilat",           grup: "Finans",       etiket: "Cari tahsilat yap / fatura kes" },
+  { key: "fatura_goruntule",        grup: "Finans",       etiket: "Faturaları görüntüle" },
+  { key: "fatura_kes",              grup: "Finans",       etiket: "Fatura kes" },
+  { key: "gider_goruntule",         grup: "Finans",       etiket: "Giderleri görüntüle" },
+  { key: "gider_ekle",              grup: "Finans",       etiket: "Gider ekle" },
+  { key: "cek_senet_goruntule",     grup: "Finans",       etiket: "Çek / Senet görüntüle" },
+  { key: "cek_senet_ekle",          grup: "Finans",       etiket: "Çek / Senet ekle" },
+  { key: "parasut_senkron",         grup: "Finans",       etiket: "Paraşüt senkronizasyonu" },
+  { key: "mahsuplasma",             grup: "Finans",       etiket: "Mahsuplaşma yap" },
+
+  // ── Personel / İK ──────────────────────────────────────────
+  { key: "personel_goruntule",      grup: "Personel/İK",  etiket: "Personel listesi görüntüle" },
+  { key: "personel_ekle",           grup: "Personel/İK",  etiket: "Yeni personel ekle" },
+  { key: "personel_duzenle",        grup: "Personel/İK",  etiket: "Personel bilgisi düzenle" },
+  { key: "personel_sil",            grup: "Personel/İK",  etiket: "Personel sil / pasife al" },
+  { key: "personel_maas",           grup: "Personel/İK",  etiket: "Maaş bilgisini görüntüle" },
+  { key: "personel_iban",           grup: "Personel/İK",  etiket: "IBAN bilgisini görüntüle" },
+  { key: "personel_tc",             grup: "Personel/İK",  etiket: "TC Kimlik numarasını görüntüle" },
+  { key: "bordro_goruntule",        grup: "Personel/İK",  etiket: "Bordroları görüntüle" },
+  { key: "bordro_hesapla",          grup: "Personel/İK",  etiket: "Bordro hesapla / oluştur" },
+  { key: "sgk_goruntule",           grup: "Personel/İK",  etiket: "SGK / Vergi ödemelerini görüntüle" },
+  { key: "izin_goruntule",          grup: "Personel/İK",  etiket: "İzin taleplerini görüntüle" },
+  { key: "izin_onayla",             grup: "Personel/İK",  etiket: "İzin talebi onayla / reddet" },
+
+  // ── ISG Yönetimi ───────────────────────────────────────────
+  { key: "isg_goruntule",           grup: "ISG",          etiket: "ISG firmalarını görüntüle" },
+  { key: "isg_plan_ekle",           grup: "ISG",          etiket: "ISG planı ekle / düzenle" },
+  { key: "isg_ziyaret",             grup: "ISG",          etiket: "Saha ziyareti kaydet" },
+  { key: "isg_rapor",               grup: "ISG",          etiket: "ISG raporlarını görüntüle" },
+  { key: "isg_meditek",             grup: "ISG",          etiket: "Meditek import" },
+
+  // ── Raporlar ───────────────────────────────────────────────
+  { key: "raporlar_goruntule",      grup: "Raporlar",     etiket: "Raporlar paneli" },
+  { key: "raporlar_satis",          grup: "Raporlar",     etiket: "Satış raporları" },
+  { key: "raporlar_finans",         grup: "Raporlar",     etiket: "Finansal raporlar" },
+  { key: "raporlar_performans",     grup: "Raporlar",     etiket: "Personel performans raporu" },
+
+  // ── Sistem ─────────────────────────────────────────────────
+  { key: "yetki_yonetimi",          grup: "Sistem",       etiket: "Yetki yönetimi (bu sayfa)" },
+  { key: "sistem_log",              grup: "Sistem",       etiket: "Sistem log kayıtları" },
+  { key: "kullanici_yonetimi",      grup: "Sistem",       etiket: "Kullanıcı ekle / düzenle" },
+];
+
+// ── VARSAYILAN YETKİ ŞABLONLARI ─────────────────────────────
+var VARSAYILAN_YETKILER = {
+  "ADMIN": (function() {
+    var t = {};
+    IZIN_TANIMLARI.forEach(function(i) { t[i.key] = true; });
+    return t;
+  })(),
+
+  "MUDUR": {
+    dashboard: true, ceo_dashboard: true,
+    firmalar_goruntule: true, firmalar_ekle: true, firmalar_duzenle: true, firmalar_sil: false, firmalar_sadece_kendi: false,
+    teklifler_goruntule: true, teklifler_ekle: true, teklifler_pdf: true, teklifler_onay: true,
+    finans_goruntule: true, kasa_goruntule: true, kasa_ekle: false, banka_goruntule: true, banka_ekle: false,
+    tahsilat_goruntule: true, tahsilat_ekle: false, cari_goruntule: true, cari_tahsilat: false,
+    fatura_goruntule: true, fatura_kes: false, gider_goruntule: true, gider_ekle: false,
+    cek_senet_goruntule: true, cek_senet_ekle: false, parasut_senkron: false, mahsuplasma: false,
+    personel_goruntule: true, personel_ekle: false, personel_duzenle: false, personel_sil: false,
+    personel_maas: true, personel_iban: false, personel_tc: false,
+    bordro_goruntule: true, bordro_hesapla: false, sgk_goruntule: true, izin_goruntule: true, izin_onayla: true,
+    isg_goruntule: true, isg_plan_ekle: true, isg_ziyaret: true, isg_rapor: true, isg_meditek: false,
+    raporlar_goruntule: true, raporlar_satis: true, raporlar_finans: true, raporlar_performans: true,
+    yetki_yonetimi: false, sistem_log: false, kullanici_yonetimi: false,
+  },
+
+  "ISG": {
+    dashboard: true, ceo_dashboard: false,
+    firmalar_goruntule: true, firmalar_ekle: false, firmalar_duzenle: false, firmalar_sil: false, firmalar_sadece_kendi: false,
+    teklifler_goruntule: false, teklifler_ekle: false, teklifler_pdf: false, teklifler_onay: false,
+    finans_goruntule: false, kasa_goruntule: false, kasa_ekle: false, banka_goruntule: false, banka_ekle: false,
+    tahsilat_goruntule: false, tahsilat_ekle: false, cari_goruntule: false, cari_tahsilat: false,
+    fatura_goruntule: false, fatura_kes: false, gider_goruntule: false, gider_ekle: false,
+    cek_senet_goruntule: false, cek_senet_ekle: false, parasut_senkron: false, mahsuplasma: false,
+    personel_goruntule: false, personel_ekle: false, personel_duzenle: false, personel_sil: false,
+    personel_maas: false, personel_iban: false, personel_tc: false,
+    bordro_goruntule: false, bordro_hesapla: false, sgk_goruntule: false, izin_goruntule: false, izin_onayla: false,
+    isg_goruntule: true, isg_plan_ekle: true, isg_ziyaret: true, isg_rapor: true, isg_meditek: true,
+    raporlar_goruntule: true, raporlar_satis: false, raporlar_finans: false, raporlar_performans: false,
+    yetki_yonetimi: false, sistem_log: false, kullanici_yonetimi: false,
+  },
+
+  "MUHASEBE": {
+    dashboard: true, ceo_dashboard: false,
+    firmalar_goruntule: true, firmalar_ekle: false, firmalar_duzenle: false, firmalar_sil: false, firmalar_sadece_kendi: false,
+    teklifler_goruntule: false, teklifler_ekle: false, teklifler_pdf: false, teklifler_onay: false,
+    finans_goruntule: true, kasa_goruntule: true, kasa_ekle: true, banka_goruntule: true, banka_ekle: true,
+    tahsilat_goruntule: true, tahsilat_ekle: true, cari_goruntule: true, cari_tahsilat: true,
+    fatura_goruntule: true, fatura_kes: true, gider_goruntule: true, gider_ekle: true,
+    cek_senet_goruntule: true, cek_senet_ekle: true, parasut_senkron: true, mahsuplasma: true,
+    personel_goruntule: true, personel_ekle: false, personel_duzenle: false, personel_sil: false,
+    personel_maas: true, personel_iban: true, personel_tc: false,
+    bordro_goruntule: true, bordro_hesapla: false, sgk_goruntule: true, izin_goruntule: false, izin_onayla: false,
+    isg_goruntule: false, isg_plan_ekle: false, isg_ziyaret: false, isg_rapor: false, isg_meditek: false,
+    raporlar_goruntule: true, raporlar_satis: false, raporlar_finans: true, raporlar_performans: false,
+    yetki_yonetimi: false, sistem_log: false, kullanici_yonetimi: false,
+  },
+
+  "IK": {
+    dashboard: true, ceo_dashboard: false,
+    firmalar_goruntule: false, firmalar_ekle: false, firmalar_duzenle: false, firmalar_sil: false, firmalar_sadece_kendi: false,
+    teklifler_goruntule: false, teklifler_ekle: false, teklifler_pdf: false, teklifler_onay: false,
+    finans_goruntule: false, kasa_goruntule: false, kasa_ekle: false, banka_goruntule: false, banka_ekle: false,
+    tahsilat_goruntule: false, tahsilat_ekle: false, cari_goruntule: false, cari_tahsilat: false,
+    fatura_goruntule: false, fatura_kes: false, gider_goruntule: false, gider_ekle: false,
+    cek_senet_goruntule: false, cek_senet_ekle: false, parasut_senkron: false, mahsuplasma: false,
+    personel_goruntule: true, personel_ekle: true, personel_duzenle: true, personel_sil: false,
+    personel_maas: true, personel_iban: true, personel_tc: true,
+    bordro_goruntule: true, bordro_hesapla: true, sgk_goruntule: true, izin_goruntule: true, izin_onayla: true,
+    isg_goruntule: false, isg_plan_ekle: false, isg_ziyaret: false, isg_rapor: false, isg_meditek: false,
+    raporlar_goruntule: true, raporlar_satis: false, raporlar_finans: false, raporlar_performans: true,
+    yetki_yonetimi: false, sistem_log: false, kullanici_yonetimi: false,
+  },
+
+  "PAZARLAMA": {
+    dashboard: true, ceo_dashboard: false,
+    firmalar_goruntule: true, firmalar_ekle: true, firmalar_duzenle: true, firmalar_sil: false, firmalar_sadece_kendi: true,
+    teklifler_goruntule: true, teklifler_ekle: true, teklifler_pdf: true, teklifler_onay: false,
+    finans_goruntule: false, kasa_goruntule: false, kasa_ekle: false, banka_goruntule: false, banka_ekle: false,
+    tahsilat_goruntule: false, tahsilat_ekle: false, cari_goruntule: false, cari_tahsilat: false,
+    fatura_goruntule: false, fatura_kes: false, gider_goruntule: false, gider_ekle: false,
+    cek_senet_goruntule: false, cek_senet_ekle: false, parasut_senkron: false, mahsuplasma: false,
+    personel_goruntule: false, personel_ekle: false, personel_duzenle: false, personel_sil: false,
+    personel_maas: false, personel_iban: false, personel_tc: false,
+    bordro_goruntule: false, bordro_hesapla: false, sgk_goruntule: false, izin_goruntule: false, izin_onayla: false,
+    isg_goruntule: false, isg_plan_ekle: false, isg_ziyaret: false, isg_rapor: false, isg_meditek: false,
+    raporlar_goruntule: true, raporlar_satis: true, raporlar_finans: false, raporlar_performans: true,
+    yetki_yonetimi: false, sistem_log: false, kullanici_yonetimi: false,
+  },
+
+  "MOBIL": {
+    dashboard: true, ceo_dashboard: false,
+    firmalar_goruntule: true, firmalar_ekle: false, firmalar_duzenle: false, firmalar_sil: false, firmalar_sadece_kendi: false,
+    teklifler_goruntule: false, teklifler_ekle: false, teklifler_pdf: false, teklifler_onay: false,
+    finans_goruntule: false, kasa_goruntule: false, kasa_ekle: false, banka_goruntule: false, banka_ekle: false,
+    tahsilat_goruntule: false, tahsilat_ekle: false, cari_goruntule: false, cari_tahsilat: false,
+    fatura_goruntule: false, fatura_kes: false, gider_goruntule: false, gider_ekle: false,
+    cek_senet_goruntule: false, cek_senet_ekle: false, parasut_senkron: false, mahsuplasma: false,
+    personel_goruntule: false, personel_ekle: false, personel_duzenle: false, personel_sil: false,
+    personel_maas: false, personel_iban: false, personel_tc: false,
+    bordro_goruntule: false, bordro_hesapla: false, sgk_goruntule: false, izin_goruntule: false, izin_onayla: false,
+    isg_goruntule: true, isg_plan_ekle: false, isg_ziyaret: true, isg_rapor: true, isg_meditek: false,
+    raporlar_goruntule: false, raporlar_satis: false, raporlar_finans: false, raporlar_performans: false,
+    yetki_yonetimi: false, sistem_log: false, kullanici_yonetimi: false,
+  },
+
+  "PERSONEL": {
+    dashboard: true, ceo_dashboard: false,
+    firmalar_goruntule: false, firmalar_ekle: false, firmalar_duzenle: false, firmalar_sil: false, firmalar_sadece_kendi: false,
+    teklifler_goruntule: false, teklifler_ekle: false, teklifler_pdf: false, teklifler_onay: false,
+    finans_goruntule: false, kasa_goruntule: false, kasa_ekle: false, banka_goruntule: false, banka_ekle: false,
+    tahsilat_goruntule: false, tahsilat_ekle: false, cari_goruntule: false, cari_tahsilat: false,
+    fatura_goruntule: false, fatura_kes: false, gider_goruntule: false, gider_ekle: false,
+    cek_senet_goruntule: false, cek_senet_ekle: false, parasut_senkron: false, mahsuplasma: false,
+    personel_goruntule: false, personel_ekle: false, personel_duzenle: false, personel_sil: false,
+    personel_maas: false, personel_iban: false, personel_tc: false,
+    bordro_goruntule: false, bordro_hesapla: false, sgk_goruntule: false, izin_goruntule: true, izin_onayla: false,
+    isg_goruntule: false, isg_plan_ekle: false, isg_ziyaret: false, isg_rapor: false, isg_meditek: false,
+    raporlar_goruntule: false, raporlar_satis: false, raporlar_finans: false, raporlar_performans: false,
+    yetki_yonetimi: false, sistem_log: false, kullanici_yonetimi: false,
+  },
+};
+
+// ── SHEET'TEN YETKİ OKU ────────────────────────────────────────
+function api_yetkiRolleriniGetir() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName(YETKI_SHEET);
+
+    // Sheet yoksa varsayılanları kullan
+    if (!sh) {
+      return { ok: true, roller: VARSAYILAN_YETKILER, tanimlar: IZIN_TANIMLARI, sistemRolleri: SISTEM_ROLLERI };
+    }
+
+    var data = sh.getDataRange().getValues();
+    if (data.length < 2) {
+      return { ok: true, roller: VARSAYILAN_YETKILER, tanimlar: IZIN_TANIMLARI, sistemRolleri: SISTEM_ROLLERI };
+    }
+
+    // Başlık satırından rol sıralamasını al (col 4+)
+    var baslik = data[0];
+    var rolSiralamasi = baslik.slice(3); // ["ADMIN","MUDUR","ISG",...]
+
+    var roller = {};
+    rolSiralamasi.forEach(function(r) { roller[r] = {}; });
+
+    for (var i = 1; i < data.length; i++) {
+      var izinKey = String(data[i][0] || "").trim();
+      if (!izinKey) continue;
+      rolSiralamasi.forEach(function(rol, idx) {
+        var deger = data[i][3 + idx];
+        roller[rol][izinKey] = (deger === true || String(deger).toUpperCase() === "TRUE");
+      });
+    }
+
+    return { ok: true, roller: roller, tanimlar: IZIN_TANIMLARI, sistemRolleri: SISTEM_ROLLERI };
+  } catch(e) {
+    return { ok: false, msg: e.message, roller: VARSAYILAN_YETKILER, tanimlar: IZIN_TANIMLARI, sistemRolleri: SISTEM_ROLLERI };
+  }
+}
+
+// ── YETKİLERİ KAYDET ──────────────────────────────────────────
+function api_yetkiKaydet(p) {
+  try {
+    var email = String(p.email || "").toLowerCase().trim();
+    var u = AUTH_requireKnownUser_(email);
+    var rol = String(u.role || "").toUpperCase();
+    if (rol !== "ADMIN") return { ok: false, msg: "Sadece ADMIN yetki değişikliği yapabilir." };
+
+    var roller = p.roller; // { "MUDUR": { "dashboard": true, ... }, ... }
+    if (!roller) return { ok: false, msg: "Rol verisi eksik." };
+
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName(YETKI_SHEET);
+    if (!sh) {
+      sh = ss.insertSheet(YETKI_SHEET);
+    }
+
+    sh.clearContents();
+
+    // Başlık satırı
+    var baslik = ["İzin Anahtarı", "Grup", "Açıklama"].concat(SISTEM_ROLLERI);
+    sh.appendRow(baslik);
+    sh.getRange(1, 1, 1, baslik.length)
+      .setFontWeight("bold")
+      .setBackground("#1e293b")
+      .setFontColor("white");
+
+    // Her izin için satır yaz
+    IZIN_TANIMLARI.forEach(function(tanim) {
+      var satir = [tanim.key, tanim.grup, tanim.etiket];
+      SISTEM_ROLLERI.forEach(function(rol) {
+        var rolYetkiler = roller[rol] || VARSAYILAN_YETKILER[rol] || {};
+        satir.push(rolYetkiler[tanim.key] === true);
+      });
+      sh.appendRow(satir);
+    });
+
+    // Sütun genişliklerini ayarla
+    sh.setColumnWidth(1, 200);
+    sh.setColumnWidth(2, 120);
+    sh.setColumnWidth(3, 260);
+    for (var c = 4; c <= 3 + SISTEM_ROLLERI.length; c++) {
+      sh.setColumnWidth(c, 90);
+    }
+    sh.setFrozenRows(1);
+    sh.setFrozenColumns(3);
+
+    return { ok: true, msg: "Yetki tablosu kaydedildi." };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+
+// ── KULLANICININ YETKİSİNİ AL ─────────────────────────────────
+// Login sırasında veya izin kontrolünde kullanılır
+function api_kullaniciYetkisiGetir(email) {
+  try {
+    var u = AUTH_getUserProfile_(email);
+    if (!u) return { ok: false, msg: "Kullanıcı bulunamadı." };
+
+    var rol = String(u.role || "PERSONEL").toUpperCase();
+
+    // YETKI_ROLLERI sheet'i varsa oradan oku, yoksa varsayılan kullan
+    var res = api_yetkiRolleriniGetir();
+    var roller = res.roller || VARSAYILAN_YETKILER;
+    var izinler = roller[rol] || roller["PERSONEL"] || {};
+
+    // ADMIN her zaman her şeye erişebilir
+    if (rol === "ADMIN") {
+      izinler = VARSAYILAN_YETKILER["ADMIN"];
+    }
+
+    return { ok: true, email: u.email, rol: rol, adSoyad: u.adSoyad, izinler: izinler };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+
+// ── YETKİ KONTROL YARDIMCISI (backend middleware) ─────────────
+// Her api_ fonksiyonunun başında çağrılabilir
+function YETKI_kontrol_(email, izinKey) {
+  try {
+    var res = api_kullaniciYetkisiGetir(email);
+    if (!res.ok) throw new Error("Kullanıcı doğrulanamadı.");
+    if (res.rol === "ADMIN") return true; // ADMIN her şeyi yapabilir
+    if (res.izinler[izinKey] !== true) {
+      throw new Error("Bu işlem için yetkiniz yok: " + izinKey);
+    }
+    return true;
+  } catch(e) {
+    throw e;
+  }
+}
+
+// ── VARSAYILANLARI SHEET'E YAZ (ilk kurulum) ─────────────────
+function api_yetkiVarsayilanlariKur() {
+  try {
+    return api_yetkiKaydet({
+      email: ADMIN_EMAIL,
+      roller: VARSAYILAN_YETKILER
+    });
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+
+// ── İZİN TANIMLARINI DÖNER (UI için) ─────────────────────────
+function api_izinTanimlariniGetir() {
+  return { ok: true, tanimlar: IZIN_TANIMLARI, sistemRolleri: SISTEM_ROLLERI };
+}
+
+// ── KULLANICI LİSTESİ İÇİN ────────────────────────────────────
+function api_kullaniciListesiGetir(email) {
+  try {
+    YETKI_kontrol_(email, "kullanici_yonetimi");
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("Kullanicilar");
+    if (!sh) return { ok: false, msg: "Kullanicilar sheet bulunamadı." };
+    var data = sh.getDataRange().getValues();
+    var liste = [];
+    for (var i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      liste.push({
+        email:   String(data[i][0] || ""),
+        pin:     "****",
+        rol:     String(data[i][2] || "PERSONEL"),
+        adSoyad: String(data[i][3] || ""),
+        tel:     String(data[i][4] || ""),
+        aktif:   String(data[i][6] || "AKTIF").toUpperCase() !== "PASİF"
+      });
+    }
+    return { ok: true, liste: liste };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+
+// ── KULLANICI ROLÜ GÜNCELLE ───────────────────────────────────
+function api_kullaniciRoluGuncelle(p) {
+  try {
+    YETKI_kontrol_(p.adminEmail, "kullanici_yonetimi");
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("Kullanicilar");
+    if (!sh) return { ok: false, msg: "Kullanicilar sheet bulunamadı." };
+    var data = sh.getDataRange().getValues();
+    var hedefEmail = String(p.hedefEmail || "").toLowerCase().trim();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0] || "").toLowerCase().trim() === hedefEmail) {
+        sh.getRange(i + 1, 3).setValue(String(p.yeniRol || "PERSONEL").toUpperCase());
+        return { ok: true, msg: hedefEmail + " kullanıcısının rolü güncellendi: " + p.yeniRol };
+      }
+    }
+    return { ok: false, msg: "Kullanıcı bulunamadı: " + hedefEmail };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
