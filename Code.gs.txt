@@ -27,6 +27,12 @@ function doGet(e) {
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
         .addMetaTag("viewport","width=device-width, initial-scale=1");
     }
+    if (e&&e.parameter&&e.parameter.page === "yetki") {
+      return HtmlService.createHtmlOutputFromFile("yetki_yonetimi")
+        .setTitle("Yetki Yönetimi — AvrupaBir CRM")
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+        .addMetaTag("viewport","width=device-width, initial-scale=1");
+    }
     var ttT = HtmlService.createTemplateFromFile("Index");
     ttT.USER = { email:"", role:"viewer" };
     return ttT.evaluate()
@@ -434,7 +440,7 @@ function veritabaniArsivle() {
         } else {
           var str = String(tarih || "");
           var m = str.match(/(\d{4})/);
-          if (m) tarihYil = parseInt(m[1]);
+          if (m) tarihYil = parseInt(m[1], 10);
         }
         if (tarihYil && tarihYil <= yil) {
           tasınan.push(row);
@@ -459,6 +465,7 @@ function veritabaniArsivle() {
     return { ok: false, msg: e.message };
   }
 }
+
 function api_geminiIsgAnaliz(base64Foto, firmaId, firmaAdi, email) {
   try {
     var apiKey = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
@@ -1311,69 +1318,8 @@ function toplantiTabDegistir(tabAdi) {
   // Listeyi yükle
   toplantiListeYukle();
 }
-function api_toplantiCevapla(params) {
-  try {
-    var id = String(params.id || "").trim();
-    var karar = String(params.karar || "").trim();
-    var email = String(params.email || "").toLowerCase().trim();
-    
-    if (!id || !karar) return { ok: false, msg: "Eksik parametre" };
-    
-    // --- 1. TAKVİM GÜNCELLEME VE MAİL GÖNDERME BÖLÜMÜ ---
-    try {
-      var event = CalendarApp.getEventById(id);
-      if (event) {
-        // Takvim durumunu güncelle
-        if (karar === 'kabul') {
-          event.setMyStatus(CalendarApp.GuestStatus.YES);
-        } else {
-          event.setMyStatus(CalendarApp.GuestStatus.NO);
-        }
+// api_toplantiCevapla: toplanti_gas_backend.gs.txt'de tanımlı
 
-        // Organizatöre mail gönder
-        var organizator = event.getCreators()[0];
-        var baslik = event.getTitle();
-        var gonderen = Session.getActiveUser().getEmail();
-        var mesaj = "Sayın Yetkili,\n\n" + gonderen + " kullanıcısı '" + baslik + 
-                    "' konulu toplantı davetinize " + 
-                    (karar === 'kabul' ? "KABUL (Geleceğim)" : "RED (Gelemeyeceğim)") + 
-                    " yanıtı vermiştir.\n\nBilgilerinize.";
-
-        MailApp.sendEmail(organizator, "Toplantı Katılım Durumu: " + baslik, mesaj);
-      }
-    } catch (e) {
-      console.error("Takvim/Mail hatası (İşleme devam ediliyor): " + e.toString());
-      // Takvimde bulunamazsa bile aşağıdaki Sheet güncellemesi devam etsin diye hatayı yutuyoruz.
-    }
-
-    // --- 2. MEVCUT SHEET GÜNCELLEME BÖLÜMÜ ---
-    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-    var sh = ss.getSheetByName("Toplantılar");
-    if (!sh) return { ok: false, msg: "Sheet bulunamadı" };
-    
-    var data = sh.getDataRange().getValues();
-    var satir = -1;
-    
-    for (var i = 1; i < data.length; i++) {
-      if (String(data[i][0]) === id) {
-        satir = i + 1;
-        break;
-      }
-    }
-    
-    if (satir < 0) return { ok: false, msg: "Toplantı bulunamadı" };
-    
-    sh.getRange(satir, 12).setValue(karar);
-    sh.getRange(satir, 14).setValue(new Date().toLocaleString('tr-TR'));
-    
-    var renk = karar === 'kabul' ? '#dcfce7' : '#fee2e2';
-    sh.getRange(satir, 1, 1, 14).setBackground(renk);
-    
-    return { ok: true };
-  } catch(e) {
-    return { ok: false, msg: e.message };
-  }
-}
 function api_toplantiSonlandir(params) {
   try {
     var id = String(params.id || "").trim();
@@ -1383,7 +1329,7 @@ function api_toplantiSonlandir(params) {
     if (!id) return { ok: false, msg: "Toplantı ID bulunamadı" };
     
     var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-    var sh = ss.getSheetByName("Toplantılar");
+    var sh = ss.getSheetByName("TOPLANTILER");
     if (!sh) return { ok: false, msg: "Sheet bulunamadı" };
     
     var data = sh.getDataRange().getValues();
@@ -1418,7 +1364,7 @@ function api_toplantiGizle(params) {
     if (!id) return { ok: false, msg: "Toplantı ID bulunamadı" };
     
     var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-    var sh = ss.getSheetByName("Toplantılar");
+    var sh = ss.getSheetByName("TOPLANTILER");
     if (!sh) return { ok: false, msg: "Sheet bulunamadı" };
     
     var data = sh.getDataRange().getValues();
@@ -1441,18 +1387,72 @@ function api_toplantiGizle(params) {
     return { ok: false, msg: e.message };
   }
 }
-
-function api_teklifDurumGuncelle(id, yeniDurum) {
+function api_teklifDurumGuncelle(id, yeniDurum, hizmetTipleri) {
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName("TEKLIFLER") || ss.getSheets()[0]; 
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sheet = ss.getSheetByName("TEKLIFLER");
+    if (!sheet) return { ok: false, msg: "TEKLIFLER sheet yok" };
     var data = sheet.getDataRange().getValues();
+    var head = data[0];
     
+    var colTeklifNo = -1, colTeklifID = -1, colDurum = -1;
+    for (var c = 0; c < head.length; c++) {
+      var h = String(head[c]).trim().toUpperCase().replace(/İ/g,"I");
+      if (h === "TEKLIFNO" || h === "TEKLIF NO" || h === "NO") colTeklifNo = c;
+      if (h === "TEKLIFID" || h === "TEKLIF ID") colTeklifID = c;
+      if (h === "DURUM") colDurum = c;
+    }
+    if (colDurum < 0) return { ok: false, msg: "DURUM sütunu bulunamadı" };
+    
+    var aranan = String(id).trim();
     for (var i = 1; i < data.length; i++) {
-      // id burada "1001" gibi bir değerdir. data[i][0] da A sütunudur.
-      if (String(data[i][0]).trim() === String(id).trim()) { 
-        // F Sütunu (Durum) 6. sıradadır.
-        sheet.getRange(i + 1, 6).setValue(yeniDurum || "ONAYLANDI"); 
+      var teklifNo = String(data[i][colTeklifNo] || "").trim();
+      var teklifId = colTeklifID >= 0 ? String(data[i][colTeklifID] || "").trim() : "";
+      if (teklifNo === aranan || teklifId === aranan) {
+        sheet.getRange(i + 1, colDurum + 1).setValue(yeniDurum || "ONAYLANDI");
+
+        var firmaAdi = "", firmaId = "", sahip = "";
+        for (var h2 = 0; h2 < head.length; h2++) {
+          var hh = String(head[h2]).trim().toUpperCase().replace(/İ/g,"I");
+          if (hh === "FIRMAADI" || hh === "FIRMA ADI") firmaAdi = String(data[i][h2] || "");
+          if (hh === "FIRMAID" || hh === "FIRMA ID") firmaId = String(data[i][h2] || "");
+          if (hh === "OLUSTURAN") sahip = String(data[i][h2] || "");
+        }
+
+        var durumUpper = String(yeniDurum || "").toUpperCase();
+        if (durumUpper === "ONAYLANDI" || durumUpper.indexOf("KAZANILDI") > -1) {
+
+          // KUTLAMA
+          try { api_kutlamaKaydet(firmaAdi, sahip, ""); } catch(ek) {}
+
+          // HİZMET TİPLERİNE GÖRE ATAMA TALEPLERİ
+          var tipler = String(hizmetTipleri || "OSGB").split(",");
+          try {
+            var shAtama = ss.getSheetByName("ATAMA_TALEPLERI");
+            if (!shAtama) {
+              shAtama = ss.insertSheet("ATAMA_TALEPLERI");
+              shAtama.appendRow(["ID","Tarih","TeklifNo","FirmaID","FirmaAdi","Durum","CalisanSayisi","Hizmetler","AtananPersonel","AtananDakika","AtayanEmail","AtamaTarihi","Notlar"]);
+              shAtama.getRange(1,1,1,13).setFontWeight("bold").setBackground("#1e293b").setFontColor("white");
+            }
+            var tarih2 = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd.MM.yyyy HH:mm");
+
+            tipler.forEach(function(tip) {
+              tip = tip.trim();
+              var atamaId = "ATA_" + tip + "_" + new Date().getTime();
+              var muhatap = "";
+              if (tip === "OSGB") muhatap = "dilara.bayrakdar@avrupabir.com.tr";
+              else if (tip === "MOBIL" || tip === "ISE_GIRIS") muhatap = "gulbahar.gultekin@avrupabir.com.tr";
+
+              shAtama.appendRow([atamaId, tarih2, aranan, firmaId, firmaAdi, "BEKLEMEDE", "", tip, "", "", muhatap, "", ""]);
+
+              var tipAdi = tip === "OSGB" ? "İSG Yönetim" : tip === "MOBIL" ? "Mobil Sağlık" : "İşe Giriş";
+              chatBildir_("🆕 *YENİ ATAMA — " + tipAdi + "*\nFirma: " + firmaAdi + "\nTeklif: " + aranan + "\nMuhatap: " + muhatap + "\n⚠️ Atama yapılması bekleniyor!");
+              Utilities.sleep(100);
+            });
+          } catch(ea) { Logger.log("Atama hatası: " + ea.message); }
+        }
+
+        logYaz("TEKLIF_DURUM", firmaAdi + " — " + aranan + " → " + yeniDurum + " [" + (hizmetTipleri || "") + "]", "TEKLIF", aranan, firmaAdi, firmaId);
         return { ok: true };
       }
     }
@@ -1461,4 +1461,3 @@ function api_teklifDurumGuncelle(id, yeniDurum) {
     return { ok: false, msg: e.toString() };
   }
 }
-
