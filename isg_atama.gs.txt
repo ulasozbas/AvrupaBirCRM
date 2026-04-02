@@ -727,3 +727,44 @@ function isgRaporTriggerKur() {
   Logger.log('✅ Her ayın 1i saat 08:00 trigger kuruldu');
 }
 
+// ==========================================
+// ISG SÖZLEŞME BİTİR
+// ==========================================
+function api_isgSozlesmeBitir(p) {
+  try {
+    p = p || {};
+    var firmaId = String(p.firmaId || "").trim();
+    if (!firmaId) return { ok: false, msg: "firmaId boş" };
+
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("ISG_HIZMETLER");
+    if (!sh) return { ok: false, msg: "ISG_HIZMETLER sheet bulunamadı" };
+
+    var vals = sh.getDataRange().getValues();
+    if (vals.length < 2) return { ok: false, msg: "ISG_HIZMETLER boş" };
+
+    var bugun = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd.MM.yyyy");
+
+    var bulundu = false;
+    for (var r = 1; r < vals.length; r++) {
+      if (String(vals[r][0] || "").trim() !== firmaId) continue;
+      // Kolon 11 = Durum, Kolon 10 = SozlesmeBit
+      sh.getRange(r + 1, 12).setValue("Pasif");   // kolon 11 (0-index) → sheet kolon 12
+      sh.getRange(r + 1, 11).setValue(bugun);     // kolon 10 (0-index) → sheet kolon 11
+      bulundu = true;
+      break;
+    }
+
+    if (!bulundu) return { ok: false, msg: "Bu firmaya ait ISG kaydı bulunamadı" };
+
+    // Chat bildirimi
+    try {
+      var firmaAdi = String(p.firmaAdi || firmaId);
+      chatBildir_("🔴 *ISG Sözleşme Sonlandırıldı*\nFirma: " + firmaAdi + "\nTarih: " + bugun + "\nYapan: " + String(p.kullanici || ""));
+    } catch(e2) {}
+
+    return { ok: true, msg: "Sözleşme başarıyla sonlandırıldı. Durum → Pasif, SözlesmeBit → " + bugun };
+  } catch(e) {
+    return { ok: false, msg: "Sunucu Hatası: " + e.message };
+  }
+}
