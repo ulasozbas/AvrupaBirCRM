@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yetki Yönetimi — AvrupaBir CRM</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 13px;
+  min-height: 100vh;
+}
+
+/* ── Üst bar ── */
+.topbar {
+  background: #1e293b;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #334155;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.topbar h1 { font-size: 16px; font-weight: 700; color: #f1f5f9; }
+.topbar .sub { font-size: 11px; color: #64748b; margin-top: 2px; }
+.btn {
+  padding: 7px 18px;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+.btn-kaydet { background: #3b82f6; color: #fff; }
+.btn-kaydet:hover { background: #2563eb; }
+.btn-kaydet:disabled { background: #475569; cursor: not-allowed; }
+.btn-varsayilan { background: #334155; color: #94a3b8; margin-right: 8px; }
+.btn-varsayilan:hover { background: #475569; color: #e2e8f0; }
+.btn-kapat { background: transparent; color: #64748b; border: 1px solid #334155; margin-left: 8px; }
+.btn-kapat:hover { color: #e2e8f0; border-color: #64748b; }
+
+/* ── Ana Layout ── */
+.layout {
+  display: flex;
+  height: calc(100vh - 57px);
+}
+
+/* ── Sol sidebar — Roller ── */
+.sidebar {
+  width: 160px;
+  background: #1e293b;
+  border-right: 1px solid #334155;
+  padding: 12px 0;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+.sidebar-baslik {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #475569;
+  padding: 0 14px 8px;
+}
+.rol-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 12px;
+  text-align: left;
+  border-left: 3px solid transparent;
+  transition: all 0.15s;
+}
+.rol-btn:hover { background: #0f172a; color: #e2e8f0; }
+.rol-btn.aktif { background: #0f172a; color: #3b82f6; border-left-color: #3b82f6; font-weight: 600; }
+.rol-btn .rol-icon { font-size: 15px; }
+.rol-btn .rol-badge {
+  margin-left: auto;
+  font-size: 10px;
+  background: #1e3a5f;
+  color: #60a5fa;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.rol-btn.aktif .rol-badge { background: #1d4ed8; color: #bfdbfe; }
+
+/* ── Sağ içerik ── */
+.icerik {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+
+/* ── Grup başlığı ── */
+.grup-baslik {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 20px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #1e293b;
+}
+.grup-baslik:first-of-type { margin-top: 0; }
+.grup-baslik h3 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #94a3b8; }
+.grup-tumunu-sec {
+  margin-left: auto;
+  font-size: 10px;
+  color: #475569;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #1e293b;
+  border: 1px solid #334155;
+}
+.grup-tumunu-sec:hover { color: #e2e8f0; border-color: #475569; }
+
+/* ── İzin satırı ── */
+.izin-satir {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 7px;
+  margin-bottom: 3px;
+  transition: background 0.1s;
+}
+.izin-satir:hover { background: #1e293b; }
+.izin-etiket { flex: 1; font-size: 12px; color: #cbd5e1; }
+.izin-etiket .izin-key { font-size: 10px; color: #475569; font-family: monospace; margin-left: 6px; }
+
+/* ── Toggle switch ── */
+.toggle-wrap { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+.toggle-wrap input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: #334155;
+  border-radius: 22px;
+  transition: 0.2s;
+}
+.toggle-slider:before {
+  content: "";
+  position: absolute;
+  width: 16px; height: 16px;
+  left: 3px; bottom: 3px;
+  background: #64748b;
+  border-radius: 50%;
+  transition: 0.2s;
+}
+input:checked + .toggle-slider { background: #1d4ed8; }
+input:checked + .toggle-slider:before { background: #fff; transform: translateX(18px); }
+.toggle-wrap.disabled .toggle-slider { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Admin kilitli uyarı ── */
+.admin-uyari {
+  background: #1e3a5f;
+  border: 1px solid #1d4ed8;
+  color: #93c5fd;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Kullanıcı listesi tab ── */
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  background: #1e293b;
+  padding: 4px;
+  border-radius: 8px;
+  width: fit-content;
+}
+.tab-btn {
+  padding: 5px 14px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.tab-btn.aktif { background: #0f172a; color: #3b82f6; }
+
+/* ── Kullanıcı tablosu ── */
+.tablo {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.tablo th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #475569;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+}
+.tablo td {
+  padding: 9px 12px;
+  border-bottom: 1px solid #1e293b;
+  color: #cbd5e1;
+}
+.tablo tr:hover td { background: #1e293b; }
+.rol-secici {
+  background: #0f172a;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.aktif-badge { color: #4ade80; font-size: 11px; }
+.pasif-badge { color: #f87171; font-size: 11px; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 9999;
+  display: none;
+  animation: slideUp 0.2s ease;
+}
+.toast.basarili { background: #065f46; color: #6ee7b7; border: 1px solid #10b981; }
+.toast.hata     { background: #7f1d1d; color: #fca5a5; border: 1px solid #ef4444; }
+@keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+/* ── Loading ── */
+.yukleniyor { text-align:center; padding:60px; color:#475569; font-size:14px; }
+
+/* ── İstatistik çubukları ── */
+.izin-sayac {
+  font-size: 10px;
+  color: #475569;
+  margin-left: 8px;
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <h1>🔐 Yetki Yönetimi</h1>
+    <div class="sub">Roller ve izinleri buradan yönetin — değişiklikler anında geçerli olur</div>
+  </div>
+  <div>
+    <button class="btn btn-varsayilan" onclick="varsayilanlariYukle()">↺ Varsayılana Dön</button>
+    <button class="btn btn-kaydet" id="btnKaydet" onclick="kaydet()" disabled>💾 Kaydet</button>
+    <button class="btn btn-kapat" onclick="window.close()">✕</button>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- Sol: Rol seçici -->
+  <div class="sidebar">
+    <div class="sidebar-baslik">Roller</div>
+    <button class="rol-btn aktif" onclick="rolSec('ADMIN')"    data-rol="ADMIN">
+      <span class="rol-icon">👑</span> Admin
+      <span class="rol-badge" id="sayac-ADMIN">-</span>
+    </button>
+    <button class="rol-btn" onclick="rolSec('MUDUR')"    data-rol="MUDUR">
+      <span class="rol-icon">🎯</span> Müdür
+      <span class="rol-badge" id="sayac-MUDUR">-</span>
+    </button>
+    <button class="rol-btn" onclick="rolSec('ISG')"      data-rol="ISG">
+      <span class="rol-icon">🦺</span> ISG
+      <span class="rol-badge" id="sayac-ISG">-</span>
+    </button>
+    <button class="rol-btn" onclick="rolSec('MUHASEBE')" data-rol="MUHASEBE">
+      <span class="rol-icon">💰</span> Muhasebe
+      <span class="rol-badge" id="sayac-MUHASEBE">-</span>
+    </button>
+    <button class="rol-btn" onclick="rolSec('IK')"       data-rol="IK">
+      <span class="rol-icon">👤</span> İK
+      <span class="rol-badge" id="sayac-IK">-</span>
+    </button>
+    <button class="rol-btn" onclick="rolSec('PAZARLAMA')" data-rol="PAZARLAMA">
+      <span class="rol-icon">📢</span> Pazarlama
+      <span class="rol-badge" id="sayac-PAZARLAMA">-</span>
+    </button>
+    <button class="rol-btn" onclick="rolSec('MOBIL')"   data-rol="MOBIL">
+      <span class="rol-icon">🚐</span> Mobil Sağlık
+      <span class="rol-badge" id="sayac-MOBIL">-</span>
+    </button>
+    <button class="rol-btn" onclick="rolSec('PERSONEL')" data-rol="PERSONEL">
+      <span class="rol-icon">👥</span> Personel
+      <span class="rol-badge" id="sayac-PERSONEL">-</span>
+    </button>
+
+    <div style="border-top:1px solid #334155;margin:12px 0;"></div>
+    <div class="sidebar-baslik">Kullanıcılar</div>
+    <button class="rol-btn" onclick="kullaniciTabiniGoster()" data-rol="__kullanicilar">
+      <span class="rol-icon">🧑‍💼</span> Kullanıcı Listesi
+    </button>
+  </div>
+
+  <!-- Sağ: İzin matrisi -->
+  <div class="icerik" id="icerik">
+    <div class="yukleniyor">⏳ Yetki verileri yükleniyor...</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var _roller = {};
+var _tanimlar = [];
+var _aktifRol = "ADMIN";
+var _degisti = false;
+var _kullaniciEmail = "";
+
+// ── BAŞLAT ────────────────────────────────────────────────────
+window.onload = function() {
+  // Login email'i al (GAS ortamında)
+  if (typeof google !== 'undefined') {
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (res && res.email) _kullaniciEmail = res.email;
+      })
+      .api_oturumBilgisiGetir();
+  }
+  yukle();
+};
+
+function yukle() {
+  if (typeof google !== 'undefined') {
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (!res.ok && !res.roller) {
+          toast("Yetki verileri alınamadı: " + (res.msg || ""), "hata");
+          return;
+        }
+        _roller = JSON.parse(JSON.stringify(res.roller));
+        _tanimlar = res.tanimlar;
+        guncelleSayaclar();
+        rolSec("ADMIN");
+      })
+      .withFailureHandler(function(err) {
+        toast("Bağlantı hatası: " + err.message, "hata");
+      })
+      .api_yetkiRolleriniGetir();
+  } else {
+    // Geliştirme modu — varsayılan verilerle çalış
+    fetch('').catch(function() {});
+    toast("GAS ortamı dışında çalışıyor — demo mod", "hata");
+  }
+}
+
+// ── ROL SEÇ ──────────────────────────────────────────────────
+function rolSec(rol) {
+  _aktifRol = rol;
+  document.querySelectorAll('.rol-btn').forEach(function(b) {
+    b.classList.toggle('aktif', b.dataset.rol === rol);
+  });
+  izinleriBoyaKalan(rol);
+}
+
+function izinleriBoyaKalan(rol) {
+  var icerik = document.getElementById('icerik');
+  var izinler = _roller[rol] || {};
+  var adminMi = (rol === "ADMIN");
+  var sayac = 0;
+  Object.values(izinler).forEach(function(v) { if (v) sayac++; });
+
+  var gruplar = {};
+  _tanimlar.forEach(function(t) {
+    if (!gruplar[t.grup]) gruplar[t.grup] = [];
+    gruplar[t.grup].push(t);
+  });
+
+  var grupIkonlari = {
+    "Dashboard": "📊", "Firmalar": "🏢", "Teklifler": "📄",
+    "Finans": "💰", "Personel/İK": "👤", "ISG": "🦺",
+    "Raporlar": "📈", "Sistem": "⚙️"
+  };
+
+  var html = '';
+
+  if (adminMi) {
+    html += '<div class="admin-uyari">🔒 Admin rolü her zaman tüm izinlere sahiptir — değiştirilemez.</div>';
+  }
+
+  html += '<div class="tab-bar"><button class="tab-btn aktif">İzinler</button></div>';
+
+  Object.keys(gruplar).forEach(function(grup) {
+    var tanimlar = gruplar[grup];
+    var grupAcikSayisi = tanimlar.filter(function(t) { return izinler[t.key] === true; }).length;
+    var ikon = grupIkonlari[grup] || "📌";
+
+    html += '<div class="grup-baslik">';
+    html += '<h3>' + ikon + ' ' + grup + '</h3>';
+    html += '<span class="izin-sayac">' + grupAcikSayisi + '/' + tanimlar.length + ' açık</span>';
+    if (!adminMi) {
+      html += '<button class="grup-tumunu-sec" onclick="grupTumunuToggle(\'' + grup + '\')">'
+            + 'Tümünü seç/kaldır</button>';
+    }
+    html += '</div>';
+
+    tanimlar.forEach(function(t) {
+      var aktif = adminMi ? true : (izinler[t.key] === true);
+      var checkedAttr = aktif ? 'checked' : '';
+      var disabledAttr = adminMi ? 'disabled' : '';
+      var disabledClass = adminMi ? 'disabled' : '';
+
+      html += '<div class="izin-satir" data-grup="' + grup + '">';
+      html += '<div class="izin-etiket">' + t.etiket
+            + '<span class="izin-key">' + t.key + '</span></div>';
+      html += '<label class="toggle-wrap ' + disabledClass + '">';
+      html += '<input type="checkbox" ' + checkedAttr + ' ' + disabledAttr
+            + ' onchange="izinDegisti(\'' + t.key + '\', this.checked)">';
+      html += '<span class="toggle-slider"></span>';
+      html += '</label>';
+      html += '</div>';
+    });
+  });
+
+  icerik.innerHTML = html;
+}
+
+// ── İZİN DEĞİŞTİ ─────────────────────────────────────────────
+function izinDegisti(key, deger) {
+  if (!_roller[_aktifRol]) _roller[_aktifRol] = {};
+  _roller[_aktifRol][key] = deger;
+  _degisti = true;
+  document.getElementById('btnKaydet').disabled = false;
+  guncelleSayaclar();
+}
+
+// ── GRUP TÜMÜNÜ TOGGLE ────────────────────────────────────────
+function grupTumunuToggle(grup) {
+  var satirlar = document.querySelectorAll('.izin-satir[data-grup="' + grup + '"]');
+  var izinler = _roller[_aktifRol] || {};
+  var hedefGrup = _tanimlar.filter(function(t) { return t.grup === grup; });
+  var tumAcik = hedefGrup.every(function(t) { return izinler[t.key] === true; });
+  var yeniDeger = !tumAcik;
+
+  satirlar.forEach(function(satir) {
+    var cb = satir.querySelector('input[type=checkbox]');
+    if (cb) {
+      cb.checked = yeniDeger;
+      var key = cb.closest('.izin-satir').querySelector('.izin-key').textContent;
+      izinDegisti(key, yeniDeger);
+    }
+  });
+}
+
+// ── SAYAÇLARI GÜNCELLE ────────────────────────────────────────
+function guncelleSayaclar() {
+  Object.keys(_roller).forEach(function(rol) {
+    var izinler = _roller[rol] || {};
+    var acik = Object.values(izinler).filter(Boolean).length;
+    var el = document.getElementById('sayac-' + rol);
+    if (el) el.textContent = acik;
+  });
+}
+
+// ── KAYDET ───────────────────────────────────────────────────
+function kaydet() {
+  document.getElementById('btnKaydet').disabled = true;
+  if (typeof google !== 'undefined') {
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (res.ok) {
+          toast("✅ Yetki tablosu kaydedildi!", "basarili");
+          _degisti = false;
+        } else {
+          toast("❌ Kayıt hatası: " + res.msg, "hata");
+          document.getElementById('btnKaydet').disabled = false;
+        }
+      })
+      .withFailureHandler(function(err) {
+        toast("❌ Bağlantı hatası: " + err.message, "hata");
+        document.getElementById('btnKaydet').disabled = false;
+      })
+      .api_yetkiKaydet({ email: _kullaniciEmail, roller: _roller });
+  } else {
+    toast("GAS ortamı dışında — kayıt yapılamaz", "hata");
+    document.getElementById('btnKaydet').disabled = false;
+  }
+}
+
+// ── VARSAYILANLARA DÖN ────────────────────────────────────────
+function varsayilanlariYukle() {
+  if (!confirm('Tüm roller varsayılan değerlere döndürülecek. Emin misiniz?')) return;
+  yukle();
+  _degisti = false;
+  document.getElementById('btnKaydet').disabled = true;
+  toast("Varsayılan değerler yüklendi", "basarili");
+}
+
+// ── KULLANICI LİSTESİ ─────────────────────────────────────────
+function kullaniciTabiniGoster() {
+  document.querySelectorAll('.rol-btn').forEach(function(b) {
+    b.classList.toggle('aktif', b.dataset.rol === '__kullanicilar');
+  });
+  var icerik = document.getElementById('icerik');
+  icerik.innerHTML = '<div class="yukleniyor">Kullanıcılar yükleniyor...</div>';
+
+  if (typeof google !== 'undefined') {
+    google.script.run
+      .withSuccessHandler(kullanicilariRender)
+      .withFailureHandler(function(err) {
+        icerik.innerHTML = '<div style="color:#f87171;padding:20px">Hata: ' + err.message + '</div>';
+      })
+      .api_kullaniciListesiGetir(_kullaniciEmail);
+  } else {
+    icerik.innerHTML = '<div style="color:#f87171;padding:20px">GAS ortamı dışında kullanıcı listesi görüntülenemez.</div>';
+  }
+}
+
+function kullanicilariRender(res) {
+  if (!res.ok) {
+    document.getElementById('icerik').innerHTML =
+      '<div style="color:#f87171;padding:20px">❌ ' + res.msg + '</div>';
+    return;
+  }
+  var liste = res.liste || [];
+  var html = '<table class="tablo"><thead><tr>'
+    + '<th>E-Posta</th><th>Ad Soyad</th><th>Mevcut Rol</th><th>Durum</th><th>İşlem</th>'
+    + '</tr></thead><tbody>';
+
+  liste.forEach(function(k) {
+    var rolSecenekleri = ['ADMIN','MUDUR','ISG','MUHASEBE','IK','PAZARLAMA','MOBIL','PERSONEL']
+      .map(function(r) {
+        return '<option value="' + r + '"' + (k.rol === r ? ' selected' : '') + '>' + r + '</option>';
+      }).join('');
+
+    html += '<tr>'
+      + '<td>' + k.email + '</td>'
+      + '<td>' + (k.adSoyad || '—') + '</td>'
+      + '<td><select class="rol-secici" onchange="kullaniciRoluGuncelle(\'' + k.email + '\', this.value)">'
+      + rolSecenekleri + '</select></td>'
+      + '<td>' + (k.aktif ? '<span class="aktif-badge">● Aktif</span>' : '<span class="pasif-badge">● Pasif</span>') + '</td>'
+      + '<td><span style="color:#475569;font-size:11px;">' + (k.tel || '') + '</span></td>'
+      + '</tr>';
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('icerik').innerHTML = html;
+}
+
+function kullaniciRoluGuncelle(hedefEmail, yeniRol) {
+  if (typeof google !== 'undefined') {
+    google.script.run
+      .withSuccessHandler(function(res) {
+        toast(res.ok ? ('✅ ' + res.msg) : ('❌ ' + res.msg), res.ok ? 'basarili' : 'hata');
+      })
+      .api_kullaniciRoluGuncelle({ adminEmail: _kullaniciEmail, hedefEmail: hedefEmail, yeniRol: yeniRol });
+  }
+}
+
+// ── TOAST ─────────────────────────────────────────────────────
+function toast(mesaj, tip) {
+  var el = document.getElementById('toast');
+  el.textContent = mesaj;
+  el.className = 'toast ' + (tip || 'basarili');
+  el.style.display = 'block';
+  setTimeout(function() { el.style.display = 'none'; }, 3500);
+}
+</script>
+</body>
+</html>
