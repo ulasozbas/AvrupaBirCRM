@@ -2,9 +2,22 @@ var CRM_SHEET_ID = "13sNHi5snSNUYxA1OWo0deMEO9s0QHoy8-_7-53umcQ4";
 var ADMIN_EMAIL = "ulas.ozbas@avrupabir.com.tr";
 var LOGO_FILE_ID = "1eScHvyDoUffScFI0XaDsuPmdDGclKv9P";
 
+// Webhook URLs - AYAR sheet'ten dinamik olarak okunur
+// Manual ayarlamak için AYAR sheet'ine şu satırları ekleyin:
+// CHAT_WEBHOOK_GRUP | https://...
+// CHAT_WEBHOOK_MUDUR | https://...
+
 // ← BU İKİ SATIRI EKLE
 var FIRMA_TABLO = "FIRMALAR";
 var ADMIN_ONLY = [];
+var LOG_TABLO = "FIRMA_ISLEM_LOG";
+
+// Hizmet tipine göre sorumlu email eşleştirmesi
+var HIZMET_SORUMLU = {
+  "OSGB": "ulas.ozbas@avrupabir.com.tr",
+  "Mobil": "dilara.bayrakdar@avrupabir.com.tr",
+  "IseGiris": "yasemin.orbay@avrupabir.com.tr"
+};
 
 // ── PDF / DRIVE KLASÖR ID'LERİ ────────────────────────────────
 // Script Özellikleri'nden okunur. Boşsa Drive kök dizinine kaydedilir.
@@ -24,6 +37,8 @@ const SHEETS = {
   TAHSILAT      : 'TAHSILAT',      // Ayaktan müşteri tahsilatları
   CARI          : 'CARI',          // Firma cari hesap bakiyeleri
   CARI_HAREKET  : 'CARI_HAREKET',  // Cari alacak/borç hareketleri
+  FINANS_CARI   : 'FİNANS_CARİ',   // Finansal işlemler (gelir/gider detayları)
+  FINANS_KASA   : 'FİNANS_KASA',   // Kasa bakiyeleri özeti
   FATURA        : 'FATURA',        // OSGB / Mobil faturalar
 
   // Gider
@@ -41,6 +56,20 @@ const SHEETS = {
 
   // Raporlar
   DASHBOARD     : 'DASHBOARD',     // Dashboard verileri (formüllü)
+  HAREKETLER    : 'HAREKETLER',    // Satış/aktivite hareketleri
+  TEKLIF_TAKIP  : 'TEKLIF_TAKIP',  // Teklif takip kaydı
+
+  // ISG Hizmetleri
+  ISG_HIZMETLER : 'ISG_HIZMETLER', // ISG hizmet tanımları
+  MOBIL_SAGLIK  : 'MOBIL_SAGLIK',  // Mobil sağlık firmalar
+  ISE_GIRIS     : 'ISE_GIRIS_FIRMA',     // İşe giriş muayenesi firmalar
+  ISG_PLANLAMA  : 'ISG_PLANLAMA',  // ISG ziyaret planları
+
+  // Toplantılar
+  TOPLANTILER   : 'TOPLANTILER',   // Toplantı kayıtları
+
+  // Yetki
+  YETKI_ROLLERI : 'YETKI_ROLLERI', // Rol bazlı izin matrisi
 };
 
 // ── ÖDEME TİPLERİ ────────────────────────────────────────────
@@ -528,16 +557,14 @@ function ayarYaz(anahtar, deger) {
 // ==========================================
 // ROL HARİTASI — email → rol eşleştirmesi
 // ==========================================
-var FIRMA_TABLO = "FIRMALAR";
-var ADMIN_ONLY = [];
 
 var ROL_HARITASI = {
   "ulas.ozbas@avrupabir.com.tr":              "ADMIN",
   "yasemin.orbay@avrupabir.com.tr":           "ADMIN",
   "kurumsal@avrupabir.com.tr":                "PAZARLAMA",
   "neslihan.karatas@avrupabir.com.tr":        "PAZARLAMA",
-  "dilara.bayrakdar@avrupabir.com.tr":        "PAZARLAMA",
-  "gulbahar.gultekin@avrupabir.com.tr":       "PAZARLAMA",
+  "dilara.bayrakdar@avrupabir.com.tr":        "ISG",
+  "gulbahar.gultekin@avrupabir.com.tr":       "MOBIL",
   "ozgur.ozden@avrupabir.com.tr":             "PERSONEL",
   "dilara.tezeren@avrupabir.com.tr":          "PERSONEL",
   "esin.kurt@avrupabir.com.tr":               "PERSONEL",
@@ -566,9 +593,5 @@ var ROL_HARITASI = {
   "serhat.almast@avrupabir.com.tr":           "PERSONEL",
   "banko@avrupabir.com.tr":                   "PERSONEL",
   "gokce.sen@avrupabir.com.tr":               "PERSONEL",
-  "kurumsal_isg_partneri@avrupabir.com.tr":   "PERSONEL"
+  "kurumsal_isg_partneri@avrupabir.com.tr":   "ADMIN"
 };
-
-function getSheet(name) {
-  return SpreadsheetApp.openById(CRM_SHEET_ID).getSheetByName(name);
-}
