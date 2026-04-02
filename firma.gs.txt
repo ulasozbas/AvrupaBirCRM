@@ -32,8 +32,11 @@ function firmaIslemYapabilirMi_(firmaId, kullaniciEmail, islem) {
   if (islem && ADMIN_ONLY.indexOf(islem) > -1) return { ok: false, msg: "Bu işlem sadece yönetici tarafından yapılabilir." };
   if (rol === "MUHASEBE") return { ok: false, msg: "Muhasebe kullanıcısı firma işlemi yapamaz." };
   if (rol === "PERSONEL") return { ok: false, msg: "Bu işlem için yetkiniz bulunmamaktadır." };
+  if (rol === "ISG" || rol === "MOBIL") return { ok: true };
   if (rol === "PAZARLAMA" && firmaId) {
-    var vals = getFirmaListesiCache_();
+    var ss2 = SpreadsheetApp.openById(CRM_SHEET_ID);
+  var sh2 = ss2.getSheetByName("FIRMALAR");
+  var vals = sh2.getDataRange().getValues();
     if (!vals || vals.length === 0) return { ok: false, msg: "FIRMALAR sayfası bulunamadı." };
     var head = vals[0];
     var idx = {};
@@ -53,9 +56,38 @@ function firmaIslemYapabilirMi_(firmaId, kullaniciEmail, islem) {
   return { ok: true };
 }
 
+function api_rahatsizEtmeToggle(firmaId) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FIRMALAR");
+    if (!sh) return { ok: false, msg: "Sheet yok" };
+    var data = sh.getDataRange().getValues();
+    var head = data[0];
+    var colId = -1, colRE = -1;
+    for (var c = 0; c < head.length; c++) {
+      var h = String(head[c]).trim();
+      if (h === "FirmaID") colId = c;
+      if (h === "RahatsizEtme") colRE = c;
+    }
+    if (colId === -1 || colRE === -1) return { ok: false, msg: "Sütun bulunamadı" };
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][colId]).trim() === String(firmaId).trim()) {
+        var mevcut = String(data[i][colRE] || "").toUpperCase();
+        var yeniDeger = (mevcut === "EVET") ? "" : "EVET";
+        sh.getRange(i + 1, colRE + 1).setValue(yeniDeger);
+        firmaListesiCacheTemizle_();
+        return { ok: true, durum: yeniDeger, msg: yeniDeger === "EVET" ? "İletişim kapatıldı" : "İletişim açıldı" };
+      }
+    }
+    return { ok: false, msg: "Firma bulunamadı" };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+
 function firmaMukerrerKontrolEt_(firmaAdi, kullaniciEmail) {
   kullaniciEmail = String(kullaniciEmail || "").toLowerCase().trim();
-  var vals = getFirmaListesiCache_();
+  var ss2 = SpreadsheetApp.openById(CRM_SHEET_ID);
+  var sh2 = ss2.getSheetByName("FIRMALAR");
+  var vals = sh2.getDataRange().getValues();
   if (!vals || vals.length === 0) return { ok: true };
   var head = vals[0];
   var idx = {};
@@ -153,6 +185,10 @@ function api_firmaKaydet(p) {
 if (p.hizmetler && p.hizmetler.indexOf("Mobil") > -1)     firmaMobilListesineEkle_(ss, yeniId, firmaAdi, p);
 if (p.hizmetler && p.hizmetler.indexOf("IseGiris") > -1)  firmaIseGirisListesineEkle_(ss, yeniId, firmaAdi, p);
     chatBildir_("🏢 *Yeni Firma Eklendi*\nFirma: " + firmaAdi + "\nEkleyen: " + kullanici);
+    try {
+      var shH = ss.getSheetByName("HAREKETLER");
+      if (shH) shH.appendRow([Utilities.getUuid(), Utilities.formatDate(now, "Europe/Istanbul", "dd.MM.yyyy HH:mm:ss"), yeniId, firmaAdi, kullanici, "FIRMA_KAYIT", "YENİ KAYIT", "BEKLEMEDE", "", ""]);
+    } catch(e3) {}
     logYaz("FIRMA_EKLE", firmaAdi + " isimli yeni firma eklendi.", "FIRMA", "", firmaAdi);
     return { ok: true, msg: "Firma başarıyla eklendi!", firmaId: yeniId, firmaAdi: firmaAdi };
   } catch (e) {
@@ -166,7 +202,7 @@ if (p.hizmetler && p.hizmetler.indexOf("IseGiris") > -1)  firmaIseGirisListesine
 function api_firmaGuncelle(p) {
   try {
     var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-    var sheet = ss.getSheetByName("FİRMALAR") || ss.getSheetByName("FIRMALAR");
+    var sheet = ss.getSheetByName("FIRMALAR") || ss.getSheetByName("FIRMALAR");
     if (!sheet) return { ok: false, msg: "FİRMALAR veritabanı bulunamadı!" };
     var data = sheet.getDataRange().getValues();
     var headers = data[0];
@@ -235,7 +271,7 @@ function api_firmaGuncelle(p) {
 // ==========================================
 function api_firmalarListe(payload) {
   var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-  var sh = ss.getSheetByName("FİRMALAR") || ss.getSheetByName("FIRMALAR");
+  var sh = ss.getSheetByName("FIRMALAR") || ss.getSheetByName("FIRMALAR");
   if (!sh) return [];
   var vals = sh.getDataRange().getDisplayValues();
   if (vals.length < 2) return [];
@@ -249,17 +285,20 @@ function api_firmalarListe(payload) {
   var iSor = idx["sorumluemail"] || idx["sorumlu"] || idx["kaydeden"] || idx["kullanici"];
   var iSorAd = idx["sorumluadsoyad"];
   var iHizmet = idx["hizmetler"];
+  var iVergi = idx["vergino"]; var iVergiDairesi = idx["vergidairesi"]; var iIl = idx["il"]; var iIlce = idx["ilce"];
+  var iCalisan = idx["calisansayisi"] || idx["calisan"]; var iSektor = idx["sektor"];
+  var iNot = idx["not"] || idx["notlar"]; var iAdres = idx["adres"]; var iReferans = idx["referans"];
   var osgbSet = {}, mobilSet = {}, iseSet = {};
   try {
     var shISG = ss.getSheetByName("ISG_HIZMETLER");
     if (shISG && shISG.getLastRow() > 1) {
       shISG.getDataRange().getValues().slice(1).forEach(function(r){ if(r[0]) osgbSet[String(r[0]).trim()] = 1; });
     }
-    var shMobil = ss.getSheetByName("MOBIL_SAGLIK_FIRMA");
+    var shMobil = ss.getSheetByName("MOBIL_SAGLIK");
     if (shMobil && shMobil.getLastRow() > 1) {
       shMobil.getDataRange().getValues().slice(1).forEach(function(r){ if(r[0]) mobilSet[String(r[0]).trim()] = 1; });
     }
-    var shIse = ss.getSheetByName("ISE_GIRIS") || ss.getSheetByName("ISE_GIRIS_FIRMA");
+    var shIse = ss.getSheetByName("ISE_GIRIS") || ss.getSheetByName("ISE_GIRIS");
     if (shIse && shIse.getLastRow() > 1) {
       shIse.getDataRange().getValues().slice(1).forEach(function(r){ if(r[0]) iseSet[String(r[0]).trim()] = 1; });
     }
@@ -278,6 +317,14 @@ function api_firmalarListe(payload) {
       SorumluAdSoyad: row[iSorAd],
       SorumluEmail: sMail,
       sorumluEmail: sMail,
+      VergiDairesi: (iVergiDairesi !== undefined) ? String(row[iVergiDairesi] || "") : "",
+      Il: (iIl !== undefined) ? String(row[iIl] || "") : "",
+      Ilce: (iIlce !== undefined) ? String(row[iIlce] || "") : "",
+      CalisanSayisi: (iCalisan !== undefined) ? String(row[iCalisan] || "") : "",
+      Sektor: (iSektor !== undefined) ? String(row[iSektor] || "") : "",
+      Not: (iNot !== undefined) ? String(row[iNot] || "") : "",
+      Adres: (iAdres !== undefined) ? String(row[iAdres] || "") : "",
+      Referans: (iReferans !== undefined) ? String(row[iReferans] || "") : "",
       Hizmetler: (function() {
         var fId = String(row[iId] || "").trim();
         var parts = [];
@@ -301,9 +348,12 @@ function api_firmaGetById(p) {
     var firmaId = String(p.firmaId || "").toLowerCase().trim();
     if (!firmaId) return { ok: false, msg: "Firma ID boş geldi." };
     var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-    var sh = ss.getSheetByName("FİRMALAR") || ss.getSheetByName("FIRMALAR");
+    var sh = ss.getSheetByName("FIRMALAR") || ss.getSheetByName("FIRMALAR");
     if (!sh) return { ok: false, msg: "Veritabanı sayfası bulunamadı." };
-    var vals = sh.getDataRange().getDisplayValues();
+    var sonSatir = sh.getLastRow();
+  var sonSutun = sh.getLastColumn();
+  if (sonSatir < 2 || sonSutun < 2) return [];
+  var vals = sh.getRange(1, 1, sonSatir, Math.min(sonSutun, 40)).getDisplayValues();
     if (vals.length < 2) return { ok: false, msg: "Kayıt yok." };
     var head = vals[0];
     var idx = {};
@@ -324,10 +374,20 @@ function api_firmaGetById(p) {
           SorumluAdSoyad: row[idx["sorumluadsoyad"]] || "",
           Durum: row[idx["durum"]] || "",
           VergiNo: row[idx["vergino"]] || "",
+          VergiDairesi: row[idx["vergidairesi"]] || "",
           CalisanSayisi: row[idx["calisansayisi"]] || "0",
           Sektor: row[idx["sektor"]] || "",
           Ilce: row[idx["ilce"]] || "",
-          Not: row[idx["not"]] || ""
+          Not: row[idx["not"]] || "",
+Adres: row[idx["adres"]] || "",
+Il: row[idx["il"]] || "",
+Referans: row[idx["referans"]] || "",
+Enlem: row[idx["enlem"]] || "",
+Boylam: row[idx["boylam"]] || "",
+HizmetOSGB: row[idx["hizmetosgb"]] || "",
+HizmetMobil: row[idx["hizmettmobil"]] || row[idx["hizmetmobil"]] || "",
+HizmetIseGiris: row[idx["hizmetisegiris"]] || "",
+RahatsizEtme: row[idx["rahatsizEtme"]] || row[idx["rahatsizEtme"]] || ""
         };
       }
     }
@@ -461,7 +521,7 @@ function api_firmaIslemLogla(p) {
 // ==========================================
 function api_firmaSorumluGuncelle(firmaId, email) {
   var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-  var sh = ss.getSheetByName("FİRMALAR");
+  var sh = ss.getSheetByName("FIRMALAR");
   var data = sh.getDataRange().getValues();
   var head = data[0];
   var ixId = head.indexOf("FirmaID");
@@ -482,7 +542,7 @@ function api_firmaSorumluGuncelle(firmaId, email) {
 function api_firmaAdlariGetir() {
   try {
     var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-    var sh = ss.getSheetByName("FİRMALAR") || ss.getSheetByName("FIRMALAR");
+    var sh = ss.getSheetByName("FIRMALAR") || ss.getSheetByName("FIRMALAR");
     if (!sh || sh.getLastRow() < 2) return [];
     var vals = sh.getDataRange().getValues();
     var head = vals[0].map(function(x){ return String(x||"").trim(); });
@@ -505,7 +565,7 @@ function api_firmaAdlariGetir() {
 function waGonder_(firmaId, mesaj) {
   try {
     var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-    var sh = ss.getSheetByName("FİRMALAR") || ss.getSheetByName("FIRMALAR");
+    var sh = ss.getSheetByName("FIRMALAR") || ss.getSheetByName("FIRMALAR");
     if (!sh) return { ok: false, msg: "FIRMALAR bulunamadı" };
     var vals = sh.getDataRange().getValues();
     var head = vals[0];
@@ -524,9 +584,8 @@ function waGonder_(firmaId, mesaj) {
 }
 
 function api_waLink(p) { return waGonder_(p.firmaId, p.mesaj); }
-
 // ==========================================
-// AKTİVİTE KAYDET
+// AKTİVİTE KAYDET (MÜKERRER ENGELLİ)
 // ==========================================
 function api_aktiviteKaydet(p) {
   try {
@@ -534,7 +593,6 @@ function api_aktiviteKaydet(p) {
     var sh = ss.getSheetByName("HAREKETLER");
     var header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
     
-    // Sütun indexlerini bul
     var idx = {};
     for (var i = 0; i < header.length; i++) {
       idx[String(header[i]).trim()] = i;
@@ -542,18 +600,74 @@ function api_aktiviteKaydet(p) {
     
     function s(x){ return String(x == null ? "" : x).trim(); }
     
-    // Email'i her yoldan al
     var email = s(p.kullaniciEmail) || s(p.kaydeden) || s(p.kullanici) || "";
     if (!email) {
       try { email = Session.getActiveUser().getEmail(); } catch(e2) {}
     }
     
+    var kanal = s(p.kanal).toUpperCase();
+    var islem = s(p.islem).toUpperCase();
+    var firmaId = s(p.firmaId);
+    
+    // ==========================================
+    // MÜKERRER KONTROL
+    // ==========================================
+    if (firmaId && sh.getLastRow() > 1) {
+      var now = new Date();
+      var bugun = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      var onbesGunOnce = new Date(bugun.getTime() - 15 * 24 * 60 * 60 * 1000);
+      
+      var mevcutData = sh.getRange(2, 1, sh.getLastRow() - 1, header.length).getValues();
+      
+      // Sütun indexlerini blan
+      var iFirmaId = -1, iTarih = -1, iKanal = -1, iIslem = -1, iEmail = -1;
+      for (var k in idx) {
+        var kl = k.toLowerCase();
+        if (kl === 'firmaid') iFirmaId = idx[k];
+        if (kl === 'tarih') iTarih = idx[k];
+        if (kl === 'kanal') iKanal = idx[k];
+        if (kl === 'islem') iIslem = idx[k];
+        if (kl === 'kullaniciemail') iEmail = idx[k];
+      }
+      
+      for (var m = 0; m < mevcutData.length; m++) {
+        var row2 = mevcutData[m];
+        var mFirmaId = String(row2[iFirmaId] || "").trim();
+        if (mFirmaId !== firmaId) continue;
+        
+        var mKanal = String(row2[iKanal] || "").toUpperCase().trim();
+        var mIslem = String(row2[iIslem] || "").toUpperCase().trim();
+        var mEmail = String(row2[iEmail] || "").toLowerCase().trim();
+        
+        var mTarih = null;
+        try { mTarih = new Date(row2[iTarih]); } catch(e3) {}
+        if (!mTarih || isNaN(mTarih.getTime())) continue;
+        var mGun = new Date(mTarih.getFullYear(), mTarih.getMonth(), mTarih.getDate());
+        
+        // Tanıtım mail → 15 gün engeli
+        if (kanal === "MAIL" && islem === "TANITIM" && mKanal === "MAIL" && mIslem === "TANITIM") {
+          if (mGun >= onbesGunOnce) {
+            var kalanGun = Math.ceil((mGun.getTime() + 15 * 24 * 60 * 60 * 1000 - now.getTime()) / (24 * 60 * 60 * 1000));
+            return { ok: false, msg: "Bu firmaya son 15 gün içinde tanıtım maili atılmış (" + mEmail + "). " + kalanGun + " gün sonra tekrar atılabilir." };
+          }
+        }
+        
+        // Diğer işlemler → aynı gün engeli (aynı kanal + aynı işlem)
+        if (kanal !== "MAIL" || islem !== "TANITIM") {
+          if (mKanal === kanal && mIslem === islem && mGun.getTime() === bugun.getTime()) {
+            return { ok: false, msg: "Bu firmaya bugün zaten " + kanal + " / " + islem + " kaydı girilmiş." };
+          }
+        }
+      }
+    }
+    // ==========================================
+    // MÜKERRER KONTROL BİTTİ — KAYDET
+    // ==========================================
+    
     var row = new Array(header.length).fill("");
     
-    // Sütun adını hem orijinal hem lowercase ile dene
     function setCol(name, value) {
       if (idx[name] !== undefined) { row[idx[name]] = value; return; }
-      // lowercase dene
       for (var k in idx) {
         if (k.toLowerCase() === name.toLowerCase()) { row[idx[k]] = value; return; }
       }
@@ -561,11 +675,11 @@ function api_aktiviteKaydet(p) {
     
     setCol("id",             Utilities.getUuid());
     setCol("tarih",          new Date());
-    setCol("firmaId",        s(p.firmaId));
+    setCol("firmaId",        firmaId);
     setCol("firmaUnvani",    s(p.firmaUnvani));
     setCol("kullaniciEmail", email.toLowerCase());
-    setCol("kanal",          s(p.kanal).toUpperCase());
-    setCol("islem",          s(p.islem).toUpperCase());
+    setCol("kanal",          kanal);
+    setCol("islem",          islem);
     setCol("asama",          s(p.asama).toUpperCase());
     setCol("not",            s(p.not));
     setCol("sonrakiTarih",   s(p.sonrakiTarih));
@@ -575,8 +689,6 @@ function api_aktiviteKaydet(p) {
     
     var kaynak = s(p.kaynak || "WEBAPP");
     if (kaynak !== "SISTEM" && kaynak !== "AUTO") {
-      var kanal = s(p.kanal).toUpperCase();
-      var islem = s(p.islem).toUpperCase();
       var emoji = kanal === "ARAMA" ? "📞" : kanal === "ZİYARET" ? "🚗" : kanal === "EMAIL" ? "📧" : "📝";
       chatBildir_(emoji + " *Aktivite: " + islem + "*\nFirma: " + s(p.firmaUnvani) + "\nKanal: " + kanal + "\nNot: " + s(p.not) + "\nKaydeden: " + email);
     }
@@ -765,18 +877,24 @@ function api_firmaAtaTalep(p) {
   if (!firmaAdi) throw new Error("firmaAdi boş");
   if (!email)    throw new Error("email boş");
   var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-  var sh = ss.getSheetByName("ATAMA_TALEPLERI");
-  if (!sh) { sh = ss.insertSheet("ATAMA_TALEPLERI"); sh.appendRow(["Tarih","FirmaID","FirmaAdi","IsteyenEmail","IsteyenAdSoyad","Durum","Onaylayan","OnayTarihi"]); }
+  var sh = ss.getSheetByName("DEVIR_TALEPLERI");
+  if (!sh) {
+    sh = ss.insertSheet("DEVIR_TALEPLERI");
+    sh.appendRow(["Tarih","FirmaID","FirmaAdi","IsteyenEmail","IsteyenAdSoyad","Durum","Onaylayan","OnayTarihi"]);
+    sh.getRange(1,1,1,8).setFontWeight("bold").setBackground("#1e293b").setFontColor("white");
+    sh.setFrozenRows(1);
+  }
   var vals = sh.getDataRange().getDisplayValues();
   for (var i=1; i<vals.length; i++) {
-    if (String(vals[i][1]||"").trim() === firmaId && String(vals[i][5]||"").trim().toUpperCase() === "BEKLEMEDE") return { ok:true, msg:"Bu firma için zaten bekleyen talep var." };
+    if (String(vals[i][1]||"").trim() === firmaId && String(vals[i][5]||"").trim().toUpperCase() === "BEKLEMEDE") return { ok:true, msg:"Bu firma için zaten bekleyen devir talebi var." };
   }
   sh.appendRow([new Date(), firmaId, firmaAdi, email, ad, "BEKLEMEDE", "", ""]);
   try {
-  MailApp.sendEmail(ADMIN_EMAIL, "Firma Atama Talebi: " + firmaAdi,
-    "Atama talebi:\nFirma: " + firmaAdi + "\nİsteyen: " + ad + " (" + email + ")");
-} catch(e) { Logger.log("Mail Hatası: " + e.toString()); }
-return { ok:true, msg:"YAZILDI ✅", firmaId: firmaId };
+    MailApp.sendEmail(ADMIN_EMAIL, "🔄 Firma Devir Talebi: " + firmaAdi,
+      "Devir talebi:\nFirma: " + firmaAdi + "\nİsteyen: " + ad + " (" + email + ")");
+  } catch(e) { Logger.log("Mail Hatası: " + e.toString()); }
+  chatBildir_("🔄 *Firma Devir Talebi*\nFirma: " + firmaAdi + "\nİsteyen: " + ad);
+  return { ok:true, msg:"Devir talebi gönderildi! ✅", firmaId: firmaId };
 }
 
 function api_firmaAtaOnay(p) {
@@ -786,8 +904,8 @@ function api_firmaAtaOnay(p) {
   if (!firmaId)    throw new Error("firmaId yok");
   if (!adminEmail) throw new Error("adminEmail yok");
   var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-  var sh = ss.getSheetByName("ATAMA_TALEPLERI");
-  if (!sh) throw new Error("ATAMA_TALEPLERI yok");
+  var sh = ss.getSheetByName("DEVIR_TALEPLERI");
+  if (!sh) throw new Error("DEVIR_TALEPLERI yok");
   var vals = sh.getDataRange().getValues();
   for (var i=1; i<vals.length; i++) {
     if (String(vals[i][1]).trim() === firmaId && String(vals[i][5]).toUpperCase() === "BEKLEMEDE") {
@@ -795,7 +913,7 @@ function api_firmaAtaOnay(p) {
       sh.getRange(i+1, 7).setValue(adminEmail);
       sh.getRange(i+1, 8).setValue(new Date());
       var isteyenEmail = String(vals[i][3] || "").trim().toLowerCase();
-      var shF = ss.getSheetByName("FİRMALAR") || ss.getSheetByName("FIRMALAR");
+      var shF = ss.getSheetByName("FIRMALAR") || ss.getSheetByName("FIRMALAR");
       if (shF && isteyenEmail) {
         var fData = shF.getDataRange().getValues();
         var fHead = fData[0].map(function(h){ return String(h||"").trim(); });
@@ -820,8 +938,8 @@ function api_firmaAtaRed(p) {
   if (!firmaId)    throw new Error("firmaId yok");
   if (!adminEmail) throw new Error("adminEmail yok");
   var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-  var sh = ss.getSheetByName("ATAMA_TALEPLERI");
-  if (!sh) throw new Error("ATAMA_TALEPLERI yok");
+  var sh = ss.getSheetByName("DEVIR_TALEPLERI");
+  if (!sh) throw new Error("DEVIR_TALEPLERI yok");
   var vals = sh.getDataRange().getValues();
   for (var i=1; i<vals.length; i++) {
     if (String(vals[i][1]).trim() === firmaId && String(vals[i][5]).toUpperCase() === "BEKLEMEDE") {
@@ -836,7 +954,7 @@ function api_firmaAtaRed(p) {
 
 function api_bekleyenAtamaTalepleri() {
   var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-  var sh = ss.getSheetByName("ATAMA_TALEPLERI");
+  var sh = ss.getSheetByName("DEVIR_TALEPLERI");
   if (!sh) return [];
   var vals = sh.getDataRange().getDisplayValues();
   if (vals.length < 2) return [];
@@ -875,7 +993,7 @@ function firmaIsgListesineEkle_(ss, firmaId, firmaAdi, p) {
 
 function firmaMobilListesineEkle_(ss, firmaId, firmaAdi, p) {
   try {
-    var sh = ss.getSheetByName("MOBIL_SAGLIK_FIRMA");
+    var sh = ss.getSheetByName("MOBIL_SAGLIK");
     if (!sh) return;
     var vals = sh.getDataRange().getValues();
     for (var i = 1; i < vals.length; i++) { if (String(vals[i][0]) === String(firmaId)) return; }
@@ -897,7 +1015,7 @@ function firmaMobilListesineEkle_(ss, firmaId, firmaAdi, p) {
 
 function firmaIseGirisListesineEkle_(ss, firmaId, firmaAdi, p) {
   try {
-    var sh = ss.getSheetByName("ISE_GIRIS") || ss.getSheetByName("ISE_GIRIS_FIRMA");
+    var sh = ss.getSheetByName("ISE_GIRIS") || ss.getSheetByName("ISE_GIRIS");
     if (!sh) return;
     var vals = sh.getDataRange().getValues();
     for (var i = 1; i < vals.length; i++) { if (String(vals[i][0]) === String(firmaId)) return; }
@@ -1159,3 +1277,767 @@ function api_firmaKonumGetir(planId) {
     return null;
   } catch(e) { return null; }
 }
+
+function api_hatirlatmaEkle(p) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("HATIRLATMALAR");
+    if (!sh) {
+      sh = ss.insertSheet("HATIRLATMALAR");
+      sh.appendRow(["ID","FirmaID","FirmaAdi","Tarih","Not","SorumluEmail","Durum","OlusturmaTarihi"]);
+    }
+    var id = "H" + Utilities.getUuid().substring(0,8).toUpperCase();
+    var now = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd.MM.yyyy HH:mm:ss");
+    sh.appendRow([
+      id,
+      String(p.firmaId || ""),
+      String(p.firmaAdi || ""),
+      String(p.tarih || ""),
+      String(p.not || ""),
+      String(p.sorumluEmail || ""),
+      "BEKLEMEDE",
+      now
+    ]);
+    return { ok: true, msg: "Hatırlatma eklendi!" };
+  } catch(e) {
+    return { ok: false, msg: e.message };
+  }
+}
+
+function hatirlatmaKontrolEt() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("HATIRLATMALAR");
+    if (!sh) return;
+    var vals = sh.getDataRange().getValues();
+    var bugun = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd.MM.yyyy");
+    for (var i = 1; i < vals.length; i++) {
+      var tarih = String(vals[i][3] || "").trim();
+      var durum = String(vals[i][6] || "").trim();
+      if (tarih === bugun && durum === "BEKLEMEDE") {
+        var msg = "⏰ *Takip Hatırlatması*\nFirma: " + vals[i][2] + "\nNot: " + vals[i][4] + "\nSorumlu: " + vals[i][5];
+        chatBildir_(msg);
+        sh.getRange(i + 1, 7).setValue("GÖNDERILDI");
+      }
+    }
+  } catch(e) {
+    Logger.log("hatirlatmaKontrolEt hata: " + e.message);
+  }
+}
+
+function hatirlatmaTriggerKur() {
+  ScriptApp.newTrigger("hatirlatmaKontrolEt")
+    .timeBased()
+    .everyDays(1)
+    .atHour(8)
+    .create();
+  Logger.log("Trigger kuruldu.");
+}
+
+function api_bekleyenAtamalar(emailFiltre, hizmetFiltre) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("DEVIR_TALEPLERI");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, liste: [] };
+    var data = sh.getDataRange().getValues();
+    var liste = [];
+    var filtre = String(emailFiltre || "").toLowerCase().trim();
+    var adminler = ["ulas.ozbas@avrupabir.com.tr", "yasemin.orbay@avrupabir.com.tr"];
+    var adminMi = adminler.indexOf(filtre) > -1;
+    for (var i = 1; i < data.length; i++) {
+      var muhatap = String(data[i][10] || "").toLowerCase().trim();
+      if (filtre && !adminMi && muhatap && muhatap !== filtre) continue;
+      var hizmet = String(data[i][7] || "").toUpperCase().trim();
+      var hFiltre = String(hizmetFiltre || "").toUpperCase().trim();
+      if (hFiltre && hizmet !== hFiltre) continue;
+      liste.push({
+        id: String(data[i][0] || ""),
+        tarih: String(data[i][1] || ""),
+        teklifNo: String(data[i][2] || ""),
+        firmaId: String(data[i][3] || ""),
+        firmaAdi: String(data[i][4] || ""),
+        durum: String(data[i][5] || "").toUpperCase(),
+        calisan: String(data[i][6] || ""),
+        hizmetler: String(data[i][7] || ""),
+        atananPersonel: String(data[i][8] || ""),
+        atananDakika: String(data[i][9] || ""),
+        muhatapEmail: muhatap,
+        atamaTarihi: String(data[i][11] || ""),
+        notlar: String(data[i][12] || ""),
+        satir: i + 1
+      });
+    }
+    liste.reverse();
+    return { ok: true, liste: liste };
+  } catch(e) { return { ok: false, liste: [], msg: e.message }; }
+}
+
+function api_atamaKaydet(p) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("DEVIR_TALEPLERI");
+    if (!sh) return { ok: false, msg: "ATAMA_TALEPLERI bulunamadı" };
+    var satir = parseInt(p.satir);
+    if (!satir || satir < 2) return { ok: false, msg: "Geçersiz satır" };
+
+    var tarih = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd.MM.yyyy HH:mm");
+    sh.getRange(satir, 6).setValue("ATANDI ✅");
+    sh.getRange(satir, 7).setValue(String(p.calisan || ""));
+    sh.getRange(satir, 8).setValue(String(p.hizmetler || ""));
+    sh.getRange(satir, 9).setValue(String(p.personel || ""));
+    sh.getRange(satir, 10).setValue(String(p.dakika || ""));
+    sh.getRange(satir, 11).setValue(String(p.atayanEmail || ""));
+    sh.getRange(satir, 12).setValue(tarih);
+    sh.getRange(satir, 13).setValue(String(p.notlar || ""));
+
+    // ISG_HIZMETLER'e kaydet
+    var shISG = ss.getSheetByName("ISG_HIZMETLER");
+    if (shISG) {
+      var firmaId = String(p.firmaId || "");
+      var firmaAdi = String(p.firmaAdi || "");
+      // Zaten var mı kontrol
+      var isgData = shISG.getDataRange().getValues();
+      var varMi = false;
+      for (var i = 1; i < isgData.length; i++) {
+        if (String(isgData[i][0] || "").trim() === firmaId || String(isgData[i][1] || "").trim().toUpperCase() === firmaAdi.toUpperCase()) {
+          varMi = true; break;
+        }
+      }
+      if (!varMi) {
+        var iguDk = 0, hekimDk = 0, dspDk = 0;
+        var hizmetler = String(p.hizmetler || "").toUpperCase();
+        var dakikalar = String(p.dakika || "").split(",");
+        if (hizmetler.indexOf("IGU") > -1) iguDk = parseInt(dakikalar[0]) || 0;
+        if (hizmetler.indexOf("HEKİM") > -1 || hizmetler.indexOf("HEKIM") > -1) hekimDk = parseInt(dakikalar[1] || dakikalar[0]) || 0;
+        if (hizmetler.indexOf("DSP") > -1) dspDk = parseInt(dakikalar[2] || dakikalar[0]) || 0;
+
+        shISG.appendRow([
+          firmaId, firmaAdi, "", parseInt(p.calisan) || 0, hizmetler,
+          "", iguDk, hekimDk, dspDk,
+          tarih.split(" ")[0], "", "AKTİF"
+        ]);
+      }
+    }
+
+    // Chat bildirimi
+    var personelListesi = String(p.personel || "");
+    chatBildir_("📋 *ATAMA YAPILDI*\nFirma: " + String(p.firmaAdi || "") + "\nPersonel: " + personelListesi + "\nHizmet: " + String(p.hizmetler || "") + "\nDakika: " + String(p.dakika || "") + "\nAtayan: " + String(p.atayanEmail || ""));
+
+    return { ok: true };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+
+function api_isgPersonelListesi() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("PERSONEL_IK");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, igu: [], hekim: [], dsp: [] };
+    var data = sh.getDataRange().getValues();
+    var igu = [], hekim = [], dsp = [];
+    for (var i = 1; i < data.length; i++) {
+      var durum = String(data[i][13] || "").toUpperCase(); // N = Durum
+      if (durum !== "AKTİF" && durum !== "AKTIF") continue;
+      var ad = String(data[i][1] || "").trim(); // B = Ad Soyad
+      var email = String(data[i][2] || "").trim(); // C = E-Posta
+      var unvan = String(data[i][3] || "").toUpperCase(); // D = Görev/Unvan
+      var obj = { ad: ad, email: email, unvan: String(data[i][3] || "") };
+      if (unvan.indexOf("İSG") > -1 || unvan.indexOf("ISG") > -1 || unvan.indexOf("GÜVENL") > -1 || unvan.indexOf("GUVENL") > -1) igu.push(obj);
+      if (unvan.indexOf("HEKİM") > -1 || unvan.indexOf("HEKIM") > -1) hekim.push(obj);
+      if (unvan.indexOf("DSP") > -1) dsp.push(obj);
+    }
+    return { ok: true, igu: igu, hekim: hekim, dsp: dsp };
+  } catch(e) { return { ok: false, igu: [], hekim: [], dsp: [], msg: e.message }; }
+}
+
+function api_atamaTamamla(atamaId, satir) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("DEVIR_TALEPLERI");
+    if (!sh) return { ok: false, msg: "Sheet yok" };
+    var s = parseInt(satir);
+    if (s < 2) return { ok: false, msg: "Geçersiz satır" };
+    var tarih = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd.MM.yyyy HH:mm");
+    sh.getRange(s, 6).setValue("TAMAMLANDI ✅");
+    sh.getRange(s, 12).setValue(tarih);
+    return { ok: true };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+
+function api_mobilEkipVerimlilik() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("MOBIL_SAHA");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, personel: [], arac: [], toplam: {} };
+
+    var data = sh.getDataRange().getValues();
+    var simdi = new Date(), buAy = simdi.getMonth(), buYil = simdi.getFullYear();
+    var personelMap = {}, aracMap = {};
+    var toplamKisi = 0, toplamOp = 0, toplamCiro = 0;
+
+    for (var i = 1; i < data.length; i++) {
+      var dt = data[i][3] instanceof Date ? data[i][3] : new Date(String(data[i][3]));
+      if (isNaN(dt) || dt.getMonth() !== buAy || dt.getFullYear() !== buYil) continue;
+
+      var firma = String(data[i][2] || "");
+      var ciro = parseFloat(data[i][4]) || 0;
+      var kisi = parseInt(data[i][9]) || 0;
+      var arac = String(data[i][11] || "").trim();
+      var ekip = String(data[i][14] || "").trim();
+
+      toplamKisi += kisi;
+      toplamOp++;
+      toplamCiro += ciro;
+
+      // Personel bazlı
+      if (ekip) {
+        ekip.split(",").forEach(function(e) {
+          e = e.trim();
+          if (!e) return;
+          if (!personelMap[e]) personelMap[e] = { operasyon: 0, kisi: 0, ciro: 0, firmalar: {} };
+          personelMap[e].operasyon++;
+          personelMap[e].kisi += kisi;
+          personelMap[e].ciro += ciro;
+          if (firma) personelMap[e].firmalar[firma] = true;
+        });
+      }
+
+      // Araç bazlı
+      if (arac) {
+        if (!aracMap[arac]) aracMap[arac] = { sefer: 0, kisi: 0, ciro: 0 };
+        aracMap[arac].sefer++;
+        aracMap[arac].kisi += kisi;
+        aracMap[arac].ciro += ciro;
+      }
+    }
+
+    var personelListe = [];
+    for (var p in personelMap) {
+      var pm = personelMap[p];
+      personelListe.push({
+        ad: p.split("@")[0],
+        email: p,
+        operasyon: pm.operasyon,
+        kisi: pm.kisi,
+        ciro: Math.round(pm.ciro),
+        firmaSayisi: Object.keys(pm.firmalar).length,
+        kisiBasiCiro: pm.kisi > 0 ? Math.round(pm.ciro / pm.kisi) : 0
+      });
+    }
+    personelListe.sort(function(a, b) { return b.operasyon - a.operasyon; });
+
+    var aracListe = [];
+    for (var a in aracMap) {
+      var am = aracMap[a];
+      aracListe.push({
+        arac: a,
+        sefer: am.sefer,
+        kisi: am.kisi,
+        ciro: Math.round(am.ciro),
+        seferBasiCiro: am.sefer > 0 ? Math.round(am.ciro / am.sefer) : 0
+      });
+    }
+    aracListe.sort(function(a, b) { return b.sefer - a.sefer; });
+
+    return {
+      ok: true,
+      personel: personelListe,
+      arac: aracListe,
+      toplam: { operasyon: toplamOp, kisi: toplamKisi, ciro: Math.round(toplamCiro) }
+    };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+
+function api_isgOtomatikPlanOneri() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("ISG_HIZMETLER");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, liste: [] };
+
+    var data = sh.getDataRange().getValues();
+    var simdi = new Date();
+    var buAy = simdi.getMonth(), buYil = simdi.getFullYear();
+
+    // Bu ay yapılan ziyaretleri topla
+    var yapilanMap = {};
+    var shPlan = ss.getSheetByName("ISG_PLANLAR");
+    if (shPlan && shPlan.getLastRow() > 1) {
+      var planData = shPlan.getDataRange().getValues();
+      for (var p = 1; p < planData.length; p++) {
+        var pdt = planData[p][1] instanceof Date ? planData[p][1] : new Date(planData[p][1]);
+        if (isNaN(pdt) || pdt.getMonth() !== buAy || pdt.getFullYear() !== buYil) continue;
+        var pDurum = String(planData[p][8] || "").toUpperCase();
+        var pFirma = String(planData[p][3] || "").trim();
+        var pDk = parseFloat(planData[p][7]) || 0;
+        if (!pFirma) continue;
+        if (!yapilanMap[pFirma]) yapilanMap[pFirma] = { planlanan: 0, tamamlanan: 0 };
+        yapilanMap[pFirma].planlanan += pDk;
+        if (pDurum === "TAMAMLANDI") yapilanMap[pFirma].tamamlanan += pDk;
+      }
+    }
+
+    var liste = [];
+    for (var i = 1; i < data.length; i++) {
+      var durum = String(data[i][11] || "").toUpperCase();
+      if (durum !== "AKTİF" && durum !== "AKTIF") continue;
+
+      var firma = String(data[i][1] || "").trim();
+      var calisan = parseInt(data[i][3]) || 0;
+      var iguDk = parseFloat(data[i][6]) || 0;
+      var hekimDk = parseFloat(data[i][7]) || 0;
+      var dspDk = parseFloat(data[i][8]) || 0;
+      var toplamKota = iguDk + hekimDk + dspDk;
+
+      if (toplamKota <= 0) continue;
+
+      var yapilan = yapilanMap[firma] || { planlanan: 0, tamamlanan: 0 };
+      var kalanDk = toplamKota - yapilan.tamamlanan;
+      var tamamlanmaOrani = toplamKota > 0 ? Math.round((yapilan.tamamlanan / toplamKota) * 100) : 0;
+
+      // Kaç ziyaret gerekiyor (günde max 480dk = 1 tam gün)
+      var kalanZiyaret = kalanDk > 0 ? Math.ceil(kalanDk / 480) : 0;
+
+      // Ay sonuna kalan gün
+      var aySonu = new Date(buYil, buAy + 1, 0);
+      var kalanGun = Math.max(0, Math.ceil((aySonu - simdi) / (1000 * 60 * 60 * 24)));
+
+      var oncelik = "NORMAL";
+      if (tamamlanmaOrani < 30 && kalanGun < 15) oncelik = "ACİL";
+      else if (tamamlanmaOrani < 60 && kalanGun < 20) oncelik = "YÜKSEK";
+
+      liste.push({
+        firma: firma,
+        calisan: calisan,
+        iguDk: iguDk,
+        hekimDk: hekimDk,
+        dspDk: dspDk,
+        toplamKota: toplamKota,
+        yapilanDk: yapilan.tamamlanan,
+        kalanDk: Math.max(0, Math.round(kalanDk)),
+        tamamlanmaOrani: tamamlanmaOrani,
+        kalanZiyaret: kalanZiyaret,
+        kalanGun: kalanGun,
+        oncelik: oncelik
+      });
+    }
+
+    liste.sort(function(a, b) {
+      var oncelikSira = { "ACİL": 0, "YÜKSEK": 1, "NORMAL": 2 };
+      return (oncelikSira[a.oncelik] || 2) - (oncelikSira[b.oncelik] || 2) || a.tamamlanmaOrani - b.tamamlanmaOrani;
+    });
+
+    return { ok: true, liste: liste.slice(0, 50), kalanGun: liste.length > 0 ? liste[0].kalanGun : 0 };
+  } catch(e) { return { ok: false, liste: [], msg: e.message }; }
+}
+
+function api_firmaRiskSkoru() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var bugun = new Date(); bugun.setHours(0,0,0,0);
+
+    // 1. Cari borç verileri
+    var borcMap = {};
+    var shCari = ss.getSheetByName("FİRMA_CARİ");
+    if (shCari && shCari.getLastRow() > 1) {
+      var cData = shCari.getDataRange().getValues();
+      for (var c = 1; c < cData.length; c++) {
+        var fAdi = String(cData[c][3] || "").trim();
+        if (!fAdi) continue;
+        var bakiye = parseFloat(cData[c][8]) || 0;
+        if (!borcMap[fAdi]) borcMap[fAdi] = 0;
+        borcMap[fAdi] = bakiye;
+      }
+    }
+
+    // 2. ISG hizmet verileri
+    var shISG = ss.getSheetByName("ISG_HIZMETLER");
+    if (!shISG || shISG.getLastRow() < 2) return { ok: true, liste: [] };
+    var isgData = shISG.getDataRange().getValues();
+    var liste = [];
+
+    for (var i = 1; i < isgData.length; i++) {
+      var durum = String(isgData[i][11] || "").toUpperCase();
+      if (durum !== "AKTİF" && durum !== "AKTIF") continue;
+
+      var firma = String(isgData[i][1] || "").trim();
+      var calisan = parseInt(isgData[i][3]) || 0;
+      var sozBit = isgData[i][10];
+      var sonZiyaret = isgData[i][25]; // Z sütunu
+
+      var bitTarih = sozBit instanceof Date ? sozBit : new Date(String(sozBit));
+      var ziyaretTarih = sonZiyaret instanceof Date ? sonZiyaret : new Date(String(sonZiyaret));
+      var sozBitGecerli = !isNaN(bitTarih) && bitTarih.getFullYear() > 2000;
+      var ziyaretGecerli = !isNaN(ziyaretTarih) && ziyaretTarih.getFullYear() > 2000;
+
+      var riskPuan = 0;
+      var riskDetay = [];
+
+      // Sözleşme riski
+      if (sozBitGecerli) {
+        var sozKalan = Math.round((bitTarih - bugun) / (1000*60*60*24));
+        if (sozKalan < 0) { riskPuan += 30; riskDetay.push("Sözleşme " + Math.abs(sozKalan) + " gün geçmiş"); }
+        else if (sozKalan <= 30) { riskPuan += 15; riskDetay.push("Sözleşme " + sozKalan + " güne bitiyor"); }
+      } else {
+        riskPuan += 10; riskDetay.push("Sözleşme tarihi tanımsız");
+      }
+
+      // Ziyaret riski
+      if (ziyaretGecerli) {
+        var ziyaretFark = Math.round((bugun - ziyaretTarih) / (1000*60*60*24));
+        if (ziyaretFark > 60) { riskPuan += 25; riskDetay.push(ziyaretFark + " gündür ziyaret yok"); }
+        else if (ziyaretFark > 30) { riskPuan += 10; riskDetay.push(ziyaretFark + " gündür ziyaret yok"); }
+      } else {
+        riskPuan += 20; riskDetay.push("Hiç ziyaret kaydı yok");
+      }
+
+      // Ödeme riski
+      var borc = borcMap[firma] || 0;
+      if (borc > 50000) { riskPuan += 30; riskDetay.push("₺" + Math.round(borc).toLocaleString("tr-TR") + " açık borç"); }
+      else if (borc > 20000) { riskPuan += 20; riskDetay.push("₺" + Math.round(borc).toLocaleString("tr-TR") + " açık borç"); }
+      else if (borc > 5000) { riskPuan += 10; riskDetay.push("₺" + Math.round(borc).toLocaleString("tr-TR") + " açık borç"); }
+
+      var riskSeviye = riskPuan >= 60 ? "KRİTİK" : riskPuan >= 35 ? "YÜKSEK" : riskPuan >= 15 ? "ORTA" : "DÜŞÜK";
+
+      liste.push({
+        firma: firma,
+        calisan: calisan,
+        borc: Math.round(borc),
+        sozlesme: sozBitGecerli ? Utilities.formatDate(bitTarih, "Europe/Istanbul", "dd.MM.yyyy") : "Tanımsız",
+        sonZiyaret: ziyaretGecerli ? Utilities.formatDate(ziyaretTarih, "Europe/Istanbul", "dd.MM.yyyy") : "Yok",
+        riskPuan: riskPuan,
+        riskSeviye: riskSeviye,
+        riskDetay: riskDetay
+      });
+    }
+
+    liste.sort(function(a, b) { return b.riskPuan - a.riskPuan; });
+
+    var kritik = liste.filter(function(f) { return f.riskSeviye === "KRİTİK"; }).length;
+    var yuksek = liste.filter(function(f) { return f.riskSeviye === "YÜKSEK"; }).length;
+
+    return { ok: true, liste: liste.slice(0, 50), kritik: kritik, yuksek: yuksek, toplam: liste.length };
+  } catch(e) { return { ok: false, liste: [], msg: e.message }; }
+}
+
+function haftalikCeoRaporGonder() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var simdi = new Date();
+    var haftaOnce = new Date(simdi.getTime() - 7 * 24 * 60 * 60 * 1000);
+    var tarihStr = Utilities.formatDate(simdi, "Europe/Istanbul", "dd.MM.yyyy");
+    var haftaOnceStr = Utilities.formatDate(haftaOnce, "Europe/Istanbul", "dd.MM.yyyy");
+
+    // 1. KASA BAKİYELERİ
+    var kasaRes = api_kasaListesiGetir();
+    var kasalar = (kasaRes && kasaRes.kasalar) || [];
+    var toplamKasa = 0;
+    var kasaHtml = '';
+    kasalar.forEach(function(k) {
+      toplamKasa += k.bakiye || 0;
+      kasaHtml += '<tr><td style="padding:8px;border-bottom:1px solid #e2e8f0;">' + k.kasa + '<\/td><td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;">₺' + (k.bakiye || 0).toLocaleString('tr-TR') + '<\/td><\/tr>';
+    });
+
+    // 2. HAFTALIK GELİR/GİDER
+    var shCari = ss.getSheetByName("FİNANS_CARİ");
+    var hGelir = 0, hGider = 0;
+    if (shCari && shCari.getLastRow() > 1) {
+      var cData = shCari.getDataRange().getValues();
+      for (var i = 1; i < cData.length; i++) {
+        var dt = cData[i][1] instanceof Date ? cData[i][1] : new Date(cData[i][1]);
+        if (isNaN(dt) || dt < haftaOnce) continue;
+        var tip = String(cData[i][2] || "").toUpperCase();
+        var tutar = parseFloat(cData[i][6]) || 0;
+        if (tip.indexOf("GELİR") > -1 || tip.indexOf("TAHSİLAT") > -1) hGelir += tutar;
+        else hGider += tutar;
+      }
+    }
+
+    // 3. AÇIK ALACAK + VADESİ GEÇMİŞ
+    var shFC = ss.getSheetByName("FİRMA_CARİ");
+    var acikAlacak = 0, vadesiGecmis = 0, vadeFirmalar = [];
+    if (shFC && shFC.getLastRow() > 1) {
+      var fcData = shFC.getDataRange().getValues();
+      for (var j = 1; j < fcData.length; j++) {
+        var bakiye = parseFloat(fcData[j][8]) || 0;
+        if (bakiye > 0) {
+          acikAlacak += bakiye;
+          vadesiGecmis++;
+          if (vadeFirmalar.length < 10) {
+            vadeFirmalar.push({ firma: String(fcData[j][3] || ""), bakiye: bakiye });
+          }
+        }
+      }
+    }
+    vadeFirmalar.sort(function(a, b) { return b.bakiye - a.bakiye; });
+
+    var vadeHtml = '';
+    vadeFirmalar.forEach(function(f) {
+      vadeHtml += '<tr><td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;font-size:13px;">' + f.firma + '<\/td><td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:700;color:#ef4444;">₺' + f.bakiye.toLocaleString('tr-TR') + '<\/td><\/tr>';
+    });
+
+    // 4. TEKLİF DÖNÜŞÜM
+    var shTek = ss.getSheetByName("TEKLIFLER");
+    var toplamTeklif = 0, kazanilan = 0, kazanilanFirmalar = [];
+    if (shTek && shTek.getLastRow() > 1) {
+      var tData = shTek.getDataRange().getValues();
+      for (var k = 1; k < tData.length; k++) {
+        var tDurum = String(tData[k][5] || "").toUpperCase();
+        toplamTeklif++;
+        if (tDurum.indexOf("KAZAN") > -1 || tDurum.indexOf("ONAYL") > -1) {
+          kazanilan++;
+          var tTarih = tData[k][2] instanceof Date ? tData[k][2] : new Date(tData[k][2]);
+          if (!isNaN(tTarih) && tTarih >= haftaOnce) {
+            kazanilanFirmalar.push(String(tData[k][16] || tData[k][3] || ""));
+          }
+        }
+      }
+    }
+    var donusum = toplamTeklif > 0 ? Math.round((kazanilan / toplamTeklif) * 100) : 0;
+
+    // 5. ISG PERFORMANS
+    var shISG = ss.getSheetByName("ISG_ZIYARET_LOG");
+    var isgZiyaret = 0, isgDakika = 0;
+    if (shISG && shISG.getLastRow() > 1) {
+      var iData = shISG.getDataRange().getValues();
+      for (var m = 1; m < iData.length; m++) {
+        var iDt = iData[m][1] instanceof Date ? iData[m][1] : new Date(iData[m][1]);
+        if (isNaN(iDt) || iDt < haftaOnce) continue;
+        isgZiyaret++;
+        isgDakika += parseFloat(iData[m][5] || 0);
+      }
+    }
+
+    // 6. HTML RAPOR
+    var html = '<div style="font-family:Segoe UI,Arial,sans-serif;max-width:600px;margin:0 auto;background:#f8fafc;padding:20px;">'
+      + '<div style="background:linear-gradient(135deg,#0f172a,#1e3a8a);color:#fff;padding:20px;border-radius:12px;margin-bottom:16px;text-align:center;">'
+      + '<div style="font-size:12px;letter-spacing:2px;opacity:0.8;">AVRUPA BİR OSGB<\/div>'
+      + '<div style="font-size:22px;font-weight:900;margin-top:4px;">📊 Haftalık CEO Raporu<\/div>'
+      + '<div style="font-size:13px;opacity:0.8;margin-top:4px;">' + haftaOnceStr + ' — ' + tarihStr + '<\/div>'
+      + '<\/div>'
+
+      + '<div style="display:flex;gap:10px;margin-bottom:16px;">'
+      + '<div style="flex:1;background:#f0fdf4;border-radius:10px;padding:14px;text-align:center;border:1px solid #bbf7d0;">'
+      + '<div style="font-size:11px;color:#065f46;font-weight:700;">HAFTALIK GELİR<\/div>'
+      + '<div style="font-size:22px;font-weight:900;color:#10b981;">₺' + Math.round(hGelir).toLocaleString('tr-TR') + '<\/div><\/div>'
+      + '<div style="flex:1;background:#fef2f2;border-radius:10px;padding:14px;text-align:center;border:1px solid #fecaca;">'
+      + '<div style="font-size:11px;color:#991b1b;font-weight:700;">HAFTALIK GİDER<\/div>'
+      + '<div style="font-size:22px;font-weight:900;color:#ef4444;">₺' + Math.round(hGider).toLocaleString('tr-TR') + '<\/div><\/div>'
+      + '<div style="flex:1;background:' + (hGelir - hGider >= 0 ? '#f0fdf4' : '#fef2f2') + ';border-radius:10px;padding:14px;text-align:center;border:1px solid ' + (hGelir - hGider >= 0 ? '#bbf7d0' : '#fecaca') + ';">'
+      + '<div style="font-size:11px;color:#475569;font-weight:700;">NET<\/div>'
+      + '<div style="font-size:22px;font-weight:900;color:' + (hGelir - hGider >= 0 ? '#10b981' : '#ef4444') + ';">₺' + Math.round(hGelir - hGider).toLocaleString('tr-TR') + '<\/div><\/div>'
+      + '<\/div>'
+
+      + '<div style="background:#fff;border-radius:10px;padding:16px;margin-bottom:16px;border:1px solid #e2e8f0;">'
+      + '<div style="font-weight:900;color:#0f172a;margin-bottom:10px;">💰 Kasa Bakiyeleri<\/div>'
+      + '<table style="width:100%;border-collapse:collapse;">' + kasaHtml
+      + '<tr style="background:#0f172a;"><td style="padding:8px;color:#fff;font-weight:700;">TOPLAM<\/td><td style="padding:8px;text-align:right;color:#fff;font-weight:900;">₺' + toplamKasa.toLocaleString('tr-TR') + '<\/td><\/tr>'
+      + '<\/table><\/div>'
+
+      + '<div style="background:#fff;border-radius:10px;padding:16px;margin-bottom:16px;border:1px solid #fecaca;">'
+      + '<div style="font-weight:900;color:#991b1b;margin-bottom:4px;">📋 Açık Alacak: ₺' + acikAlacak.toLocaleString('tr-TR') + ' (' + vadesiGecmis + ' firma)<\/div>'
+      + '<table style="width:100%;border-collapse:collapse;margin-top:8px;">' + vadeHtml + '<\/table><\/div>'
+
+      + '<div style="background:#fff;border-radius:10px;padding:16px;margin-bottom:16px;border:1px solid #bbf7d0;">'
+      + '<div style="font-weight:900;color:#0f172a;margin-bottom:8px;">📈 Teklif Dönüşüm<\/div>'
+      + '<div style="font-size:14px;color:#475569;">Toplam: <b>' + toplamTeklif + '<\/b> | Kazanılan: <b style="color:#10b981;">' + kazanilan + '<\/b> | Oran: <b style="color:#2563eb;">%' + donusum + '<\/b><\/div>'
+      + (kazanilanFirmalar.length ? '<div style="margin-top:8px;font-size:12px;color:#065f46;">🆕 Bu hafta: ' + kazanilanFirmalar.join(', ') + '<\/div>' : '')
+      + '<\/div>'
+
+      + '<div style="background:#fff;border-radius:10px;padding:16px;margin-bottom:16px;border:1px solid #bfdbfe;">'
+      + '<div style="font-weight:900;color:#0f172a;margin-bottom:8px;">🦺 ISG Performans (Bu Hafta)<\/div>'
+      + '<div style="font-size:14px;color:#475569;">Ziyaret: <b>' + isgZiyaret + '<\/b> | Toplam Dakika: <b>' + isgDakika + '<\/b><\/div>'
+      + '<\/div>'
+
+      + '<div style="text-align:center;color:#94a3b8;font-size:11px;margin-top:16px;">Bu rapor otomatik oluşturulmuştur — AvrupaBirCRM<\/div>'
+      + '<\/div>';
+
+    MailApp.sendEmail({
+      to: "ulas.ozbas@avrupabir.com.tr",
+      subject: "📊 Haftalık CEO Raporu — " + tarihStr,
+      htmlBody: html
+    });
+
+    Logger.log("CEO raporu gönderildi: " + tarihStr);
+    return { ok: true, msg: "Rapor gönderildi" };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+
+function haftalikCeoRaporTriggerKur() {
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === "haftalikCeoRaporGonder") ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger("haftalikCeoRaporGonder")
+    .timeBased()
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(8)
+    .create();
+  Logger.log("Haftalık CEO rapor trigger kuruldu — her Pazartesi 08:00");
+}
+
+function gunlukTahsilatHatirlatma() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+
+    var shFC = ss.getSheetByName("FİRMA_CARİ");
+    if (!shFC || shFC.getLastRow() < 2) return;
+    var fcData = shFC.getDataRange().getValues();
+
+    var borcluFirmalar = {};
+    for (var i = 1; i < fcData.length; i++) {
+      var bakiye = parseFloat(fcData[i][8]) || 0;
+      if (bakiye <= 0) continue;
+      var firma = String(fcData[i][3] || "").trim();
+      if (!firma) continue;
+      if (!borcluFirmalar[firma] || borcluFirmalar[firma] < bakiye) {
+        borcluFirmalar[firma] = bakiye;
+      }
+    }
+
+    if (!Object.keys(borcluFirmalar).length) return;
+
+    var shFirma = ss.getSheetByName("FIRMALAR");
+    if (!shFirma || shFirma.getLastRow() < 2) return;
+    var fData = shFirma.getDataRange().getValues();
+
+    var firmaMap = {};
+    for (var j = 1; j < fData.length; j++) {
+      var fAdi = String(fData[j][1] || "").trim().toUpperCase();
+      var tel = String(fData[j][3] || "").replace(/[^0-9]/g, "");
+      var yetkili = String(fData[j][2] || "");
+      if (fAdi && tel) firmaMap[fAdi] = { tel: tel, yetkili: yetkili };
+    }
+
+    var liste = [];
+    for (var firma in borcluFirmalar) {
+      var bilgi = firmaMap[firma.toUpperCase()] || {};
+      if (!bilgi.tel) continue;
+      var tel = bilgi.tel;
+      if (tel.length === 10 && tel.charAt(0) === '5') tel = '90' + tel;
+      if (tel.length === 11 && tel.charAt(0) === '0') tel = '9' + tel;
+
+      var bakiye = borcluFirmalar[firma];
+      var mesaj = "Sayın " + (bilgi.yetkili || "Yetkili") + ",\n\n"
+        + "Avrupa Bir OSGB olarak firmamızdan almış olduğunuz hizmetlere ait "
+        + "₺" + bakiye.toLocaleString('tr-TR') + " tutarında açık bakiyeniz bulunmaktadır.\n\n"
+        + "Ödemenizi en kısa sürede yapmanızı rica ederiz.\n\n"
+        + "Saygılarımızla,\nAvrupa Bir OSGB";
+
+      var waUrl = "https://wa.me/" + tel + "?text=" + encodeURIComponent(mesaj);
+
+      liste.push({
+        firma: firma,
+        yetkili: bilgi.yetkili || "-",
+        tel: tel,
+        bakiye: bakiye,
+        waUrl: waUrl
+      });
+    }
+
+    if (!liste.length) return;
+
+    liste.sort(function(a, b) { return b.bakiye - a.bakiye; });
+    liste = liste.slice(0, 20);
+
+    var chatMesaj = "📱 *GÜNLÜK TAHSİLAT HATIRLATMA*\n"
+      + "━━━━━━━━━━━━━━━━━━━━\n"
+      + liste.length + " firmaya WhatsApp hatırlatması gönderilebilir:\n\n";
+
+    liste.forEach(function(f, idx) {
+      chatMesaj += (idx + 1) + ". *" + f.firma + "* — ₺" + f.bakiye.toLocaleString('tr-TR') + "\n"
+        + "   👤 " + f.yetkili + " | 📞 " + f.tel + "\n"
+        + "   💬 " + f.waUrl + "\n\n";
+    });
+
+    var webhookUrl = PropertiesService.getScriptProperties().getProperty("CHAT_WEBHOOK_MUDUR");
+    if (webhookUrl) {
+      UrlFetchApp.fetch(webhookUrl, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({ text: chatMesaj }),
+        muteHttpExceptions: true
+      });
+    }
+
+    Logger.log("Tahsilat hatırlatma: " + liste.length + " firma bildirildi");
+    return { ok: true, msg: liste.length + " firma bildirildi" };
+  } catch(e) { Logger.log("Tahsilat hatirlatma hata: " + e.message); return { ok: false, msg: e.message }; }
+}
+
+function tahsilatHatirlatmaTriggerKur() {
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === "gunlukTahsilatHatirlatma") ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger("gunlukTahsilatHatirlatma")
+    .timeBased()
+    .everyDays(1)
+    .atHour(9)
+    .create();
+  Logger.log("Tahsilat hatırlatma trigger kuruldu — her gün 09:00");
+}
+
+function api_isgZiyaretDokumu(basTarih, bitTarih) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("ISG_PLANLAMA");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, liste: [], toplam: 0 };
+
+    var data = sh.getDataRange().getValues();
+    var liste = [];
+
+    var bas = basTarih ? new Date(basTarih.split('.').reverse().join('-')) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    var bit = bitTarih ? new Date(bitTarih.split('.').reverse().join('-')) : new Date();
+    bit.setHours(23, 59, 59);
+
+    for (var i = 1; i < data.length; i++) {
+      var dt;
+      if (data[i][1] instanceof Date) {
+        dt = data[i][1];
+      } else {
+        var parcalar = String(data[i][1] || "").split(".");
+        if (parcalar.length === 3) {
+          dt = new Date(parcalar[2], parseInt(parcalar[1]) - 1, parcalar[0]);
+        } else {
+          dt = new Date(data[i][1]);
+        }
+      }
+      if (isNaN(dt) || dt < bas || dt > bit) continue;
+
+      liste.push({
+        tarih: ('0' + dt.getDate()).slice(-2) + '.' + ('0' + (dt.getMonth() + 1)).slice(-2) + '.' + dt.getFullYear(),
+        firma: String(data[i][3] || ""),
+        personel: String(data[i][5] || ""),
+        hizmetTipi: String(data[i][6] || ""),
+        dk: parseFloat(data[i][7]) || 0,
+        durum: String(data[i][8] || "PLANLI"),
+        saat: String(data[i][12] || ""),
+        not: String(data[i][9] || "")
+      });
+    }
+
+    liste.sort(function(a, b) { return a.tarih > b.tarih ? 1 : a.tarih < b.tarih ? -1 : 0; });
+
+    var toplamDk = 0, firmaSayisi = {}, personelMap = {};
+    liste.forEach(function(l) {
+      toplamDk += l.dk;
+      firmaSayisi[l.firma] = true;
+      if (!personelMap[l.personel]) personelMap[l.personel] = { dk: 0, ziyaret: 0 };
+      personelMap[l.personel].dk += l.dk;
+      personelMap[l.personel].ziyaret++;
+    });
+
+    var personelOzet = [];
+    for (var p in personelMap) {
+      personelOzet.push({ ad: p, dk: personelMap[p].dk, ziyaret: personelMap[p].ziyaret });
+    }
+    personelOzet.sort(function(a, b) { return b.ziyaret - a.ziyaret; });
+
+    return {
+      ok: true,
+      liste: liste,
+      toplam: liste.length,
+      toplamDk: toplamDk,
+      firmaSayisi: Object.keys(firmaSayisi).length,
+      personelOzet: personelOzet
+    };
+  } catch(e) { return { ok: false, liste: [], msg: e.message }; }
+}
+
