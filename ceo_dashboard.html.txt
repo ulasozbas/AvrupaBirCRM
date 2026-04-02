@@ -557,6 +557,21 @@
   <div class="scroll-area" style="max-height:250px;" id="memnuniyetListesi"><div class="empty">Yukleniyor...</div></div>
 </div>
 
+<!-- FİRMA RİSK SKORU -->
+<div class="sec-hdr"><h2>Firma Risk Haritası</h2></div>
+<div class="ceo-card">
+  <div class="card-hdr">
+    <span class="card-title">Firma Risk Skorları</span>
+    <div style="display:flex;gap:5px;">
+      <span class="tag tag-red" id="riskKritikBadge">0 kritik</span>
+      <span class="tag tag-yellow" id="riskYuksekBadge">0 yüksek</span>
+      <button onclick="ceoRiskYukle()" style="background:#ef4444;color:#fff;border:none;padding:3px 10px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;margin-left:6px;">🔍 Tara</button>
+    </div>
+  </div>
+  <div class="scroll-area" style="max-height:350px;" id="ceoRiskDiv"><div class="empty">Taramak için butona tıklayın.</div></div>
+</div>
+
+
 <!-- MALİ SAĞLIK & YAPAY ZEKA UYARILARI -->
 <div class="sec-hdr"><h2>Mali Sağlık & Yapay Zeka</h2></div>
 <div class="row r-3">
