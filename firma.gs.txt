@@ -243,9 +243,6 @@ function api_firmaGuncelle(p) {
     setValueIfExist("Not", p.not);
     setValueIfExist("Adres", p.adres);
     setValueIfExist("Referans", p.referans);
-    setValueIfExist("SgkSicilNo", p.sgkSicilNo);
-    setValueIfExist("VergiDairesi", p.vergiDairesi);
-    setValueIfExist("SgkSicilNo", p.sgkSicilNo);
     setValueIfExist("RahatsizEtme", (p.rahatsizEtme === true || p.rahatsizEtme === "true") ? "EVET" : "");
     if (p.hizmetler !== undefined) {
       setValueIfExist("HizmetOSGB", p.hizmetler.indexOf("OSGB") > -1 ? "EVET" : "");
