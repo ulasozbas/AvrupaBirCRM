@@ -54,7 +54,7 @@ function api_raporTeklifler(p) {
   try {
     p = p || {};
     var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-    var sh = ss.getSheetByName("TEKLIFLER") || ss.getSheetByName("TEKLİFLER");
+    var sh = ss.getSheetByName("TEKLIFLER") || ss.getSheetByName("TEKLIFLER");
     if (!sh || sh.getLastRow() < 2) return { ok:true, rows:[] };
     var vals = sh.getDataRange().getValues();
     var head = vals[0];
@@ -81,7 +81,7 @@ function api_raporFirmalar(p) {
   try {
     p = p || {};
     var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-    var sh = ss.getSheetByName("FİRMALAR") || ss.getSheetByName("FIRMALAR");
+    var sh = ss.getSheetByName("FIRMALAR") || ss.getSheetByName("FIRMALAR");
     if (!sh || sh.getLastRow() < 2) return { ok:true, rows:[] };
     var vals = sh.getDataRange().getValues();
     var head = vals[0];
@@ -252,8 +252,16 @@ function api_getPerformanceData(p) {
     var baslik = data[0];
     function getCol(aranan){ for(var m=0;m<baslik.length;m++){if(String(baslik[m]).toLowerCase().indexOf(aranan)>-1)return m;} return -1; }
     var ixt=getCol("tarih"),ixfr=getCol("firma"),ixkl=getCol("kullaniciemail"),ixk=getCol("kanal"),ixis=getCol("islem"),ixasm=getCol("asama"),ixnot=getCol("not");
-    var fromDate=p.from?new Date(p.from).getTime():0;
-    var toDate=p.to?new Date(p.to+"T23:59:59").getTime():4102444800000;
+    var simdi = new Date();
+    function _parsePerf(s) {
+      if (!s) return null;
+      s = String(s);
+      var m = s.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+      if (m) return new Date(m[3], m[2]-1, m[1]);
+      return new Date(s);
+    }
+    var fromDate = p.from ? _parsePerf(p.from).getTime() : new Date(simdi.getFullYear(), simdi.getMonth(), 1).getTime();
+    var toDate = p.to ? (_parsePerf(p.to).getTime() + 86399000) : simdi.getTime();
     var outputArray=[], ustLimit=0;
     for(var k=data.length-1;k>=1;k--){
       var r=data[k];
@@ -279,7 +287,7 @@ function api_getPerformanceData(p) {
 function api_getSicakTakipler(aktifEmail) {
   try {
     var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-    var sTakip=ss.getSheetByName("TEKLIF_TAKIP"), sTeklif=ss.getSheetByName("TEKLIFLER")||ss.getSheetByName("TEKLİFLER");
+    var sTakip=ss.getSheetByName("TEKLIF_TAKIP"), sTeklif=ss.getSheetByName("TEKLIFLER")||ss.getSheetByName("TEKLIFLER");
     if(!sTakip||!sTeklif) return [];
     var tkData=sTakip.getDataRange().getValues(), tfData=sTeklif.getDataRange().getValues();
     var creatorMap={}, tHead=tfData[0];
@@ -400,8 +408,8 @@ function api_getFirmaGecmisiDetay(p) {
 // ==========================================
 function api_getPoliceAuditList() {
   var ss=SpreadsheetApp.openById(CRM_SHEET_ID);
-  var shISG=ss.getSheetByName("ISG_HIZMETLER"), shMobil=ss.getSheetByName("MOBIL_SAGLIK_FIRMA"), shIseGiris=ss.getSheetByName("ISE_GIRIS_FIRMA");
-  var shHareket=ss.getSheetByName("HAREKETLER"), shFirma=ss.getSheetByName("FİRMALAR")||ss.getSheetByName("FIRMALAR");
+  var shISG=ss.getSheetByName("ISG_HIZMETLER"), shMobil=ss.getSheetByName("MOBIL_SAGLIK"), shIseGiris=ss.getSheetByName("ISE_GIRIS");
+  var shHareket=ss.getSheetByName("HAREKETLER"), shFirma=ss.getSheetByName("FIRMALAR")||ss.getSheetByName("FIRMALAR");
   if(!shHareket||!shFirma) return [];
   var hizmetFirmalar={};
   if(shISG&&shISG.getLastRow()>1){var isgVals=shISG.getDataRange().getValues();for(var i=1;i<isgVals.length;i++){var id=String(isgVals[i][0]||"");if(id)hizmetFirmalar[id]={hizmet:"OSGB"};}}
@@ -501,3 +509,243 @@ function api_memnuniyetAnalizi() {
     return { ok:true, ortalama:toplamOrtalama, liste:liste.slice(0,20) };
   } catch(e) { return { ok:false, ortalama:0, liste:[], msg:e.message }; }
 }
+
+// ==========================================
+// TEKLİF DÖNÜŞÜM ORANI
+// ==========================================
+function api_teklifDonusumOrani(p) {
+  try {
+    p = p || {};
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("TEKLIFLER") || ss.getSheetByName("TEKLİFLER");
+    if (!sh || sh.getLastRow() < 2) return { ok:true, genel:{}, aylik:[], kisisel:[] };
+    var vals = sh.getDataRange().getDisplayValues();
+    var head = vals[0];
+    function normKey(s) { return String(s||"").trim().toUpperCase().replace(/İ/g,"I").replace(/ı/g,"I").replace(/\s+/g,""); }
+    var idx = {};
+    for (var c=0; c<head.length; c++) { var k = normKey(head[c]); if (k) idx[k] = c; }
+    function col(names) { for (var i=0;i<names.length;i++) { if (idx[names[i]] !== undefined) return idx[names[i]]; } return -1; }
+    var iDurum = col(["DURUM"]);
+    var iTarih = col(["TARIH","OLUSTURMATARIHI"]);
+    var iOlus  = col(["OLUSTURAN","SENDEREMAIL"]);
+    var iTutar = col(["GENELTOPLAM","TOPLAM"]);
+    
+    var genel = { toplam:0, onaylanan:0, reddedilen:0, bekleyen:0, toplamTutar:0, onaylananTutar:0 };
+    var ayMap = {};
+    var kisiMap = {};
+    
+    for (var r=1; r<vals.length; r++) {
+      var durum = String(vals[r][iDurum] || "").toUpperCase().trim();
+      if (!durum && !vals[r][iTarih]) continue;
+      
+      var tarihStr = String(vals[r][iTarih] || "");
+      var ay = "";
+      var m = tarihStr.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+      if (m) ay = m[3] + "-" + m[2].padStart(2,"0");
+      else {
+        var m2 = tarihStr.match(/(\d{4})-(\d{2})/);
+        if (m2) ay = m2[1] + "-" + m2[2];
+      }
+      
+      var olusturan = String(vals[r][iOlus] || "").toLowerCase().trim();
+      var tutar = Number(String(vals[r][iTutar] || "0").replace(/\./g,"").replace(",",".")) || 0;
+      
+      var isOnayli = (durum === "ONAYLANDI" || durum.indexOf("KAZAN") > -1);
+      var isRed = (durum.indexOf("KAYB") > -1 || durum === "REDDEDILDI" || durum === "REDDEDİLDİ");
+      
+      genel.toplam++;
+      genel.toplamTutar += tutar;
+      if (isOnayli) { genel.onaylanan++; genel.onaylananTutar += tutar; }
+      else if (isRed) { genel.reddedilen++; }
+      else { genel.bekleyen++; }
+      
+      // Aylık
+      if (ay) {
+        if (!ayMap[ay]) ayMap[ay] = { ay:ay, toplam:0, onaylanan:0, reddedilen:0, tutar:0, onaylananTutar:0 };
+        ayMap[ay].toplam++;
+        ayMap[ay].tutar += tutar;
+        if (isOnayli) { ayMap[ay].onaylanan++; ayMap[ay].onaylananTutar += tutar; }
+        else if (isRed) { ayMap[ay].reddedilen++; }
+      }
+      
+      // Kişisel
+      if (olusturan) {
+        if (!kisiMap[olusturan]) kisiMap[olusturan] = { email:olusturan, ad:olusturan.split("@")[0].toUpperCase(), toplam:0, onaylanan:0, reddedilen:0, tutar:0, onaylananTutar:0 };
+        kisiMap[olusturan].toplam++;
+        kisiMap[olusturan].tutar += tutar;
+        if (isOnayli) { kisiMap[olusturan].onaylanan++; kisiMap[olusturan].onaylananTutar += tutar; }
+        else if (isRed) { kisiMap[olusturan].reddedilen++; }
+      }
+    }
+    
+    genel.donusumOrani = genel.toplam > 0 ? Math.round((genel.onaylanan / genel.toplam) * 100) : 0;
+    
+    var aylik = Object.keys(ayMap).map(function(k) { 
+      var o = ayMap[k]; 
+      o.donusumOrani = o.toplam > 0 ? Math.round((o.onaylanan / o.toplam) * 100) : 0; 
+      return o; 
+    }).sort(function(a,b) { return b.ay.localeCompare(a.ay); });
+    
+    var kisisel = Object.keys(kisiMap).map(function(k) { 
+      var o = kisiMap[k]; 
+      o.donusumOrani = o.toplam > 0 ? Math.round((o.onaylanan / o.toplam) * 100) : 0; 
+      return o; 
+    }).sort(function(a,b) { return b.onaylanan - a.onaylanan; });
+    
+    return { ok:true, genel:genel, aylik:aylik.slice(0,12), kisisel:kisisel };
+  } catch(e) { return { ok:false, msg:e.message }; }
+}
+
+// ==========================================
+// GÜNLÜK KPI TAKİP & UYARI
+// ==========================================
+var GUNLUK_HEDEFLER = {
+  PAZARLAMA: { telefon: 20, mail: 10, toplanti: 1, teklif: 3, tanitim: 50 },
+  PERSONEL:  { telefon: 0,  mail: 0,  toplanti: 0, teklif: 0, tanitim: 0 },
+  ADMIN:     { telefon: 0, mail: 0, toplanti: 0, teklif: 3, tanitim: 0 },
+  MUDUR:     { telefon: 0, mail: 0, toplanti: 0, teklif: 0, tanitim: 0 }
+};
+
+var KISI_HEDEFLERI = {
+  "neslihan.karatas@avrupabir.com.tr": { telefon: 25, mail: 10, toplanti: 2, teklif: 5, tanitim: 50 },
+  "kurumsal@avrupabir.com.tr":         { telefon: 25, mail: 10, toplanti: 2, teklif: 5, tanitim: 50 },
+};
+
+function api_gunlukKpiGetir(p) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("HAREKETLER");
+    if (!sh) return { ok:false, msg:"HAREKETLER yok" };
+    var data = sh.getDataRange().getValues();
+    if (data.length < 2) return { ok:true, kisiler:[] };
+    
+    var head = data[0];
+    function getCol(aranan) {
+      for (var z=0; z<head.length; z++) {
+        if (String(head[z]).toLowerCase().replace(/\s+/g,"").indexOf(aranan) > -1) return z;
+      }
+      return -1;
+    }
+    var ixt = getCol("tarih"), ixUser = getCol("kullaniciemail"), ixKanal = getCol("kanal"), ixIslem = getCol("islem");
+    
+    // Bugünün tarihi
+    var bugun = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd.MM.yyyy");
+    var hedefTarih = String(p && p.tarih || bugun);
+    
+    // ROL haritası
+    var roller = {};
+    try {
+      var rolHaritasi = ROL_HARITASI || {};
+      for (var email in rolHaritasi) {
+        roller[email.toLowerCase()] = rolHaritasi[email];
+      }
+    } catch(e) {}
+    
+    // Personel listesi al
+    var shPer = ss.getSheetByName("PERSONEL_IK");
+    var personelMap = {};
+    if (shPer && shPer.getLastRow() > 1) {
+      var perData = shPer.getDataRange().getValues();
+      for (var pi=1; pi<perData.length; pi++) {
+        var pEmail = String(perData[pi][2] || "").toLowerCase().trim();
+        var pAd = String(perData[pi][1] || "").trim();
+        if (pEmail) personelMap[pEmail] = pAd;
+      }
+    }
+    
+    // Bugünkü aktiviteleri say
+    var kisiMap = {};
+    for (var i=1; i<data.length; i++) {
+      var rawTarih = data[i][ixt];
+      var tarihStr = "";
+      if (rawTarih instanceof Date) {
+        tarihStr = Utilities.formatDate(rawTarih, "Europe/Istanbul", "dd.MM.yyyy");
+      } else {
+        tarihStr = String(rawTarih || "").substring(0, 10);
+      }
+      if (tarihStr !== hedefTarih) continue;
+      
+      var email = String(data[i][ixUser] || "").toLowerCase().trim();
+      if (!email) continue;
+      var kanal = String(data[i][ixKanal] || "").toUpperCase().trim();
+      var islem = String(data[i][ixIslem] || "").toUpperCase().trim();
+      
+      if (kanal === "SİSTEM" || kanal === "SISTEM") continue;
+      
+      if (!kisiMap[email]) {
+        kisiMap[email] = { email:email, ad:"", rol:"", telefon:0, mail:0, toplanti:0, teklif:0, tanitim:0, diger:0, toplam:0 };
+      }
+      kisiMap[email].toplam++;
+      
+      if (kanal.indexOf("TELEFON") > -1 || kanal.indexOf("ARAMA") > -1) kisiMap[email].telefon++;
+      else if (kanal.indexOf("MAIL") > -1 || kanal.indexOf("MAİL") > -1) kisiMap[email].mail++;
+      else if (kanal.indexOf("TOPLANTI") > -1 || kanal.indexOf("GÖRÜŞME") > -1 || kanal.indexOf("GORUSME") > -1) kisiMap[email].toplanti++;
+      else kisiMap[email].diger++;
+      
+      if (islem.indexOf("TEKLIF") > -1 || islem.indexOf("TEKLİF") > -1) kisiMap[email].teklif++;
+      if (islem.indexOf("TANITIM") > -1) kisiMap[email].tanitim++;
+    }
+    
+    // Tüm PAZARLAMA personelini ekle (bugün aktivite olmayanlar dahil)
+    for (var em in roller) {
+      if (roller[em] === "PAZARLAMA" && !kisiMap[em]) {
+        kisiMap[em] = { email:em, ad:"", rol:"PAZARLAMA", telefon:0, mail:0, toplanti:0, teklif:0, tanitim:0, diger:0, toplam:0 };
+      }
+    }
+    
+    // Ad ve rol eşleştir, hedef hesapla
+    var kisiler = [];
+    for (var k in kisiMap) {
+      var o = kisiMap[k];
+      o.ad = personelMap[k] || k.split("@")[0].toUpperCase();
+      o.rol = roller[k] || "PERSONEL";
+      Logger.log("KPI lookup: " + k + " -> " + JSON.stringify(KISI_HEDEFLERI[k]));
+      var hedef = GUNLUK_HEDEFLER[o.rol] || GUNLUK_HEDEFLER["PERSONEL"];
+      o.hedefler = hedef;
+      
+      // Yüzde hesapla
+      var toplamHedef = (hedef.telefon + hedef.mail + hedef.toplanti + hedef.teklif + hedef.tanitim) || 1;
+      var toplamYapilan = o.telefon + o.mail + o.toplanti + o.teklif + o.tanitim;
+      o.yuzdeTamamlama = Math.min(100, Math.round((toplamYapilan / toplamHedef) * 100));
+      
+      // Detay bazlı kontrol
+      o.eksikler = [];
+      if (hedef.telefon > 0 && o.telefon < hedef.telefon) o.eksikler.push("Telefon: " + o.telefon + "/" + hedef.telefon);
+      if (hedef.mail > 0 && o.mail < hedef.mail) o.eksikler.push("Mail: " + o.mail + "/" + hedef.mail);
+      if (hedef.toplanti > 0 && o.toplanti < hedef.toplanti) o.eksikler.push("Toplantı: " + o.toplanti + "/" + hedef.toplanti);
+      if (hedef.teklif > 0 && o.teklif < hedef.teklif) o.eksikler.push("Teklif: " + o.teklif + "/" + hedef.teklif);
+      if (hedef.tanitim > 0 && o.tanitim < hedef.tanitim) o.eksikler.push("Tanıtım: " + o.tanitim + "/" + hedef.tanitim);
+      
+      o.hedefeUlasti = o.eksikler.length === 0;
+      kisiler.push(o);
+    }
+    
+    kisiler.sort(function(a,b) { return a.yuzdeTamamlama - b.yuzdeTamamlama; });
+    
+    return { ok:true, tarih:hedefTarih, kisiler:kisiler };
+  } catch(e) { return { ok:false, msg:e.message }; }
+}
+
+function api_bugunHastaSayisi() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_CARİ");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, sayi: 0 };
+    var data = sh.getDataRange().getValues();
+    var bugun = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd.MM.yyyy");
+    var sayi = 0;
+    for (var i = 1; i < data.length; i++) {
+      var tarih = "";
+      if (data[i][1] instanceof Date) {
+        tarih = Utilities.formatDate(data[i][1], "Europe/Istanbul", "dd.MM.yyyy");
+      } else {
+        tarih = String(data[i][1] || "").substring(0, 10);
+      }
+      if (tarih !== bugun) continue;
+      var tip = String(data[i][4] || "").toUpperCase();
+      if (tip.indexOf("GELİR") > -1 || tip.indexOf("TAHSİLAT") > -1 || tip.indexOf("ALACAK") > -1) sayi++;
+    }
+    return { ok: true, sayi: sayi };
+  } catch(e) { return { ok: false, sayi: 0 }; }
+}
+
