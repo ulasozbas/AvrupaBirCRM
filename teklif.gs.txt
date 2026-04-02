@@ -750,7 +750,8 @@ try {
   satirEkle("MOBIL", p.mobil || []);
   satirEkle("ISE_GIRIS", p.iseGiris || []);
 } catch(e) { Logger.log("Satır kayıt hatası: " + e.message); }
-    try { api_aktiviteKaydet({ firmaId:rowObj.FirmaID, firmaUnvani:rowObj.FirmaAdi, kullaniciEmail:rowObj.Olusturan, kanal:"SİSTEM", islem:"TEKLIF", asama:(rowIndex>-1?"GÜNCELLENDİ":"YENİ KAYIT"), not:"Teklif No: "+teklifNo+" sisteme işlendi.", kaynak:"WEBAPP" }); } catch(e) {}
+    try { api_aktiviteKaydet({ firmaId:rowObj.FirmaID, firmaUnvani:rowObj.FirmaAdi, kullaniciEmail:rowObj.Olusturan, kanal:"MAIL", islem:"TEKLIF", asama:"BEKLEMEDE", not:"Teklif No: "+teklifNo+" sisteme işlendi.", kaynak:"WEBAPP" }); } catch(e) {}
+    try { api_aktiviteKaydet({ firmaId:yeniId, firmaUnvani:firmaAdi, kullaniciEmail:kullanici, kanal:"TELEFON", islem:"FIRMA_KAYIT", asama:"BEKLEMEDE", not:"Yeni firma kaydedildi: "+firmaAdi, kaynak:"WEBAPP" }); } catch(e3) {}
     chatBildir_("📋 *Teklif Kaydedildi*\nFirma: " + rowObj.FirmaAdi + "\nTeklif No: " + teklifNo + "\nTutar: " + Number(rowObj.GenelToplam||0).toLocaleString("tr-TR") + " TL\nKaydeden: " + rowObj.Olusturan);
     logYaz("TEKLIF_OLUSTUR", "Yeni teklif hazırlandı.", "TEKLIF", teklifNo, firmaAdi);
     if (p.asilTeklifNo) {
@@ -1007,7 +1008,7 @@ function api_topluMailListesiKaziyici() {
         if(isFinite(kDate)&&kMail&&((bugun-kDate)/(1000*60*60*24))<=15) atilanlarMap[kMail]=true;
       }
     }
-    var sh = ss.getSheetByName("FİRMALAR") || ss.getSheetByName("FIRMALAR");
+    var sh = ss.getSheetByName("FIRMALAR") || ss.getSheetByName("FIRMALAR");
     if (!sh) return [];
     var data = sh.getDataRange().getValues();
     if(data.length<2) return [];
@@ -1043,7 +1044,7 @@ if (p.ekBrosur) {
     ekler.attachments = [brosurDosya.getAs(MimeType.PDF)];
   } catch(e) {}
 }
-MailApp.sendEmail(hedefMail, p.konu, "Lütfen HTML destekleyici istemci kullanınız.", Object.assign({htmlBody:p.icerik, name:"AvrupaBir Kurumsal Hizmetler", replyTo:aktifKullaniciMail}, ekler)); basariliSayisi++; basariylaGidenler.push(hedefMail); Utilities.sleep(150); } catch(e) {}
+MailApp.sendEmail(hedefMail, p.konu, "Lütfen HTML destekleyici istemci kullanınız.", Object.assign({htmlBody:p.icerik, name:"AvrupaBir Kurumsal Hizmetler", replyTo:aktifKullaniciMail}, ekler)); basariliSayisi++; basariylaGidenler.push(hedefMail); Utilities.sleep(500); } catch(e) {}
     }
     if(basariylaGidenler.length>0){
       var ss=SpreadsheetApp.openById(CRM_SHEET_ID);
@@ -1118,7 +1119,7 @@ function api_kurumsal_MusteriDijitalHemenOnaylaBombaPatlatYahuIslemGecsInZntrMnt
     function normStr_(s){ return String(s||"").trim().toUpperCase().replace(/İ/g,"I").replace(/Ö/g,"O").replace(/Ü/g,"U").replace(/Ş/g,"S").replace(/Ç/g,"C").replace(/Ğ/g,"G").replace(/[^A-Z0-9]/g,""); }
     var hdfDuzen = normStr_(strNmm);
     var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-    var sh = ss.getSheetByName("TEKLIFLER") || ss.getSheetByName("TEKLİFLER");
+    var sh = ss.getSheetByName("TEKLIFLER") || ss.getSheetByName("TEKLIFLER");
     if (!sh) return {ok:false,msg:"TEKLIFLER sheet yok"};
     var alldata = sh.getDataRange().getValues();
     var head = alldata[0];
@@ -1137,6 +1138,22 @@ function api_kurumsal_MusteriDijitalHemenOnaylaBombaPatlatYahuIslemGecsInZntrMnt
     if(!uyariSh){uyariSh=ss.insertSheet("PATRONUYARI");uyariSh.appendRow(["ID","Tarih","Tip","Baslik","Mesaj","Okundu"]);}
     var tarih=Utilities.formatDate(new Date(),"Europe/Istanbul","dd.MM.yyyy HH:mm");
     uyariSh.appendRow(["B_"+new Date().getTime(),tarih,"MÜJDE","🤝 Teklif Onaylandı!",firmaAdi+" firması ["+strNmm+"] nolu teklifi onayladı — "+tarih,false]);
+    // ATAMA TALEBİ OLUŞTUR — Dilara'nın ekranına düşecek
+    try {
+      var shAtama = ss.getSheetByName("ATAMA_TALEPLERI");
+      if (!shAtama) {
+        shAtama = ss.insertSheet("ATAMA_TALEPLERI");
+        shAtama.appendRow(["ID","Tarih","TeklifNo","FirmaID","FirmaAdi","Durum","CalisanSayisi","Hizmetler","AtananPersonel","AtananDakika","AtayanEmail","AtamaTarihi","Notlar"]);
+        shAtama.getRange(1,1,1,13).setFontWeight("bold").setBackground("#1e293b").setFontColor("white");
+      }
+      var atamaId = "ATA_" + new Date().getTime();
+      shAtama.appendRow([atamaId, tarih, strNmm, firmaId, firmaAdi, "BEKLEMEDE", "", "", "", "", "", "", ""]);
+      chatBildir_("🆕 *YENİ ATAMA TALEBİ*\nFirma: " + firmaAdi + "\nTeklif: " + strNmm + "\nDurum: BEKLEMEDE\n⚠️ ISG ekibinin atama yapması bekleniyor!");
+    } catch(ea) { Logger.log("Atama talebi hatası: " + ea.message); }
+    // KUTLAMA KAYDET — tüm ekranlara yansıyacak
+    try {
+      api_kutlamaKaydet(firmaAdi, sahip, "");
+    } catch(ek) {}
     return {ok:true};
   } catch(e) { return {ok:false,msg:e.message}; }
 }
