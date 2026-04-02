@@ -227,7 +227,7 @@ function _tariheGoreParse(tarihStr) {
   if (!tarihStr) return null;
   const parts = tarihStr.split('.');
   if (parts.length < 3) return null;
-  return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+  return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
 }
 
 function _tariheGoreSirala(a, b) {
