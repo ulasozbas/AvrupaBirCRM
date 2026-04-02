@@ -34,12 +34,15 @@
   }
   .btn-yenile:hover { background: #0873c4; }
 
-  /* ── 4 büyük kart ── */
+  /* ── Büyük kartlar ── */
   .kartlar {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 10px;
     margin-bottom: 12px;
+  }
+  @media (max-width: 600px) {
+    .kartlar { grid-template-columns: 1fr 1fr; }
   }
   .kart {
     background: #fff;
@@ -48,10 +51,12 @@
     box-shadow: 0 1px 4px rgba(0,0,0,0.08);
     border-left: 4px solid #dfe6e9;
   }
-  .kart.yesil { border-left-color: #00b894; }
-  .kart.mavi  { border-left-color: #0984e3; }
+  .kart.yesil   { border-left-color: #00b894; }
+  .kart.mavi    { border-left-color: #0984e3; }
   .kart.turuncu { border-left-color: #e17055; }
-  .kart.mor   { border-left-color: #6c5ce7; }
+  .kart.mor     { border-left-color: #6c5ce7; }
+  .kart.sari    { border-left-color: #fdcb6e; }
+  .kart.kirmizi { border-left-color: #d63031; }
 
   .kart .etiket {
     font-size: 11px;
@@ -178,6 +183,27 @@
   .badge.eft    { background: #fef3c7; color: #92400e; }
   .badge.cari   { background: #ede9fe; color: #5b21b6; }
 
+  /* ── Gelir/Gider karşılaştırma ── */
+  .gelir-gider {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin-top: 8px;
+  }
+  .gg-blok {
+    text-align: center;
+    padding: 10px 6px;
+    border-radius: 8px;
+  }
+  .gg-blok.gelir  { background: #d1fae5; }
+  .gg-blok.gider  { background: #fee2e2; }
+  .gg-blok.net    { background: #ede9fe; }
+  .gg-blok .gg-tutar { font-size: 17px; font-weight: 700; }
+  .gg-blok.gelir .gg-tutar { color: #065f46; }
+  .gg-blok.gider .gg-tutar { color: #991b1b; }
+  .gg-blok.net   .gg-tutar { color: #5b21b6; }
+  .gg-blok .gg-etiket { font-size: 11px; margin-top: 3px; color: #636e72; }
+
   /* ── Loading ── */
   .yukleniyor {
     text-align: center;
@@ -226,6 +252,14 @@
   <div id="tahsilat-dagilim" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px;"></div>
 </div>
 
+<!-- Bu Ay Gelir / Gider Özeti -->
+<div class="panel" style="margin-bottom:12px">
+  <h3>📈 Bu Ay Gelir / Gider Özeti</h3>
+  <div class="gelir-gider" id="gelir-gider-ozet">
+    <div class="yukleniyor" style="grid-column:1/-1">Yükleniyor...</div>
+  </div>
+</div>
+
 <script>
   function yukle() {
     document.getElementById('guncelleme-zaman').textContent = 'Yükleniyor...';
@@ -238,8 +272,10 @@
   function render(veri) {
     document.getElementById('guncelleme-zaman').textContent = 'Son güncelleme: ' + veri.guncelleme;
 
-    // ── 4 Kart ──
+    // ── 6 Kart ──
     const k = veri.kartlar;
+    const ca = veri.cariAlacaklar || {};
+    const bc = veri.bekleyenCekler || {};
     document.getElementById('kartlar').innerHTML = `
       <div class="kart yesil">
         <div class="etiket">🏦 Kasa Nakit</div>
@@ -247,7 +283,7 @@
         <div class="alt-bilgi">Anlık nakit bakiye</div>
       </div>
       <div class="kart mavi">
-        <div class="etiket">🏛️ Banka Nakit</div>
+        <div class="etiket">🏛️ Banka</div>
         <div class="tutar">${formatPara(k.bankaNakit)}</div>
         <div class="alt-bilgi">Tüm banka hesapları toplamı</div>
       </div>
@@ -255,6 +291,16 @@
         <div class="etiket">⚠️ Toplam Borçlar</div>
         <div class="tutar">${formatPara(k.toplamBorclar)}</div>
         <div class="alt-bilgi">Çek + SGK + Vergi bekleyenler</div>
+      </div>
+      <div class="kart sari">
+        <div class="etiket">📂 Açık Alacaklar</div>
+        <div class="tutar">${formatPara(ca.toplamAlacak || 0)}</div>
+        <div class="alt-bilgi">${ca.borcluFirma || 0} firma henüz ödemedi</div>
+      </div>
+      <div class="kart kirmizi">
+        <div class="etiket">🗒️ Bekleyen Çekler</div>
+        <div class="tutar">${formatPara(bc.tutar || 0)}</div>
+        <div class="alt-bilgi">${bc.adet || 0} adet çek / senet bekliyor</div>
       </div>
       <div class="kart mor">
         <div class="etiket">📌 Aylık Sabit Gider</div>
@@ -317,6 +363,27 @@
     } else {
       tahsilatListesi.innerHTML = '<li><span class="h-aciklama" style="color:#b2bec3">Tahsilat yok</span></li>';
     }
+
+    // ── Bu Ay Gelir / Gider Özeti ──
+    const ag = veri.aylikGider || {};
+    const at2 = veri.aylikTahsilat || {};
+    const ayGelir = at2.toplamTutar || 0;
+    const ayGider = ag.toplamTutar || 0;
+    const ayNet   = ayGelir - ayGider;
+    document.getElementById('gelir-gider-ozet').innerHTML = `
+      <div class="gg-blok gelir">
+        <div class="gg-tutar">${formatPara(ayGelir)}</div>
+        <div class="gg-etiket">💚 Bu Ay Gelir (${at2.adet || 0} işlem)</div>
+      </div>
+      <div class="gg-blok gider">
+        <div class="gg-tutar">${formatPara(ayGider)}</div>
+        <div class="gg-etiket">❌ Bu Ay Gider (${ag.adet || 0} kalem)</div>
+      </div>
+      <div class="gg-blok net">
+        <div class="gg-tutar" style="color:${ayNet >= 0 ? '#065f46' : '#991b1b'}">${ayNet >= 0 ? '+' : ''}${formatPara(ayNet)}</div>
+        <div class="gg-etiket">🔮 Net (Gelir − Gider)</div>
+      </div>
+    `;
 
     // ── Tahsilat Dağılımı ──
     const at = veri.aylikTahsilat;
