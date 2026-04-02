@@ -199,7 +199,7 @@ function faturaKes(firmaId, faturaNo, tutarOverride) {
   }
 
   const firmaAd = _firmaAdAl(firmaId);
-  const kdvOrani = parseFloat(ayarOku('KDV_ORANI') || '20') / 100;
+  const kdvOrani = parseFloat(ayarOku('KDV_VARSAYILAN') || '20') / 100;
   const kdvTutar = faturalanacakTutar * kdvOrani;
   const toplam   = faturalanacakTutar + kdvTutar;
 
