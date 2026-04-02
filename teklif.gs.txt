@@ -836,21 +836,12 @@ function api_teklifGecmisi_yeni_() {
   }
   function get_(row, name) { var ci = colIndex_(name); if (ci==null) return ""; return String(row[ci]||"").trim(); }
   function parseTRDate_(s) { s=String(s||"").trim(); var m=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/); if(!m) return new Date(0); return new Date(+m[3],+m[2]-1,+m[1]); }
-  var map = {}, out = [];
-  for (var r=values.length-1; r>=1; r--) {
+  var out = [];
+  for (var r=1; r<values.length; r++) {
     var row = values[r];
     var teklifNo = get_(row,"TeklifNo"), firmaAdi = get_(row,"FirmaAdi"), gToplam = get_(row,"GenelToplam");
     if (!teklifNo && !firmaAdi) continue;
-    if (teklifNo && teklifNo.length > 20) continue;
-    var key = teklifNo ? teklifNo : firmaAdi;
-    if (map[key]) {
-      var existing = map[key];
-      if ((Number(existing.genelToplam)===0||!existing.genelToplam) && Number(gToplam)>0) { existing.genelToplam=gToplam; if(!existing.PdfDriveFileId||existing.PdfDriveFileId.length<10) existing.PdfDriveFileId=get_(row,"PdfDriveFileId"); }
-      continue;
-    }
-    var nObj = { teklifId:get_(row,"TeklifID"), teklifNo:teklifNo, tarih:get_(row,"Tarih"), firmaId:get_(row,"FirmaID"), firma:firmaAdi, yetkili:get_(row,"YetkiliAdi"), durum:get_(row,"Durum"), araToplam:get_(row,"AraToplam"), iskonto:get_(row,"Iskonto"), kdv10:get_(row,"Kdv10"), kdv20:get_(row,"Kdv20"), genelToplam:gToplam, PdfDriveFileId:get_(row,"PdfDriveFileId"), mailTo:get_(row,"MailTo"), olusturan:get_(row,"Olusturan"), olusturmaTarihi:get_(row,"OlusturmaTarihi") };
-    map[key] = nObj;
-    out.push(nObj);
+    out.push({ teklifId:get_(row,"TeklifID"), teklifNo:teklifNo, tarih:get_(row,"Tarih"), firmaId:get_(row,"FirmaID"), firma:firmaAdi, yetkili:get_(row,"YetkiliAdi"), durum:get_(row,"Durum"), araToplam:get_(row,"AraToplam"), iskonto:get_(row,"Iskonto"), kdv10:get_(row,"Kdv10"), kdv20:get_(row,"Kdv20"), genelToplam:gToplam, PdfDriveFileId:get_(row,"PdfDriveFileId"), mailTo:get_(row,"MailTo"), olusturan:get_(row,"Olusturan"), olusturmaTarihi:get_(row,"OlusturmaTarihi"), asilTeklifNo:get_(row,"AsilTeklifNo") });
   }
   try {
     var shTakip = ss.getSheetByName("TEKLIF_TAKIP");
@@ -1195,4 +1186,98 @@ function api_teklifSatirlariniGetir(teklifNo) {
     }
     return out;
   } catch(e) { return []; }
+}
+
+// ==========================================
+// FİRMA BAZINDA TÜM TEKLİFLER (REVİZE DAHİL)
+// ==========================================
+function api_firmaninTeklifleri(p) {
+  try {
+    p = p || {};
+    var firmaId   = String(p.firmaId   || "").trim();
+    var firmaAdi  = String(p.firmaAdi  || "").trim();
+
+    if (!firmaId && !firmaAdi) return { ok: false, msg: "firmaId veya firmaAdi gerekli", liste: [] };
+
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("TEKLIFLER");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, liste: [] };
+
+    var vals = sh.getDataRange().getDisplayValues();
+    var head = vals[0];
+
+    function normKey_(s) {
+      return String(s || "").trim()
+        .toLocaleUpperCase("tr-TR")
+        .replace(/İ/g,"I").replace(/ı/g,"I")
+        .replace(/\s+/g,"").replace(/[^A-Z0-9]/g,"");
+    }
+
+    var idx = {};
+    for (var c = 0; c < head.length; c++) {
+      var k = normKey_(head[c]);
+      if (k) idx[k] = c;
+    }
+
+    function col_(name) {
+      var k = normKey_(name);
+      return (idx[k] != null) ? idx[k] : -1;
+    }
+
+    function get_(row, name) {
+      var i = col_(name);
+      return i >= 0 ? String(row[i] || "").trim() : "";
+    }
+
+    // Firma eşleştirme: ID veya ad (normalize karşılaştırma)
+    function normFirma_(s) {
+      return String(s || "").toLocaleLowerCase("tr-TR")
+        .replace(/\s+/g, " ").trim();
+    }
+    var nAdi = normFirma_(firmaAdi);
+
+    var out = [];
+    for (var r = 1; r < vals.length; r++) {
+      var row = vals[r];
+      var rFirmaId  = get_(row, "FirmaID");
+      var rFirmaAdi = get_(row, "FirmaAdi");
+      var rTeklifNo = get_(row, "TeklifNo");
+      if (!rTeklifNo && !rFirmaId && !rFirmaAdi) continue;
+
+      var eslesme = false;
+      if (firmaId && rFirmaId === firmaId) eslesme = true;
+      if (!eslesme && nAdi && normFirma_(rFirmaAdi).indexOf(nAdi) >= 0) eslesme = true;
+
+      if (!eslesme) continue;
+
+      out.push({
+        teklifId       : get_(row, "TeklifID"),
+        teklifNo       : rTeklifNo,
+        tarih          : get_(row, "Tarih"),
+        firmaId        : rFirmaId,
+        firmaAdi       : rFirmaAdi,
+        yetkili        : get_(row, "YetkiliAdi"),
+        durum          : get_(row, "Durum"),
+        genelToplam    : get_(row, "GenelToplam"),
+        araToplam      : get_(row, "AraToplam"),
+        iskonto        : get_(row, "Iskonto"),
+        pdfDriveFileId : get_(row, "PdfDriveFileId"),
+        mailTo         : get_(row, "MailTo"),
+        olusturan      : get_(row, "Olusturan"),
+        olusturmaTarihi: get_(row, "OlusturmaTarihi"),
+        asilTeklifNo   : get_(row, "AsilTeklifNo")  // revize ise orijinal no
+      });
+    }
+
+    // Tarih sıralı (yeniden eskiye)
+    function parseTR_(s) {
+      var m = String(s || "").match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+      return m ? new Date(+m[3], +m[2]-1, +m[1]) : new Date(0);
+    }
+    out.sort(function(a, b) { return parseTR_(b.tarih) - parseTR_(a.tarih); });
+
+    return { ok: true, liste: out, toplam: out.length };
+  } catch(e) {
+    return { ok: false, msg: e.message, liste: [] };
+  }
 }
