@@ -29,6 +29,7 @@ function api_finansIslemKaydet(p) {
     api_kasaGuncelle_(String(p.kasa || "NAKİT"), tipKasa, tutar);
     var emoji = tip.indexOf("GELİR") > -1 ? "💰" : "💸";
     chatBildir_(emoji + " *" + tip + "*\nFirma: " + String(p.aciklama || p.firmaAdi || "-") + "\nTutar: " + tutar.toLocaleString("tr-TR") + " TL");
+    logYaz("FINANS_ISLEM", tip + " | " + tutar + " TL | " + String(p.aciklama || p.firmaAdi || "-"), "FINANS", "FIN_" + simdi.getTime(), String(p.aciklama || p.firmaAdi || ""), "");
     return { ok: true };
   } catch(e) { return { ok: false, msg: e.message }; }
 }
@@ -40,34 +41,37 @@ function api_finansIslemKaydet(p) {
 function api_getToplamKasa() {
   try {
     var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-    var shKasa = ss.getSheetByName("FİNANS_KASA");
+    var sh = ss.getSheetByName("FİNANS_CARİ");
+    if (!sh || sh.getLastRow() < 2) return { ok:true, toplam:0, bakiye:0, kasalar:[], ayGelir:0, ayGider:0 };
+
+    var data = sh.getDataRange().getValues();
+    var simdi = new Date(), buAy = simdi.getMonth(), buYil = simdi.getFullYear();
+    var kasaMap = {}, ayGelir = 0, ayGider = 0;
+
+    for (var i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      var tip = String(data[i][2] || "").toUpperCase();
+      var kasa = String(data[i][4] || "NAKİT").trim();
+      var tutar = parseFloat(data[i][6]) || 0;
+      var gelirMi = tip.indexOf("GELİR") > -1 || tip.indexOf("TAHSİLAT") > -1;
+
+      if (!kasaMap[kasa]) kasaMap[kasa] = 0;
+      kasaMap[kasa] += gelirMi ? tutar : -tutar;
+
+      var dt = data[i][1] instanceof Date ? data[i][1] : new Date(data[i][1]);
+      if (!isNaN(dt) && dt.getMonth() === buAy && dt.getFullYear() === buYil) {
+        if (gelirMi) ayGelir += tutar; else ayGider += tutar;
+      }
+    }
+
     var toplam = 0, kasalar = [];
-    if (shKasa) {
-      var kasaData = shKasa.getDataRange().getValues();
-      for (var i=0; i<kasaData.length; i++) {
-        if (!kasaData[i][0]) continue;
-        var bakiye = parseFloat(kasaData[i][3]) || 0;
-        toplam += bakiye;
-        kasalar.push({ kasa: kasaData[i][0], bakiye: bakiye });
-      }
+    for (var k in kasaMap) {
+      var b = Math.round(kasaMap[k] * 100) / 100;
+      toplam += b;
+      kasalar.push({ kasa: k, bakiye: b });
     }
-    var shCari = ss.getSheetByName("FİNANS_CARİ");
-    var ayGelir = 0, ayGider = 0;
-    if (shCari && shCari.getLastRow() > 1) {
-      var cariData = shCari.getDataRange().getValues();
-      var simdi = new Date(), buAy = simdi.getMonth(), buYil = simdi.getFullYear();
-      for (var j=1; j<cariData.length; j++) {
-        if (!cariData[j][0]) continue;
-        var dt = new Date(cariData[j][1]);
-        if (isNaN(dt.getTime())) continue;
-        if (dt.getMonth()!==buAy || dt.getFullYear()!==buYil) continue;
-        var tip = String(cariData[j][2]||"");
-        var t = parseFloat(cariData[j][8]) || 0;
-        if (tip.indexOf("GELİR")>-1 || tip.indexOf("TAHSİLAT")>-1) ayGelir+=t;
-        else ayGider+=t;
-      }
-    }
-    return { ok:true, toplam:toplam, bakiye:toplam, kasalar:kasalar, ayGelir:ayGelir, ayGider:ayGider };
+
+    return { ok:true, toplam:Math.round(toplam*100)/100, bakiye:Math.round(toplam*100)/100, kasalar:kasalar, ayGelir:Math.round(ayGelir*100)/100, ayGider:Math.round(ayGider*100)/100 };
   } catch(e) { return { ok:false, toplam:0, msg:e.message }; }
 }
 
@@ -109,6 +113,7 @@ function api_finansIslemSil(id) {
         var tersTip = (tip.indexOf("GELİR")>-1||tip.indexOf("TAHSİLAT")>-1) ? "GİDER" : "GELİR";
         api_kasaGuncelle_(kasa, tersTip, tutar);
         sh.deleteRow(i+1);
+        logYaz("FINANS_SIL", "Silindi | " + tip + " | " + tutar + " TL | " + kasa, "FINANS", String(id), "", "");
         return { ok:true };
       }
     }
@@ -173,37 +178,6 @@ function api_kdvDurumuHesapla() {
   } catch(e) { return { ok:false, msg:e.message }; }
 }
 
-// ==========================================
-// KAÇAK RADAR
-// ==========================================
-function api_kacakRadariKontrol() {
-  try {
-    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-    var sh = ss.getSheetByName("FİNANS_CARİ");
-    if (!sh) return { ok:false, msg:"FİNANS_CARİ bulunamadı" };
-    var LIMITLER = { "Araç Yakıt & Otoyol":5000, "Ofis ve Mutfak Gideri":3000, "Personel Yemek":4000, "Kırtasiye ve Toner":2000, "Dışarıdan Hizmet / Laboratuvar":10000, "Maaş / Avans Ödemesi":100000, "Vergi ve SGK Ödemeleri":50000, "Diğer":5000 };
-    var simdi=new Date(), buAy=simdi.getMonth(), buYil=simdi.getFullYear();
-    var data = sh.getDataRange().getValues();
-    var toplamlar = {};
-    for (var i=1; i<data.length; i++) {
-      if (String(data[i][2])!=="GİDER") continue;
-      var tarih=data[i][1], dt=(tarih instanceof Date)?tarih:new Date(String(tarih).split(".").reverse().join("-"));
-      if (isNaN(dt)||dt.getMonth()!==buAy||dt.getFullYear()!==buYil) continue;
-      var kat=String(data[i][3]||"Diğer");
-      toplamlar[kat]=(toplamlar[kat]||0)+(parseFloat(data[i][6])||0);
-    }
-    var alarmlar = [];
-    for (var k in toplamlar) {
-      var limit=LIMITLER[k]||5000;
-      if (toplamlar[k]>limit) alarmlar.push({ kategori:k, harcanan:toplamlar[k], limit:limit });
-    }
-    return { ok:true, alarmlar:alarmlar };
-  } catch(e) { return { ok:false, msg:e.message }; }
-}
-
-// ==========================================
-// FİŞ OCR
-// ==========================================
 function api_fisiYapayZekayaOkut(base64Data, mimeType) {
   try {
     var GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
@@ -241,6 +215,7 @@ function api_gelirKaydet(p) {
     ]);
     api_kasaGuncelle_(kasaAdi, "GELİR", tutar);
     chatBildir_("💰 *Gelir Kaydedildi*\nFirma: " + String(p.firmaAdi||"-") + "\nTutar: " + tutar.toLocaleString("tr-TR") + " ₺\nÖdeme: " + odemeTipi + "\nKaydeden: " + String(p.kaydedenEmail||""));
+    logYaz("GELIR_KAYIT", "GELİR | " + tutar + " TL | " + String(p.firmaAdi || "-"), "FINANS", "FIN_" + simdi.getTime(), String(p.firmaAdi || ""), "");
     return { ok: true };
   } catch(e) {
     return { ok: false, msg: e.message };
@@ -416,6 +391,7 @@ function api_giderKaydet(p) {
     }
 
     chatBildir_("💸 *GİDER*\nAçıklama: " + String(p.aciklama||"-") + "\nTutar: " + tutar.toLocaleString("tr-TR") + " ₺\nÖdeme: " + odemeTipi + "\nKaydeden: " + String(p.kaydedenEmail||""));
+    logYaz("GIDER_KAYIT", "GİDER | " + tutar + " TL | " + String(p.aciklama || "-"), "FINANS", "FIN_" + simdi.getTime(), String(p.aciklama || ""), "");
     return { ok: true };
   } catch(e) {
     return { ok: false, msg: e.message };
@@ -472,6 +448,7 @@ function api_cekOdendi(id) {
     return { ok: false, msg: e.message };
   }
 }
+
 function api_karZararHesapla(donem) {
   try {
     donem = donem || "aylik";
@@ -721,3 +698,648 @@ var analiz = json.candidates[0].content.parts[0].text;
     };
   } catch(e) { return { ok: false, msg: e.message }; }
 }
+
+function api_aylikOdemeSkor() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    
+    // 1. Sabit gider toplamı (hedef)
+    var hedef = 0;
+    var kalemler = [];
+    try {
+      var sgSh = ss.getSheetByName("SABIT_GIDER");
+      if (sgSh && sgSh.getLastRow() > 1) {
+        var sgData = sgSh.getDataRange().getValues();
+        for (var s = 1; s < sgData.length; s++) {
+          var aktif = sgData[s][4];
+          if (aktif === true || String(aktif).toUpperCase() === "TRUE") {
+            var t = parseFloat(sgData[s][3]) || 0;
+            hedef += t;
+            kalemler.push({ kategori: String(sgData[s][1] || ""), aciklama: String(sgData[s][2] || ""), tutar: t });
+          }
+        }
+      }
+    } catch(e) {}
+
+    // 2. Bu ay toplam gelir (FİNANS_CARİ'den)
+    var shCari = ss.getSheetByName("FİNANS_CARİ");
+    var ayGelir = 0, ayGider = 0;
+    if (shCari && shCari.getLastRow() > 1) {
+      var data = shCari.getDataRange().getValues();
+      var simdi = new Date(), buAy = simdi.getMonth(), buYil = simdi.getFullYear();
+      for (var i = 1; i < data.length; i++) {
+        if (!data[i][0]) continue;
+        var dt = data[i][1] instanceof Date ? data[i][1] : new Date(data[i][1]);
+        if (isNaN(dt) || dt.getMonth() !== buAy || dt.getFullYear() !== buYil) continue;
+        var tip = String(data[i][2] || "").toUpperCase();
+        var tutar = parseFloat(data[i][6]) || 0;
+        if (tip.indexOf("GELİR") > -1 || tip.indexOf("TAHSİLAT") > -1) ayGelir += tutar;
+        else ayGider += tutar;
+      }
+    }
+
+    // 3. Skor hesapla
+    var skor = hedef > 0 ? Math.min(Math.round((ayGelir / hedef) * 100), 200) : 0;
+    var kalan = hedef - ayGelir;
+
+    return {
+      ok: true,
+      hedef: Math.round(hedef * 100) / 100,
+      ayGelir: Math.round(ayGelir * 100) / 100,
+      ayGider: Math.round(ayGider * 100) / 100,
+      skor: skor,
+      kalan: Math.round(kalan * 100) / 100,
+      kalemler: kalemler
+    };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+
+function api_ceoFinansOzet() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var res = api_kasaListesiGetir();
+    var kasalar = res.kasalar || [];
+    var nakitBakiye = 0, kkartiBakiye = 0, havaleBakiye = 0;
+    var bankaListesi = [];
+
+    kasalar.forEach(function(k) {
+      var ad = String(k.kasa || "").toUpperCase();
+      if (ad === "NAKİT") nakitBakiye = k.bakiye || 0;
+      else if (ad === "KREDİ KARTI") kkartiBakiye = k.bakiye || 0;
+      else {
+        havaleBakiye += k.bakiye || 0;
+        bankaListesi.push({ ad: k.kasa, bakiye: k.bakiye || 0, durum: "AKTİF" });
+      }
+    });
+
+    // Açık alacak — FİRMA_CARİ
+    var toplamFatura = 0, toplamTahsilat = 0, kalanAlacak = 0;
+    try {
+      var shFC = ss.getSheetByName("FİRMA_CARİ");
+      if (shFC && shFC.getLastRow() > 1) {
+        var fcData = shFC.getDataRange().getValues();
+        var firmaBakiye = {};
+        for (var j = 1; j < fcData.length; j++) {
+          var fId = String(fcData[j][2] || "").trim();
+          var tip = String(fcData[j][4] || "").toUpperCase();
+        var borc = parseFloat(fcData[j][5]) || 0;
+        var alacak = parseFloat(fcData[j][6]) || 0;
+        if (tip === "ALACAK" || tip === "FATURA") toplamFatura += alacak;
+        if (tip === "TAHSİLAT") toplamTahsilat += borc;
+        if (fId) firmaBakiye[fId] = parseFloat(fcData[j][7]) || 0;
+        }
+        for (var f in firmaBakiye) {
+          if (firmaBakiye[f] > 0) kalanAlacak += firmaBakiye[f];
+        }
+      }
+    } catch(e2) {}
+
+    var toplamKullanilabilir = nakitBakiye + havaleBakiye;
+
+    return {
+      nakitBakiye: Math.round(nakitBakiye * 100) / 100,
+      bankaAktif: Math.round(havaleBakiye * 100) / 100,
+      bankaBloke: 0,
+      toplamKullanilabilir: Math.round(toplamKullanilabilir * 100) / 100,
+      kkartiBakiye: Math.round(kkartiBakiye * 100) / 100,
+      toplamFatura: Math.round(toplamFatura * 100) / 100,
+      toplamTahsilat: Math.round(toplamTahsilat * 100) / 100,
+      kalanAlacak: Math.round(kalanAlacak * 100) / 100,
+      bankaListesi: bankaListesi
+    };
+  } catch(e) { return {}; }
+}
+
+function api_sonIslemLoglari(limit) {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("LOGS");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, liste: [] };
+    var data = sh.getDataRange().getValues();
+    var liste = [];
+    for (var i = data.length - 1; i >= 1; i--) {
+      var islem = String(data[i][10] || "");
+      if (islem.indexOf("FINANS") < 0 && islem.indexOf("GELIR") < 0 && islem.indexOf("GIDER") < 0 && islem.indexOf("KASA") < 0) continue;
+      liste.push({
+        tarih: String(data[i][9] || ""),
+        kullanici: String(data[i][1] || ""),
+        islem: islem,
+        detay: String(data[i][5] || ""),
+        entity: String(data[i][11] || "")
+      });
+      if (liste.length >= (limit || 20)) break;
+    }
+    return { ok: true, liste: liste };
+  } catch(e) { return { ok: false, liste: [], msg: e.message }; }
+}
+
+function api_gelirKacagiTespit() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("ISG_HIZMETLER");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, liste: [], toplam: 0 };
+
+    var data = sh.getDataRange().getValues();
+    var head = data[0];
+    var bugun = new Date(); bugun.setHours(0,0,0,0);
+    var liste = [];
+
+    for (var i = 1; i < data.length; i++) {
+      var durum = String(data[i][11] || "").toUpperCase(); // L = Durum
+      if (durum !== "AKTİF" && durum !== "AKTIF") continue;
+
+      var firma = String(data[i][1] || ""); // B = FirmaAdi
+      var sozBit = data[i][10]; // K = SozlesmeBit
+      var sonZiyaret = data[i][25]; // Z = SonZiyaret
+      var calisan = parseInt(data[i][3]) || 0; // D = CalisanSayisi
+
+      // Tarihleri parse et
+      var bitTarih = sozBit instanceof Date ? sozBit : new Date(String(sozBit));
+      var ziyaretTarih = sonZiyaret instanceof Date ? sonZiyaret : new Date(String(sonZiyaret));
+
+      // 1970 = hiç girilmemiş
+      var sozBitGecerli = !isNaN(bitTarih) && bitTarih.getFullYear() > 2000;
+      var ziyaretGecerli = !isNaN(ziyaretTarih) && ziyaretTarih.getFullYear() > 2000;
+
+      var sorunlar = [];
+
+      // Sözleşme bitmiş ama hâlâ AKTİF
+      if (sozBitGecerli && bitTarih < bugun) {
+        var gecikmeGun = Math.round((bugun - bitTarih) / (1000*60*60*24));
+        sorunlar.push("Sözleşme " + gecikmeGun + " gün önce bitti");
+      }
+
+      // Sözleşme hiç tanımlanmamış (1970)
+      if (!sozBitGecerli) {
+        sorunlar.push("Sözleşme tarihi tanımsız");
+      }
+
+      // 60 günden fazla ziyaret yok
+      if (ziyaretGecerli) {
+        var ziyaretFark = Math.round((bugun - ziyaretTarih) / (1000*60*60*24));
+        if (ziyaretFark > 60) {
+          sorunlar.push(ziyaretFark + " gündür ziyaret yok");
+        }
+      }
+
+      if (sorunlar.length > 0) {
+        liste.push({
+          firma: firma,
+          calisan: calisan,
+          sozBit: sozBitGecerli ? Utilities.formatDate(bitTarih, "Europe/Istanbul", "dd.MM.yyyy") : "Tanımsız",
+          sonZiyaret: ziyaretGecerli ? Utilities.formatDate(ziyaretTarih, "Europe/Istanbul", "dd.MM.yyyy") : "Yok",
+          sorunlar: sorunlar
+        });
+      }
+    }
+
+    liste.sort(function(a, b) { return b.sorunlar.length - a.sorunlar.length; });
+
+    return { ok: true, liste: liste.slice(0, 50), toplam: liste.length };
+  } catch(e) { return { ok: false, liste: [], toplam: 0, msg: e.message }; }
+}
+
+function api_firmaKarlilikAnalizi() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_CARİ");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, liste: [] };
+
+    var data = sh.getDataRange().getValues();
+    var firmaMap = {};
+
+    for (var i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      var firma = String(data[i][5] || "").trim();
+      if (!firma || firma === "-") continue;
+      var tip = String(data[i][2] || "").toUpperCase();
+      var tutar = parseFloat(data[i][6]) || 0;
+      var gelirMi = tip.indexOf("GELİR") > -1 || tip.indexOf("TAHSİLAT") > -1;
+
+      if (!firmaMap[firma]) firmaMap[firma] = { gelir: 0, gider: 0, islem: 0 };
+      if (gelirMi) firmaMap[firma].gelir += tutar;
+      else firmaMap[firma].gider += tutar;
+      firmaMap[firma].islem++;
+    }
+
+    // ISG ziyaret maliyeti tahmini (personel başına günlük maliyet)
+    var GUNLUK_MALIYET = 1500; // TL — yaklaşık personel+yol+zaman
+    try {
+      var shISG = ss.getSheetByName("ISG_HIZMETLER");
+      if (shISG && shISG.getLastRow() > 1) {
+        var isgData = shISG.getDataRange().getValues();
+        for (var j = 1; j < isgData.length; j++) {
+          var fAdi = String(isgData[j][1] || "").trim();
+          var aylikDk = (parseFloat(isgData[j][6]) || 0) + (parseFloat(isgData[j][7]) || 0) + (parseFloat(isgData[j][8]) || 0);
+          if (!fAdi || aylikDk <= 0) continue;
+          var aylikZiyaret = Math.ceil(aylikDk / 480); // 480dk = 1 tam gün
+          var aylikMaliyet = aylikZiyaret * GUNLUK_MALIYET;
+          if (!firmaMap[fAdi]) firmaMap[fAdi] = { gelir: 0, gider: 0, islem: 0 };
+          firmaMap[fAdi].gider += aylikMaliyet;
+        }
+      }
+    } catch(e2) {}
+
+    var liste = [];
+    for (var f in firmaMap) {
+      var net = firmaMap[f].gelir - firmaMap[f].gider;
+      var marj = firmaMap[f].gelir > 0 ? Math.round((net / firmaMap[f].gelir) * 100) : -100;
+      liste.push({
+        firma: f,
+        gelir: Math.round(firmaMap[f].gelir),
+        gider: Math.round(firmaMap[f].gider),
+        net: Math.round(net),
+        marj: marj,
+        islem: firmaMap[f].islem
+      });
+    }
+
+    liste.sort(function(a, b) { return a.net - b.net; }); // En zararlı üste
+
+    return { ok: true, liste: liste.slice(0, 30) };
+  } catch(e) { return { ok: false, liste: [], msg: e.message }; }
+}
+
+function api_nakitAkisTahmini() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var simdi = new Date();
+
+    // 1. Mevcut toplam kasa
+    var kasaRes = api_kasaListesiGetir();
+    var mevcutKasa = 0;
+    (kasaRes.kasalar || []).forEach(function(k) { mevcutKasa += k.bakiye || 0; });
+
+    // 2. Aylık sabit gider
+    var sabitGider = 0;
+    try {
+      var sgSh = ss.getSheetByName("SABIT_GIDER");
+      if (sgSh && sgSh.getLastRow() > 1) {
+        var sgData = sgSh.getDataRange().getValues();
+        for (var s = 1; s < sgData.length; s++) {
+          var aktif = sgData[s][4];
+          if (aktif === true || String(aktif).toUpperCase() === "TRUE") {
+            sabitGider += parseFloat(sgData[s][3]) || 0;
+          }
+        }
+      }
+    } catch(e) {}
+
+    // 3. Son 3 ay ortalama gelir/gider (FİNANS_CARİ)
+    var shCari = ss.getSheetByName("FİNANS_CARİ");
+    var aylikGelirler = {}, aylikGiderler = {};
+    if (shCari && shCari.getLastRow() > 1) {
+      var data = shCari.getDataRange().getValues();
+      for (var i = 1; i < data.length; i++) {
+        if (!data[i][0]) continue;
+        var dt = data[i][1] instanceof Date ? data[i][1] : new Date(data[i][1]);
+        if (isNaN(dt)) continue;
+        var anahtar = dt.getFullYear() + "-" + (dt.getMonth() + 1);
+        var tip = String(data[i][2] || "").toUpperCase();
+        var tutar = parseFloat(data[i][6]) || 0;
+        var gelirMi = tip.indexOf("GELİR") > -1 || tip.indexOf("TAHSİLAT") > -1;
+        if (gelirMi) aylikGelirler[anahtar] = (aylikGelirler[anahtar] || 0) + tutar;
+        else aylikGiderler[anahtar] = (aylikGiderler[anahtar] || 0) + tutar;
+      }
+    }
+
+    // Son 3 ay ortalaması
+    var son3Ay = [];
+    for (var m = 1; m <= 3; m++) {
+      var d = new Date(simdi.getFullYear(), simdi.getMonth() - m, 1);
+      son3Ay.push(d.getFullYear() + "-" + (d.getMonth() + 1));
+    }
+    var ortGelir = 0, ortGider = 0, aySayisi = 0;
+    son3Ay.forEach(function(a) {
+      if (aylikGelirler[a] || aylikGiderler[a]) {
+        ortGelir += aylikGelirler[a] || 0;
+        ortGider += aylikGiderler[a] || 0;
+        aySayisi++;
+      }
+    });
+    if (aySayisi > 0) { ortGelir = ortGelir / aySayisi; ortGider = ortGider / aySayisi; }
+
+    // 4. Bekleyen çekler (30/60/90 gün içinde vadesi gelen)
+    var cek30 = 0, cek60 = 0, cek90 = 0;
+    try {
+      var shCek = ss.getSheetByName("CEKLER_SENETLER");
+      if (shCek && shCek.getLastRow() > 1) {
+        var cekData = shCek.getDataRange().getValues();
+        for (var c = 1; c < cekData.length; c++) {
+          if (String(cekData[c][6] || "").toUpperCase() === "ODENDİ") continue;
+          var vade = cekData[c][2] instanceof Date ? cekData[c][2] : new Date(String(cekData[c][2]).split(".").reverse().join("-"));
+          if (isNaN(vade)) continue;
+          var farkGun = Math.round((vade - simdi) / (1000*60*60*24));
+          var ct = parseFloat(cekData[c][4]) || 0;
+          if (farkGun >= 0 && farkGun <= 30) cek30 += ct;
+          else if (farkGun > 30 && farkGun <= 60) cek60 += ct;
+          else if (farkGun > 60 && farkGun <= 90) cek90 += ct;
+        }
+      }
+    } catch(e3) {}
+
+    // 5. Tahmin hesapla
+    var aylikNet = ortGelir - ortGider;
+    var gun30 = mevcutKasa + aylikNet - cek30 - sabitGider;
+    var gun60 = gun30 + aylikNet - cek60 - sabitGider;
+    var gun90 = gun60 + aylikNet - cek90 - sabitGider;
+
+    return {
+      ok: true,
+      mevcutKasa: Math.round(mevcutKasa),
+      sabitGider: Math.round(sabitGider),
+      ortGelir: Math.round(ortGelir),
+      ortGider: Math.round(ortGider),
+      aylikNet: Math.round(aylikNet),
+      cekler: { gun30: Math.round(cek30), gun60: Math.round(cek60), gun90: Math.round(cek90) },
+      tahmin: { gun30: Math.round(gun30), gun60: Math.round(gun60), gun90: Math.round(gun90) }
+    };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+
+function api_sozlesmeYenilemeUyari() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("ISG_HIZMETLER");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, yaklasan: [], biten: [] };
+
+    var data = sh.getDataRange().getValues();
+    var bugun = new Date(); bugun.setHours(0,0,0,0);
+    var yaklasan = [], biten = [];
+
+    for (var i = 1; i < data.length; i++) {
+      var durum = String(data[i][11] || "").toUpperCase();
+      if (durum !== "AKTİF" && durum !== "AKTIF") continue;
+
+      var firma = String(data[i][1] || "");
+      var calisan = parseInt(data[i][3]) || 0;
+      var sozBit = data[i][10];
+      var bitTarih = sozBit instanceof Date ? sozBit : new Date(String(sozBit));
+      if (isNaN(bitTarih) || bitTarih.getFullYear() < 2001) continue;
+
+      var kalanGun = Math.round((bitTarih - bugun) / (1000*60*60*24));
+      var bitStr = Utilities.formatDate(bitTarih, "Europe/Istanbul", "dd.MM.yyyy");
+
+      if (kalanGun < 0) {
+        biten.push({ firma: firma, calisan: calisan, bitTarih: bitStr, gecikme: Math.abs(kalanGun) });
+      } else if (kalanGun <= 60) {
+        yaklasan.push({ firma: firma, calisan: calisan, bitTarih: bitStr, kalanGun: kalanGun });
+      }
+    }
+
+    yaklasan.sort(function(a, b) { return a.kalanGun - b.kalanGun; });
+    biten.sort(function(a, b) { return b.gecikme - a.gecikme; });
+
+    return { ok: true, yaklasan: yaklasan.slice(0, 20), biten: biten.slice(0, 20), toplamYaklasan: yaklasan.length, toplamBiten: biten.length };
+  } catch(e) { return { ok: false, yaklasan: [], biten: [], msg: e.message }; }
+}
+function api_parasutCariGuncelle() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var shFatura = ss.getSheetByName("PARASUT_FATURALAR");
+    if (!shFatura || shFatura.getLastRow() < 2) return { ok: true, msg: "Fatura yok", eklenen: 0 };
+
+    var shCari = ss.getSheetByName("FİRMA_CARİ");
+    if (!shCari) return { ok: false, msg: "FİRMA_CARİ bulunamadı" };
+
+    // Mevcut cari ID'leri topla
+    var cariData = shCari.getDataRange().getValues();
+    var mevcutIdler = {};
+    for (var c = 1; c < cariData.length; c++) {
+      mevcutIdler[String(cariData[c][0] || "")] = true;
+    }
+
+    // Firma adı → ID eşleştirme
+    var firmaMap = {};
+    try {
+      var shFirma = ss.getSheetByName("FIRMALAR");
+      if (shFirma && shFirma.getLastRow() > 1) {
+        var fData = shFirma.getDataRange().getValues();
+        for (var fi = 1; fi < fData.length; fi++) {
+          var fAdi = String(fData[fi][1] || "").trim().toUpperCase();
+          if (fAdi) firmaMap[fAdi] = String(fData[fi][0] || "");
+        }
+      }
+    } catch(ef) {}
+
+    // Firma bakiyeleri hesapla (mevcut cariden)
+    var firmaBakiye = {};
+    for (var cb = 1; cb < cariData.length; cb++) {
+      var fId = String(cariData[cb][2] || "").trim();
+      if (fId) firmaBakiye[fId] = parseFloat(cariData[cb][8]) || 0;
+    }
+
+    var faturaData = shFatura.getDataRange().getValues();
+    var yeniSatirlar = [];
+    var eklenen = 0;
+    var simdi = Utilities.formatDate(new Date(), "Europe/Istanbul", "dd.MM.yyyy HH:mm");
+
+    for (var i = 1; i < faturaData.length; i++) {
+      var parasutId = String(faturaData[i][0] || "");
+      var firmaAdi = String(faturaData[i][3] || "").trim();
+      var faturaNo = String(faturaData[i][4] || "");
+      var faturaTarihi = String(faturaData[i][5] || "");
+      var brutTutar = parseFloat(faturaData[i][9]) || 0;
+
+      if (!firmaAdi || brutTutar <= 0) continue;
+
+      var cariId = "PARASUT_" + parasutId;
+
+      // Zaten eklenmişse atla
+      if (mevcutIdler[cariId]) continue;
+
+      var firmaId = firmaMap[firmaAdi.toUpperCase()] || "";
+
+      // Mevcut bakiye + yeni fatura tutarı
+      var mevcutBak = firmaBakiye[firmaId] || 0;
+      var yeniBakiye = mevcutBak + brutTutar;
+      firmaBakiye[firmaId] = yeniBakiye;
+
+      yeniSatirlar.push([
+        cariId,
+        faturaTarihi || simdi,
+        firmaId,
+        firmaAdi,
+        "ALACAK",
+        "Fatura: " + faturaNo,
+        0,
+        brutTutar,
+        yeniBakiye,
+        faturaNo,
+        "PARASUT_SYNC",
+        "AÇIK"
+      ]);
+      mevcutIdler[cariId] = true;
+      eklenen++;
+    }
+
+    // Toplu yazma
+    if (yeniSatirlar.length > 0) {
+      shCari.getRange(shCari.getLastRow() + 1, 1, yeniSatirlar.length, 12).setValues(yeniSatirlar);
+    }
+
+    Logger.log("Parasut Cari: " + eklenen + " fatura eklendi (sadece alacak, ödeme yok)");
+    return { ok: true, msg: eklenen + " fatura cariye eklendi", eklenen: eklenen };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+
+function api_kasaMutabakat() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_CARİ");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, kasalar: [], bugunIslem: 0 };
+
+    var data = sh.getDataRange().getValues();
+    var bugun = new Date();
+    var bugunStr = ('0' + bugun.getDate()).slice(-2) + '.' + ('0' + (bugun.getMonth() + 1)).slice(-2) + '.' + bugun.getFullYear();
+    var kasaMap = {}, bugunGelir = {}, bugunGider = {}, bugunIslem = 0;
+
+    for (var i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      var tip = String(data[i][2] || "").toUpperCase();
+      var kasa = String(data[i][4] || "NAKİT").trim();
+      var tutar = parseFloat(data[i][6]) || 0;
+      var gelirMi = tip.indexOf("GELİR") > -1 || tip.indexOf("TAHSİLAT") > -1;
+
+      if (!kasaMap[kasa]) kasaMap[kasa] = 0;
+      kasaMap[kasa] += gelirMi ? tutar : -tutar;
+
+      // Bugünkü işlemler
+      var dt = data[i][1] instanceof Date ? data[i][1] : new Date(data[i][1]);
+      if (!isNaN(dt) && dt.getDate() === bugun.getDate() && dt.getMonth() === bugun.getMonth() && dt.getFullYear() === bugun.getFullYear()) {
+        if (!bugunGelir[kasa]) bugunGelir[kasa] = 0;
+        if (!bugunGider[kasa]) bugunGider[kasa] = 0;
+        if (gelirMi) bugunGelir[kasa] += tutar;
+        else bugunGider[kasa] += tutar;
+        bugunIslem++;
+      }
+    }
+
+    var kasalar = [];
+    for (var k in kasaMap) {
+      kasalar.push({
+        kasa: k,
+        sistemBakiye: Math.round(kasaMap[k] * 100) / 100,
+        bugunGelir: Math.round((bugunGelir[k] || 0) * 100) / 100,
+        bugunGider: Math.round((bugunGider[k] || 0) * 100) / 100,
+        bugunNet: Math.round(((bugunGelir[k] || 0) - (bugunGider[k] || 0)) * 100) / 100
+      });
+    }
+
+    return { ok: true, tarih: bugunStr, kasalar: kasalar, bugunIslem: bugunIslem };
+  } catch(e) { return { ok: false, msg: e.message }; }
+}
+
+function api_aylikTrend() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var sh = ss.getSheetByName("FİNANS_CARİ");
+    if (!sh || sh.getLastRow() < 2) return { ok: true, aylar: [] };
+
+    var data = sh.getDataRange().getValues();
+    var simdi = new Date();
+    var ayMap = {};
+
+    // Son 6 ay için boş hazırla
+    for (var m = 5; m >= 0; m--) {
+      var d = new Date(simdi.getFullYear(), simdi.getMonth() - m, 1);
+      var anahtar = d.getFullYear() + "-" + ('0' + (d.getMonth() + 1)).slice(-2);
+      var ayAdi = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"][d.getMonth()] + " " + d.getFullYear();
+      ayMap[anahtar] = { ay: ayAdi, gelir: 0, gider: 0 };
+    }
+
+    for (var i = 1; i < data.length; i++) {
+      if (!data[i][0]) continue;
+      var dt = data[i][1] instanceof Date ? data[i][1] : new Date(data[i][1]);
+      if (isNaN(dt)) continue;
+      var anahtar2 = dt.getFullYear() + "-" + ('0' + (dt.getMonth() + 1)).slice(-2);
+      if (!ayMap[anahtar2]) continue;
+
+      var tip = String(data[i][2] || "").toUpperCase();
+      var tutar = parseFloat(data[i][6]) || 0;
+      if (tip.indexOf("GELİR") > -1 || tip.indexOf("TAHSİLAT") > -1) ayMap[anahtar2].gelir += tutar;
+      else ayMap[anahtar2].gider += tutar;
+    }
+
+    var aylar = [];
+    var anahtarlar = Object.keys(ayMap).sort();
+    anahtarlar.forEach(function(k) {
+      var a = ayMap[k];
+      a.net = Math.round((a.gelir - a.gider) * 100) / 100;
+      a.gelir = Math.round(a.gelir * 100) / 100;
+      a.gider = Math.round(a.gider * 100) / 100;
+      aylar.push(a);
+    });
+
+    return { ok: true, aylar: aylar };
+  } catch(e) { return { ok: false, aylar: [], msg: e.message }; }
+}
+
+function api_isgUzmanPerformans() {
+  try {
+    var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
+    var shPlan = ss.getSheetByName("ISG_PLANLAR");
+    var simdi = new Date(), buAy = simdi.getMonth(), buYil = simdi.getFullYear();
+    var personelMap = {};
+
+    // ISG planlarından ziyaret verileri
+    if (shPlan && shPlan.getLastRow() > 1) {
+      var data = shPlan.getDataRange().getValues();
+      for (var i = 1; i < data.length; i++) {
+        var dt = data[i][1] instanceof Date ? data[i][1] : new Date(data[i][1]);
+        if (isNaN(dt) || dt.getMonth() !== buAy || dt.getFullYear() !== buYil) continue;
+        var email = String(data[i][4] || "").toLowerCase().trim();
+        var durum = String(data[i][8] || "").toUpperCase();
+        var dk = parseFloat(data[i][7]) || 0;
+        if (!email) continue;
+        if (!personelMap[email]) personelMap[email] = { ad: String(data[i][5] || email.split("@")[0]), ziyaret: 0, tamamlanan: 0, toplam: 0, dakika: 0, firmalar: {} };
+        personelMap[email].toplam++;
+        personelMap[email].dakika += dk;
+        var firma = String(data[i][3] || "");
+        if (firma) personelMap[email].firmalar[firma] = true;
+        if (durum === "TAMAMLANDI") {
+          personelMap[email].tamamlanan++;
+          personelMap[email].ziyaret++;
+        }
+      }
+    }
+
+    // ISG ziyaret kayıtlarından
+    var shZiyaret = ss.getSheetByName("ISG_ZIYARETLER");
+    if (shZiyaret && shZiyaret.getLastRow() > 1) {
+      var zData = shZiyaret.getDataRange().getValues();
+      for (var j = 1; j < zData.length; j++) {
+        var dt2 = zData[j][1] instanceof Date ? zData[j][1] : new Date(zData[j][1]);
+        if (isNaN(dt2) || dt2.getMonth() !== buAy || dt2.getFullYear() !== buYil) continue;
+        var email2 = String(zData[j][3] || "").toLowerCase().trim();
+        var dk2 = parseFloat(zData[j][6]) || 0;
+        var firma2 = String(zData[j][2] || "");
+        if (!email2) continue;
+        if (!personelMap[email2]) personelMap[email2] = { ad: email2.split("@")[0], ziyaret: 0, tamamlanan: 0, toplam: 0, dakika: 0, firmalar: {} };
+        personelMap[email2].ziyaret++;
+        personelMap[email2].dakika += dk2;
+        if (firma2) personelMap[email2].firmalar[firma2] = true;
+      }
+    }
+
+    var liste = [];
+    for (var e in personelMap) {
+      var p = personelMap[e];
+      var basariOrani = p.toplam > 0 ? Math.round((p.tamamlanan / p.toplam) * 100) : 0;
+      liste.push({
+        email: e,
+        ad: p.ad,
+        ziyaret: p.ziyaret,
+        tamamlanan: p.tamamlanan,
+        toplam: p.toplam,
+        basariOrani: basariOrani,
+        dakika: Math.round(p.dakika),
+        firmaSayisi: Object.keys(p.firmalar).length
+      });
+    }
+    liste.sort(function(a, b) { return b.ziyaret - a.ziyaret; });
+
+    return { ok: true, liste: liste };
+  } catch(e) { return { ok: false, liste: [], msg: e.message }; }
+}
+
