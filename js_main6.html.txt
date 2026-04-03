@@ -1,0 +1,1609 @@
+<script>
+function ceoHaftaOzetiYukle() {
+  var modal = document.getElementById("ceoOzetModal");
+  var icerik = document.getElementById("ceoOzetIcerik");
+  modal.style.display = "flex";
+  icerik.innerHTML = "<div style='color:#7c3aed;text-align:center;padding:40px;font-weight:700;'>Avrupa Bir AI analiz ediyor...<\/div>";
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.ok) {
+        icerik.innerHTML = "<div style='color:#ef4444;padding:20px;'>Hata: " + (r ? r.msg : "Bilinmiyor") + "<\/div>";
+        return;
+      }
+      var html = "<div style='background:#111827;border-radius:12px;padding:20px;margin-bottom:20px;border-left:4px solid #7c3aed;'>";
+      html += "<div style='color:#e2e8f0;font-size:15px;line-height:1.7;'>" + r.ozet + "<\/div>";
+      html += "<\/div>";
+      html += "<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;'>";
+      html += "<div style='background:#111827;border-radius:10px;padding:16px;text-align:center;'><div style='font-size:28px;font-weight:700;color:#3b82f6;'>" + r.yeniFirma + "<\/div><div style='font-size:12px;color:#64748b;margin-top:4px;'>Yeni Firma<\/div><\/div>";
+      html += "<div style='background:#111827;border-radius:10px;padding:16px;text-align:center;'><div style='font-size:28px;font-weight:700;color:#10b981;'>" + r.teklifSayisi + "<\/div><div style='font-size:12px;color:#64748b;margin-top:4px;'>Teklif Gönderildi<\/div><\/div>";
+      html += "<div style='background:#111827;border-radius:10px;padding:16px;text-align:center;'><div style='font-size:28px;font-weight:700;color:#f59e0b;'>" + r.ziyaretSayisi + "<\/div><div style='font-size:12px;color:#64748b;margin-top:4px;'>Saha Ziyareti<\/div><\/div>";
+      html += "<div style='background:#111827;border-radius:10px;padding:16px;text-align:center;'><div style='font-size:28px;font-weight:700;color:#8b5cf6;'>" + r.bekleyenSayisi + "<\/div><div style='font-size:12px;color:#64748b;margin-top:4px;'>Bekleyen Teklif<\/div><\/div>";
+      html += "<div style='background:#111827;border-radius:10px;padding:16px;text-align:center;'><div style='font-size:28px;font-weight:700;color:#ef4444;'>" + r.riskliSayi + "<\/div><div style='font-size:12px;color:#64748b;margin-top:4px;'>Risk Altında<\/div><\/div>";
+      html += "<div style='background:#111827;border-radius:10px;padding:16px;text-align:center;'><div style='font-size:20px;font-weight:700;color:#10b981;'>" + Number(r.teklifTutar).toLocaleString("tr-TR") + " ₺<\/div><div style='font-size:12px;color:#64748b;margin-top:4px;'>Teklif Tutarı<\/div><\/div>";
+      html += "<\/div>";
+      icerik.innerHTML = html;
+    })
+    .withFailureHandler(function(err) {
+      icerik.innerHTML = "<div style='color:#ef4444;padding:20px;'>Bağlantı Hatası: " + err.message + "<\/div>";
+    })
+    .api_ceoHaftaOzeti();
+}
+
+
+document.addEventListener("DOMContentLoaded", function() {
+  var btn = document.getElementById("btnCeoOzet");
+  if (btn) {
+    btn.addEventListener("click", function() {
+      alert("Tıklandı");
+    });
+  }
+});
+
+function loadCEODashboard() {
+  var div = document.getElementById('ceoDashboardIcin');
+  if (!div) return;
+  div.innerHTML = '<div style="padding:40px; text-align:center; color:#2563eb; font-weight:bold; font-size:18px;">CEO Komuta Merkezi Yükleniyor... ⏳<\/div>';
+
+  google.script.run
+    .withSuccessHandler(function(html) {
+      div.innerHTML = html;
+      setTimeout(function() {
+        var btn = document.getElementById("btnCeoOzet");
+        if (btn) btn.addEventListener("click", function() { ceoHaftaOzetiYukle(); });
+      }, 500);
+
+      google.script.run
+        .withSuccessHandler(function(data) {
+          if (!data) { console.log("data yok"); return; }
+          var set = function(id,v){var e=document.getElementById(id);if(e)e.textContent=v;};
+          var esc2 = function(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');};
+
+          try { if (data.kasa && data.kasa.ok) { set('kasaVal', Number(data.kasa.toplam||0).toLocaleString('tr-TR') + ' TL'); set('kasaTrend', (data.kasa.kasalar||[]).length + ' kasa'); } } catch(e){}
+
+          try {
+            if (data.finansOzet) {
+              var fo = data.finansOzet;
+              set('ceoNakitBakiye', Number(fo.nakitBakiye||0).toLocaleString('tr-TR') + ' TL');
+              set('ceoBankaAktif', Number(fo.bankaAktif||0).toLocaleString('tr-TR') + ' TL');
+              set('ceoBankaBloke', Number(fo.bankaBloke||0).toLocaleString('tr-TR') + ' TL');
+              set('ceoToplamKullanilabilir', Number(fo.toplamKullanilabilir||0).toLocaleString('tr-TR') + ' TL');
+              set('ceoKkartiPOS', Number(fo.kkartiBakiye||0).toLocaleString('tr-TR') + ' TL');
+              set('toplamFaturaVal', Number(fo.toplamFatura||0).toLocaleString('tr-TR') + ' TL');
+              set('toplamTahsilatVal', Number(fo.toplamTahsilat||0).toLocaleString('tr-TR') + ' TL');
+              set('kalanAlacakVal', Number(fo.kalanAlacak||0).toLocaleString('tr-TR') + ' TL');
+              var blEl = document.getElementById('ceoBankaListesi');
+              if (blEl && (fo.bankaListesi||[]).length) {
+                blEl.innerHTML = fo.bankaListesi.map(function(b){ var bloke=b.durum==='BLOKE'; return '<div style="display:flex;justify-content:space-between;padding:7px 10px;border-radius:8px;background:'+(bloke?'rgba(239,68,68,0.08)':'var(--s2)')+';border:1px solid '+(bloke?'rgba(239,68,68,0.2)':'var(--border)')+';margin-bottom:5px;"><div style="font-size:11px;font-weight:700;color:'+(bloke?'#f87171':'#fff')+';">'+(bloke?'BLOKE: ':'')+b.ad+'<\/div><div style="font-size:12px;font-weight:900;color:'+(bloke?'#f87171':'#10b981')+';">'+Number(b.bakiye||0).toLocaleString('tr-TR')+' TL<\/div><\/div>'; }).join('');
+              } else if (blEl) blEl.innerHTML = '<div class="empty">Kasa verisi yok<\/div>';
+            }
+          } catch(e){}
+          try {
+            if (data.buAyYeniFirma !== undefined) {
+              set('buAyYeniVal', data.buAyYeniFirma);
+              set('buAyYeniAlt', data.buAyYeniFirma > 0 ? 'Buyume var' : 'Yeni kayit yok');
+            }
+            if (data.isgFirmaSayisi !== undefined) set('isgFirmaVal', data.isgFirmaSayisi);
+            if (data.acikTeklifTutar !== undefined) set('acikTeklifVal', Number(data.acikTeklifTutar).toLocaleString('tr-TR') + ' TL');
+            if (data.bekleyenTalep !== undefined) {
+              var bEl = document.getElementById('bekleyenTalepVal');
+              if (bEl) { bEl.textContent = data.bekleyenTalep; bEl.style.color = data.bekleyenTalep > 0 ? '#ef4444' : '#10b981'; }
+              set('bekleyenTalepAlt', data.bekleyenTalep > 0 ? 'Onay gerekiyor' : 'Temiz');
+            }
+          } catch(e){}
+          try { if (data.teklifOzet) { set('teklifToplam', data.teklifOzet.toplam); set('teklifAcik', data.teklifOzet.bekliyor + ' bekliyor'); } } catch(e){}
+          try { if (data.firmaOzet) { set('firmaAktif', data.firmaOzet.aktif); set('firmaYeni', data.firmaOzet.toplam + ' toplam'); set('firmaToplam', data.firmaOzet.toplam + ' firma'); set('firmaAktifS', data.firmaOzet.aktif); set('firmaPasif', data.firmaOzet.pasif); } } catch(e){}
+          try { if (data.personelOzet) { set('personelAktif', data.personelOzet.aktif); set('personelIzin', data.personelOzet.aktif + ' aktif'); } } catch(e){}
+
+          try {
+            if (data.uyarilar && data.uyarilar.length) {
+              set('uyariSayi', data.uyarilar.length);
+              var kritik = data.uyarilar.filter(function(u){ return String(u.tip||'').toUpperCase().indexOf('ALARM')>-1; }).length;
+              set('uyariCritical', kritik + ' kritik');
+              var uyEl = document.getElementById('uyariListesi');
+              if (uyEl) uyEl.innerHTML = data.uyarilar.slice(0,10).map(function(u){ return '<div class="alarm alarm-w"><div class="alarm-body"><div class="alarm-title">'+esc2(u.baslik||u.tip||'')+'<\/div><div class="alarm-text">'+esc2(String(u.mesaj||'').substring(0,100))+'<\/div><\/div><div class="alarm-time">'+esc2(u.tarih||'')+'<\/div><\/div>'; }).join('');
+            }
+          } catch(e){}
+
+          try {
+            if (data.finans && data.finans.length) {
+              var gelir=0, gider=0;
+              data.finans.forEach(function(x){ var t=Number(x.tutar||0); if(String(x.tip||'').toUpperCase().indexOf('GEL')>-1) gelir+=t; else gider+=t; });
+              set('gelirVal', gelir.toLocaleString('tr-TR') + ' TL');
+              set('giderVal', gider.toLocaleString('tr-TR') + ' TL');
+              set('netVal', (gelir-gider).toLocaleString('tr-TR') + ' TL');
+            }
+          } catch(e){}
+
+          try {
+            var saha = data.saha || {};
+            set('sahadaSayi', (saha.sahada||[]).length + ' sahada');
+            set('ofisteSayi', (saha.ofiste||[]).length + ' ofiste');
+            set('izinliSayi', (saha.izinli||[]).length + ' izinli');
+            var isgEl = document.getElementById('isgPlanListesi');
+            if (isgEl) isgEl.innerHTML = (saha.isgPlanlar||[]).length ? saha.isgPlanlar.map(function(p){ return '<div class="list-item"><div class="li-info"><div class="li-name">'+esc2(p.firma)+'<\/div><div class="li-sub">'+esc2(p.personel||'')+'<\/div><\/div><div class="li-right"><span class="tag tag-blue">'+esc2(p.durum||'')+'<\/span><\/div><\/div>'; }).join('') : '<div class="empty">Bugün plan yok<\/div>';
+            var ziyEl = document.getElementById('ziyaretListesi');
+            var ziyBadge = document.getElementById('ziyaretSayiBadge');
+            if (ziyBadge) ziyBadge.textContent = (saha.ziyaretler||[]).length + ' ziyaret';
+            if (ziyEl) ziyEl.innerHTML = (saha.ziyaretler||[]).length ? saha.ziyaretler.map(function(z){ return '<div class="list-item"><div class="li-info"><div class="li-name">'+esc2(z.firma)+'<\/div><div class="li-sub">'+esc2(z.personel||'')+'<\/div><\/div><\/div>'; }).join('') : '<div class="empty">Ziyaret yok<\/div>';
+            var mobEl = document.getElementById('mobilBugunListesi');
+            var mobBadge = document.getElementById('mobilBugunSayiBadge');
+            if (mobBadge) mobBadge.textContent = (saha.mobilBugun||[]).length + ' operasyon';
+            if (mobEl) mobEl.innerHTML = (saha.mobilBugun||[]).length ? saha.mobilBugun.map(function(m){ return '<div class="list-item"><div class="li-info"><div class="li-name">'+esc2(m.firma)+'<\/div><\/div><div class="li-right"><div class="li-val">'+Number(m.ciro||0).toLocaleString('tr-TR')+' TL<\/div><\/div><\/div>'; }).join('') : '<div class="empty">Operasyon yok<\/div>';
+          } catch(e){}
+
+          try {
+            var soz = data.sozlesme || {};
+            set('sozYaklaşanSayi', (soz.yaklasanlar||[]).length + ' adet');
+            set('sozBitenSayi', (soz.bitenler||[]).length + ' adet');
+            var ykEl = document.getElementById('sozYaklasanListesi');
+            if (ykEl) ykEl.innerHTML = (soz.yaklasanlar||[]).length ? soz.yaklasanlar.map(function(f){ var r=f.kalanGun<=7?'#ef4444':f.kalanGun<=30?'#f59e0b':'#10b981'; return '<div class="list-item"><div class="li-info"><div class="li-name">'+esc2(f.firma)+'<\/div><div class="li-sub">'+esc2(f.bitTarih)+'<\/div><\/div><div class="li-right"><div class="li-val" style="color:'+r+'">'+f.kalanGun+' gün<\/div><\/div><\/div>'; }).join('') : '<div class="empty">Yaklaşan yok<\/div>';
+            var btEl = document.getElementById('sozBitenListesi');
+            if (btEl) btEl.innerHTML = (soz.bitenler||[]).length ? soz.bitenler.map(function(f){ return '<div class="list-item"><div class="li-info"><div class="li-name" style="color:#ef4444;">'+esc2(f.firma)+'<\/div><div class="li-sub">'+esc2(f.bitTarih)+' doldu<\/div><\/div><\/div>'; }).join('') : '<div class="empty">Süresi dolan yok<\/div>';
+          } catch(e){}
+
+          try {
+            var ciro = data.ciro || {};
+            var cEl = document.getElementById('firmaCiroListesi');
+            if (cEl && (ciro.liste||[]).length) {
+              set('ciroToplamSayi', ciro.liste.length + ' firma');
+              var top = ciro.liste.reduce(function(s,f){ return s+f.ciro; }, 0);
+              cEl.innerHTML = ciro.liste.map(function(f,i){ var y=top>0?Math.round(f.ciro/top*100):0; var r=i===0?'#f59e0b':i===1?'#94a3b8':'#3b82f6'; return '<div class="list-item"><div class="li-info"><div class="li-name">'+esc2(f.firma)+'<\/div><\/div><div class="li-right"><div class="li-val" style="color:'+r+'">'+f.ciro.toLocaleString('tr-TR')+' TL<\/div><div class="li-date">%'+y+'<\/div><\/div><\/div>'; }).join('');
+            } else if (cEl) cEl.innerHTML = '<div class="empty">Ciro verisi yok<\/div>';
+          } catch(e){}
+
+          try {
+            var terk = data.terk || {};
+            var tEl = document.getElementById('terkFirmaListesi');
+            if (tEl) { set('terkToplamSayi', (terk.toplam||0) + ' firma'); tEl.innerHTML = (terk.liste||[]).length ? terk.liste.map(function(f){ return '<div class="list-item"><div class="li-info"><div class="li-name" style="color:#f87171;">'+esc2(f.firma)+'<\/div><div class="li-sub">'+esc2(f.sorumlu||'')+'<\/div><\/div><\/div>'; }).join('') : '<div class="empty">Pasif firma yok<\/div>'; }
+          } catch(e){}
+
+          try {
+            var mem = data.memnuniyet || {};
+            var mEl = document.getElementById('memnuniyetListesi');
+            if (mEl) { set('memnuniyetOrtalama', 'Ort: '+(mem.ortalama||0)+'/5'); mEl.innerHTML = (mem.liste||[]).length ? mem.liste.map(function(f){ var r=f.ortalama>=4?'#10b981':f.ortalama>=3?'#f59e0b':'#ef4444'; return '<div class="list-item"><div class="li-info"><div class="li-name">'+esc2(f.firma)+'<\/div><\/div><div class="li-right"><div class="li-val" style="color:'+r+'">'+f.ortalama+'/5<\/div><\/div><\/div>'; }).join('') : '<div class="empty">Kayıt yok<\/div>'; }
+          } catch(e){}
+
+          google.script.run
+            .withSuccessHandler(function(data2) {
+              if (!data2) return;
+              var set2 = function(id,v){var e=document.getElementById(id);if(e)e.textContent=v;};
+              if (data2.firmaOzet) { set2('firmaAktif', data2.firmaOzet.aktif||data2.firmaOzet.toplam); set2('firmaToplam', data2.firmaOzet.toplam + ' firma'); set2('firmaAktifS', data2.firmaOzet.aktif||data2.firmaOzet.toplam); }
+              if (data2.teklifOzet) { set2('teklifToplam', data2.teklifOzet.toplam); set2('teklifAcik', data2.teklifOzet.bekliyor + ' bekliyor'); }
+              if (data2.personelOzet) { set2('personelAktif', data2.personelOzet.aktif); set2('personelIzin', data2.personelOzet.aktif + ' aktif'); }
+            })
+            .withFailureHandler(function(){})
+            .getCEODashboardData2();
+
+        })
+        .withFailureHandler(function(err){ console.log('Veri hatası:', err.message); })
+        .getCEODashboardData();
+    })
+    .withFailureHandler(function(err){
+      div.innerHTML = '<p style="color:red;padding:20px;">Hata: '+err.message+'<\/p>';
+    })
+    .getCEODashboardHTML();
+    // Kar/Zarar & Radar otomatik yükle
+ceoKarZararYukle('aylik');
+}
+
+function ceoKarZararYukle(donem) {
+  ['ay','yil'].forEach(function(k){
+    var btn = document.getElementById('ceoBtn_'+k);
+    if(btn) btn.className = 'ceo-donem-btn';
+  });
+  var aktifBtn = document.getElementById('ceoBtn_'+(donem==='aylik'?'ay':'yil'));
+  if(aktifBtn) aktifBtn.className = 'ceo-donem-btn aktif';
+  var div = document.getElementById('ceoKarZararDiv');
+  if(div) div.innerHTML = '<div class="empty">Hesaplanıyor...<\/div>';
+
+  google.script.run
+    .withSuccessHandler(function(d) {
+      var div = document.getElementById('ceoKarZararDiv');
+      if(!div) return;
+      if (!d || !d.ok) { div.innerHTML = '<div class="empty">Veri yok.<\/div>'; return; }
+      var degisimRenk = d.degisim >= 0 ? '#34d399' : '#f87171';
+      var degisimIkon = d.degisim >= 0 ? '▲' : '▼';
+      div.innerHTML =
+        '<div class="sgrid">' +
+        '<div class="sitem"><div class="sv" style="color:#34d399">₺' + Math.round(d.gelir).toLocaleString('tr-TR') + '<\/div><div class="sl">Gelir<\/div><\/div>' +
+        '<div class="sitem"><div class="sv" style="color:#f87171">₺' + Math.round(d.gider).toLocaleString('tr-TR') + '<\/div><div class="sl">Gider<\/div><\/div>' +
+        '<\/div>' +
+        '<div style="margin-top:10px;padding:10px;background:var(--s2);border-radius:8px;border:1px solid var(--border);">' +
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:4px;">NET KAR/ZARAR<\/div>' +
+        '<div style="font-size:22px;font-weight:800;color:' + (d.net>=0?'#34d399':'#f87171') + '">₺' + Math.round(d.net).toLocaleString('tr-TR') + '<\/div>' +
+        '<div style="font-size:11px;color:' + degisimRenk + ';margin-top:4px;">' + degisimIkon + ' %' + Math.abs(d.degisim) + ' önceki döneme göre<\/div>' +
+        '<\/div>';
+    })
+    .withFailureHandler(function(){ var d=document.getElementById('ceoKarZararDiv'); if(d) d.innerHTML='<div class="empty">Hata.<\/div>'; })
+    .api_karZararHesapla(donem);
+}
+
+function ceoRadarYukle() {
+  var div = document.getElementById('ceoRadarDiv');
+  if(div) div.innerHTML = '<div class="empty">Taranıyor...<\/div>';
+  google.script.run
+    .withSuccessHandler(function(d) {
+      var div = document.getElementById('ceoRadarDiv');
+      if(!div) return;
+      if (!d || !d.ok) { div.innerHTML = '<div class="empty">Hata.<\/div>'; return; }
+      if (d.alarmlar.length === 0) {
+        div.innerHTML = '<div style="color:#34d399;font-size:12px;padding:8px;">✅ Anormal harcama tespit edilmedi.<\/div>';
+        return;
+      }
+      var html = '<div class="scroll-area" style="max-height:180px;">';
+      d.alarmlar.forEach(function(a) {
+        var cls = a.tip === 'ANORMAL_ARTIS' ? 'ceo-radar-item anormal' : 'ceo-radar-item';
+        var ikon = a.tip === 'ANORMAL_ARTIS' ? '⚠️' : '🚨';
+        html += '<div class="' + cls + '">' + ikon + ' <b>' + a.kategori + '<\/b><br>' +
+          '<span style="color:var(--muted)">' + a.mesaj + '<\/span>' +
+          '<span style="float:right;font-weight:700;color:#f87171;">₺' + a.harcanan.toLocaleString('tr-TR') + '<\/span><\/div>';
+      });
+      html += '<\/div>';
+      div.innerHTML = html;
+    })
+    .withFailureHandler(function(){ var d=document.getElementById('ceoRadarDiv'); if(d) d.innerHTML='<div class="empty">Hata.<\/div>'; })
+    .api_kacakRadariKontrol();
+}
+
+function ceoYZAnalizYukle() {
+  var div = document.getElementById('ceoYZDiv');
+  if(div) div.innerHTML = '<div class="empty">🤖 Analiz yapılıyor...<\/div>';
+  google.script.run
+    .withSuccessHandler(function(d) {
+      var div = document.getElementById('ceoYZDiv');
+      if(!div) return;
+      if (!d || !d.ok) { div.innerHTML = '<div class="empty">Hata: ' + (d?d.msg:'') + '<\/div>'; return; }
+      div.innerHTML =
+        '<div class="ceo-yz-kutu">' + d.analiz + '<\/div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:6px;">' + d.olusturmaTarihi + '<\/div>';
+    })
+    .withFailureHandler(function(){ var d=document.getElementById('ceoYZDiv'); if(d) d.innerHTML='<div class="empty">Hata.<\/div>'; })
+    .api_yapayzeka_harcamaAnalizi();
+}
+
+
+// --- MOBİL SAHA FONKSİYONLARI ---
+function mobilSahaModalAc() {
+  if (!window._selectedFirmaId) { alert("Lütfen önce bir firma seçin!"); return; }
+  document.getElementById("mobilFirmaAdi").innerText = window._selectedFirma;
+  document.getElementById("msTarih").value = new Date().toISOString().split("T")[0];
+  document.getElementById("mobilSahaModal").style.display = "flex";
+}
+
+function mobilSahaKaydet() {
+  var btn = document.getElementById("btnMobilKaydet");
+  btn.disabled = true; btn.innerHTML = "İşleniyor... ⏳";
+  
+  var p = {
+    firmaId: window._selectedFirmaId,
+    firmaAdi: window._selectedFirma,
+    islemTarihi: document.getElementById("msTarih").value,
+    sonucDurumu: document.getElementById("msSonuc").value,
+    teslimatDurumu: document.getElementById("msTeslimat").value,
+    kullanici: window.currentUserEmail,
+    // EĞER BİR PERSONEL SEÇTİRİYORSAN BURAYA ONUN MAİLİNİ EKLE:
+    atananPersonel: document.getElementById("msPersonelListe") ? document.getElementById("msPersonelListe").value : window.currentUserEmail 
+  };
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      btn.disabled = false; btn.innerHTML = "💾 SİSTEME İŞLE VE DENETİME GÖNDER";
+      if (res && res.ok) {
+        notify(res.msg, "success");
+        document.getElementById("mobilSahaModal").style.display = "none";
+        // WhatsApp — mobil program yapıldı
+        if (p.firmaId) {
+          var waMesaj = "Sayın " + p.firmaAdi + ",\n\n" +
+            p.islemTarihi + " tarihli mobil sağlık tarama programınız sisteme işlenmiştir.\n" +
+            "Teslimat: " + p.teslimatDurumu + "\n\n" +
+            "Sağlıklı günler dileriz.\nAvrupaİSG OSGB\n0549 483 83 82";
+          google.script.run.withSuccessHandler(function(wa) {
+            if (wa && wa.ok && wa.url) {
+              if (confirm("📱 Firmaya WhatsApp mesajı gönderilsin mi?")) {
+                window.open(wa.url, "_blank");
+              }
+            }
+          }).api_waLink({ firmaId: p.firmaId, mesaj: waMesaj });
+        }
+      } else {
+        alert("Hata: " + res.msg);
+      }
+    })
+    .api_mobilOperasyonKaydet(p);
+}
+
+// --- HİZMET FİLTRELEME MOTORU ---
+window._aktifHizmetFiltresi = "TÜMÜ";
+function hizmetFiltrele(kategori, btnEl) {
+  window._aktifHizmetFiltresi = kategori;
+  document.querySelectorAll('.hizmet-btn').forEach(function(b) {
+    b.style.boxShadow = "none"; b.style.opacity = "0.6";
+  });
+  if (btnEl) {
+    btnEl.style.boxShadow = "0 4px 6px rgba(0,0,0,0.3)"; btnEl.style.opacity = "1";
+  }
+  var aramaKutusu = document.getElementById("f_search");
+  renderFirmaList(aramaKutusu ? aramaKutusu.value : "");
+}
+
+var orijinalRenderFirmaList = window.renderFirmaList;
+window.renderFirmaList = function(q) {
+  var strip = document.getElementById("f_results");
+  if (!strip) return;
+  var qq = norm(q);
+  var list = (window._firmaCache || []).filter(function(x){
+    var hay = String((x.firma||"") + " " + (x.yetkili||"") + " " + (x.iletisim||"") + " " + (x.sonIslem||"")).toLocaleLowerCase("tr-TR");
+    var metinUyuyor = !qq || hay.indexOf(qq) >= 0;
+    if (!metinUyuyor) return false;
+
+    var etiketler = String(x.Hizmetler || x.hizmetler || "").toUpperCase();
+    var filtre = window._aktifHizmetFiltresi;
+    
+    if (filtre === "TÜMÜ") return true;
+    if (filtre === "POTANSIYEL") {
+      return (etiketler.indexOf("OSGB") === -1 && etiketler.indexOf("MOBİL") === -1 && etiketler.indexOf("ISE_GIRIS") === -1);
+    }
+    return etiketler.indexOf(filtre) > -1;
+  });
+
+  if (!list.length){
+    strip.innerHTML = '<div style="padding:20px; color:#6b7280; width:100%; text-align:center;">Bu kategoriye/aramaya uygun firma bulunamadı.<\/div>';
+    return;
+  }
+
+  // YENİ: LİSTEYİ SADECE İLK 12 FİRMA İLE SINIRLA
+  var gosterilecekListe = list.slice(0, 12);
+
+ strip.innerHTML = gosterilecekListe.map(function(x){
+    var active = (String(window._selectedFirma||"") === String(x.firma||"")) ? "active" : "";
+    var durum = String(x.Durum || "").toUpperCase().replace(/İ/g,"I").replace(/Ş/g,"S").replace(/Ç/g,"C").replace(/Ö/g,"O").replace(/Ü/g,"U").replace(/Ğ/g,"G");
+var kartRenk = durum.indexOf("AKT") > -1 ? "#f0fdf4" : durum.indexOf("PAS") > -1 ? "#f8fafc" : "#fffbeb";
+var kartBorder = durum.indexOf("AKT") > -1 ? "#10b981" : durum.indexOf("PAS") > -1 ? "#94a3b8" : "#f59e0b";
+    var dataStr = JSON.stringify(x).replace(/'/g, "&#39;");
+    
+    var etiketGorseli = "";
+    var strHiz = String(x.Hizmetler || x.hizmetler || "").toUpperCase();
+    if(strHiz.indexOf("OSGB") > -1) etiketGorseli += '<span style="background:#dcfce7; color:#166534; padding:2px 5px; border-radius:4px; font-size:9px; margin-right:4px;">🦺 OSGB<\/span>';
+    if(strHiz.indexOf("MOBİL") > -1 || strHiz.indexOf("MOBIL") > -1) etiketGorseli += '<span style="background:#e0f2fe; color:#0369a1; padding:2px 5px; border-radius:4px; font-size:9px; margin-right:4px;">🚐 MOBİL<\/span>';
+    if(strHiz.indexOf("ISE_GIRIS") > -1 || strHiz.indexOf("ISEGIRIS") > -1 || strHiz.indexOf("İŞEGİRİŞ") > -1) etiketGorseli += '<span style="background:#ede9fe; color:#6b21a8; padding:2px 5px; border-radius:4px; font-size:9px;">🩺 İŞE GİRİŞ<\/span>';
+    
+    if(etiketGorseli === "") etiketGorseli = '<span style="background:#f1f5f9; color:#475569; padding:2px 5px; border-radius:4px; font-size:9px;">💬 İletişim / Satış Yok<\/span>';
+
+    return ''
+      + '<div class="firmaCard '+active+'"'
+      + ' onclick=\'handleFirmaClick('+dataStr+')\''
+      + ' style="cursor:pointer; display:flex; flex-direction:column; justify-content:space-between; background:' + kartRenk + '; border:1px solid ' + kartBorder + ';">'
+      +  '<div><div class="firmaTitle" style="margin-bottom:6px;">'+esc(x.firma)+'<\/div>'
+      +  '<div style="margin-bottom:8px;">' + etiketGorseli + '<\/div>'
+      +  '<div class="firmaMeta">'+esc(x.yetkili || "-")+'<\/div>'
+      +  '<div class="firmaLine"><b>İletişim:<\/b> '+esc(x.iletisim || "-")+'<\/div>'
++  '<div class="firmaLine" style="margin-top:6px; font-size:11px; color:'+(x.sonIslem && x.sonIslem !== "-" ? "#10b981" : "#94a3b8")+';"><b>🕐 Son İşlem:<\/b> '+esc(x.sonIslem || "Henüz işlem yok")+'<\/div><\/div>'
+      + '<\/div>';
+  }).join("");
+
+  if (list.length > 12) {
+      strip.innerHTML += '<div style="grid-column:1/-1; text-align:center; padding:15px; color:#64748b; font-size:12px; font-style:italic;">' + 
+                         'Toplam ' + list.length + ' firma bulundu. Sadece ilk 12 kayıt gösteriliyor. Diğerlerini görmek için arama kutusunu kullanın.<\/div>';
+  }
+};
+
+var eskiFirmaKaydet = api_yeniFirmaKaydet_on_UI;
+window.api_yeniFirmaKaydet_on_UI = function() {
+  var hList = [];
+  if(document.getElementById("nf_hiz_osgb") && document.getElementById("nf_hiz_osgb").checked) hList.push("OSGB");
+  if(document.getElementById("nf_hiz_mobil") && document.getElementById("nf_hiz_mobil").checked) hList.push("MOBİL");
+  if(document.getElementById("nf_hiz_isegiris") && document.getElementById("nf_hiz_isegiris").checked) hList.push("ISE_GIRIS");
+  
+  var hid = document.getElementById("nf_Hizmetler");
+  if(!hid) {
+      hid = document.createElement("input");
+      hid.type = "hidden";
+      hid.id = "nf_Hizmetler";
+      document.getElementById("nf_wrap").appendChild(hid);
+  }
+  hid.value = hList.join(",");
+  eskiFirmaKaydet(); 
+};
+
+var eskiFillAll = window.firmaDetayFillAll;
+window.firmaDetayFillAll = function(rec) {
+  if(eskiFillAll) eskiFillAll(rec);
+  var h = String(rec.Hizmetler || rec.hizmetler || "").toUpperCase();
+if(document.getElementById("e_hiz_osgb"))     document.getElementById("e_hiz_osgb").checked     = (h.indexOf("OSGB") > -1);
+if(document.getElementById("e_hiz_mobil"))    document.getElementById("e_hiz_mobil").checked    = (h.indexOf("MOBİL") > -1 || h.indexOf("MOBIL") > -1);
+if(document.getElementById("e_hiz_isegiris")) document.getElementById("e_hiz_isegiris").checked = (h.indexOf("ISE_GIRIS") > -1 || h.indexOf("İŞEGİRİŞ") > -1);
+};
+
+var eskiFirmaGuncelle = window.firmaGuncelleKaydetUI;
+window.firmaGuncelleKaydetUI = function() {
+  var hList = [];
+  if(document.getElementById("e_hiz_osgb") && document.getElementById("e_hiz_osgb").checked) hList.push("OSGB");
+  if(document.getElementById("e_hiz_mobil") && document.getElementById("e_hiz_mobil").checked) hList.push("MOBİL");
+  if(document.getElementById("e_hiz_isegiris") && document.getElementById("e_hiz_isegiris").checked) hList.push("ISE_GIRIS");
+  
+  var hid = document.getElementById("e_Hizmetler");
+  if(!hid) {
+      hid = document.createElement("input");
+      hid.type = "hidden";
+      hid.id = "e_Hizmetler";
+      document.getElementById("firmaEditBox").appendChild(hid);
+  }
+  if(hid) hid.value = hList.join(",");
+
+  var rahatsizEl = document.getElementById("e_rahatsizEtme");
+  var rahatsizHid = document.getElementById("e_RahatsizEtme");
+  if(!rahatsizHid) {
+    rahatsizHid = document.createElement("input");
+    rahatsizHid.type = "hidden";
+    rahatsizHid.id = "e_RahatsizEtme";
+    rahatsizHid.name = "rahatsizEtme";
+    document.getElementById("firmaEditBox").appendChild(rahatsizHid);
+  }
+  if(rahatsizHid) rahatsizHid.value = (rahatsizEl && rahatsizEl.checked) ? "true" : "false";
+
+  eskiFirmaGuncelle();
+};
+
+function isgSenkronizeEt() {
+  var btn = document.getElementById("btnSihirliSync");
+  if(btn) { btn.disabled = true; btn.innerHTML = "Aktarılıyor... ⏳"; }
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+       if(btn) { btn.disabled = false; btn.innerHTML = "🪄 İSG Firmalarını CRM'e Aktar"; }
+       if(res && res.ok) {
+           notify(res.msg, "success");
+           loadFirmalar(); 
+       } else {
+           alert("Hata: " + res.msg);
+       }
+    })
+    .withFailureHandler(function(err){
+       if(btn) { btn.disabled = false; btn.innerHTML = "🪄 İSG Firmalarını CRM'e Aktar"; }
+       alert("Bağlantı Hatası: " + err.message);
+    })
+    .api_sihirliSenkronizasyon();
+}
+
+// ==========================================================
+// 🚐 MOBİL SAĞLIK PANO (KANBAN) KODLARI VE GİRİŞ/ÇIKIŞ
+// ==========================================================
+window._mobilCache = [];
+window._aktifMobilDurum = "TÜMÜ";
+
+function loadMobilList() {
+  var kutu = document.getElementById("mobilKutuListesi");
+  if (!kutu) return;
+  kutu.innerHTML = "<div style='grid-column:1/-1; text-align:center; padding:40px; color:#0ea5e9; font-weight:bold; font-size:16px;'>Operasyonlar taranıyor... ⏳<\/div>";
+  
+  google.script.run
+    .withSuccessHandler(function(list) {
+      window._mobilCache = list || [];
+      renderMobilPano();
+      mobilAtamaKontrol();
+      
+      // YENİ: TÜM FİRMALARI KUTUYA DOLDURUYORUZ VE HAFIZAYA ALIYORUZ
+      var selFirma = document.getElementById("mgFirmaId");
+      if(selFirma && window._firmaCache) {
+        // Tüm firmaları (sadece mobilleri değil) hafızaya alıyoruz ki arama motoru bulabilsin
+        window._mobilFirmaOptions = window._firmaCache.map(function(f) { 
+            return '<option value="' + f.firmaId + '">' + f.firma + '<\/option>'; 
+        });
+        selFirma.innerHTML = '<option value="">-- CRM\'den Firma Seçin --<\/option>' + window._mobilFirmaOptions.join("");
+      }
+// Personel kutusunu dolduralım
+      var selPer = document.getElementById("mgPersonelEmail");
+      {
+          google.script.run.withSuccessHandler(function(perList) {
+   var _perList = Array.isArray(perList) ? perList : (perList && perList.liste ? perList.liste : []);
+   window._mgPersonelOptions = _perList.map(function(p) {
+     return "<option value='" + p.mail + "'>" + p.ad + "<\/option>";
+   });
+   if (selPer) {
+     selPer.innerHTML = '<option value="">-- Personel Seçin --</option>' + window._mgPersonelOptions.join("");
+   }
+          }).api_personelListesiGetir(window.currentUserEmail || "");
+      }
+    })
+    .withFailureHandler(function(err) {
+      kutu.innerHTML = "<div style='grid-column:1/-1; text-align:center; color:red; font-weight:bold;'>Hata: " + err.message + "<\/div>";
+    })
+    .api_getMobilOperasyonlar(); 
+    
+}
+
+function mobilDurumGoster(durum, btnEl) {
+  window._aktifMobilDurum = durum;
+  document.querySelectorAll('.mobil-tab-btn').forEach(function(b) {
+    b.style.background = "#f1f5f9";
+    b.style.color = "#475569";
+    b.style.border = "2px solid #cbd5e1";
+  });
+  if (btnEl) {
+    btnEl.style.background = "#1e293b";
+    btnEl.style.color = "white";
+    btnEl.style.border = "2px solid #1e293b";
+  }
+  renderMobilPano();
+}
+
+function renderMobilPano() {
+  var kutu = document.getElementById("mobilKutuListesi");
+  if (!kutu) return;
+  
+  var filtre = window._aktifMobilDurum;
+  var liste = window._mobilCache;
+
+  var islenmisListe = liste.map(function(x) {
+      var sonuc = String(x.sonuc || "").toUpperCase();
+      var kargo = String(x.teslimat || "").toUpperCase();
+      var akilliDurum = "YAPILACAK"; 
+      var renk = "#3b82f6"; 
+      var yuzde = 25;
+      
+      // İPTAL KONTROLÜ
+      if (sonuc.indexOf("İPTAL") > -1 || kargo.indexOf("İPTAL") > -1) {
+         akilliDurum = "İPTAL EDİLDİ"; renk = "#ef4444"; yuzde = 100;
+      }
+      else if (!x.islemTarihi || x.islemTarihi.trim() === "") {
+         akilliDurum = "PLAN BEKLEYEN"; renk = "#64748b"; yuzde = 10;
+      } 
+      else if (sonuc.indexOf("BEKLİYOR") > -1 || sonuc.indexOf("ONAYINDA") > -1) {
+         akilliDurum = "SONUÇ BEKLEYEN"; renk = "#f59e0b"; yuzde = 50;
+      }
+      else if (sonuc.indexOf("HAZIR") > -1 && kargo.indexOf("ÇIKMADI") > -1) {
+         akilliDurum = "KARGO"; renk = "#8b5cf6"; yuzde = 75;
+      }
+      else if (kargo.indexOf("VERİLDİ") > -1 || kargo.indexOf("EDİLDİ") > -1 || kargo.indexOf("YOLA") > -1) {
+  akilliDurum = "BİTTİ"; renk = "#10b981"; yuzde = 100;
+}
+      
+      x.akilliDurum = akilliDurum;
+      x.renk = renk;
+      x.yuzde = yuzde;
+      return x;
+  });
+
+  if (filtre === "TAKVIM") {
+      renderMobilTakvim(islenmisListe);
+      return;
+  }
+
+  islenmisListe = islenmisListe.filter(function(x) {
+  return x.akilliDurum !== "İPTAL EDİLDİ" 
+    && x.akilliDurum !== "BİTTİ"
+    && String(x.firmaAdi||"").trim() !== "";
+});
+
+  if (filtre !== "TÜMÜ") {
+      islenmisListe = islenmisListe.filter(function(x) { return x.akilliDurum === filtre; });
+  }
+
+  if (islenmisListe.length === 0) {
+    kutu.innerHTML = "<div style='grid-column:1/-1; text-align:center; padding:40px; color:#64748b; font-size:15px; border:2px dashed #cbd5e1; border-radius:12px;'>Bu aşamada bekleyen bir operasyon bulunamadı.<\/div>";
+    return;
+  }
+
+  kutu.innerHTML = islenmisListe.map(function(x) {
+    var isIptal = x.akilliDurum === "İPTAL EDİLDİ";
+    var ustCizgi = isIptal ? "text-decoration: line-through;" : "";
+    var ciroMetni = parseFloat(x.ciro) > 0 ? ('<b style="color:#059669;">' + Number(x.ciro).toLocaleString("tr-TR") + ' ₺<\/b>') : '<span style="color:#94a3b8;">Fiyat Girilmedi<\/span>';
+    
+    var sonucSelect = '<select ' + (isIptal?'disabled':'') + ' onchange="hizliMobilGuncelle(\'' + x.id + '\', \'SONUC\', this.value)" style="width:100%; padding:8px; border-radius:8px; border:1px solid #cbd5e1; font-size:12px; font-weight:bold; margin-bottom:8px; background:' + (x.yuzde>=50?'#fef9c3':'#f8fafc') + ';">' +
+      '<option value="Laboratuvarda Bekliyor"' + (x.sonuc === "Laboratuvarda Bekliyor" ? " selected" : "") + '>🧪 Tahlil: Lab Bekliyor<\/option>' +
+      '<option value="Uzman Hekim Onayında"' + (x.sonuc === "Uzman Hekim Onayında" ? " selected" : "") + '>🩺 Tahlil: Hekim Onayında<\/option>' +
+      '<option value="Sonuçlar Hazır"' + (x.sonuc === "Sonuçlar Hazır" ? " selected" : "") + '>✅ Tahlil: Sonuçlar Çıktı<\/option>' +
+      '<option value="İptal Edildi"' + (isIptal ? " selected" : "") + '>🚫 İptal Edildi<\/option>' +
+    '<\/select>';
+
+    var teslimatSelect = '<select ' + (isIptal?'disabled':'') + ' onchange="hizliMobilGuncelle(\'' + x.id + '\', \'TESLIMAT\', this.value)" style="width:100%; padding:8px; border-radius:8px; border:1px solid #cbd5e1; font-size:12px; font-weight:bold; background:' + (x.yuzde>=75?'#e0e7ff':'#f8fafc') + ';">' +
+      '<option value="Henüz Çıkmadı"' + (x.teslimat === "Henüz Çıkmadı" ? " selected" : "") + '>📦 Kargo: Çıkış Bekliyor<\/option>' +
+      '<option value="Kargoya Verildi"' + (x.teslimat === "Kargoya Verildi" ? " selected" : "") + '>🚚 Kargo: Yola Çıktı<\/option>' +
+      '<option value="Elden Teslim Edildi"' + (x.teslimat === "Elden Teslim Edildi" ? " selected" : "") + '>🤝 Elden: Teslim Edildi<\/option>' +
+      '<option value="İptal Edildi"' + (isIptal ? " selected" : "") + '>🚫 İptal Edildi<\/option>' +
+    '<\/select>';
+    
+    var sahaAksiyonButonlari = '';
+    if(x.akilliDurum === "YAPILACAK") {
+      sahaAksiyonButonlari = 
+      '<div style="display:flex; gap:10px; margin-top:10px; padding-top:10px; border-top:1px dashed #cbd5e1;">' +
+         '<button onclick="isgGirisYap(\'' + x.id + '\')" style="flex:1; background:#059669; color:white; border:none; padding:8px; border-radius:6px; font-weight:bold; font-size:11px; cursor:pointer;">🟢 Tesise Gir<\/button>' +
+         '<button onclick="isgCikisYap(\'' + x.id + '\')" style="flex:1; background:#ef4444; color:white; border:none; padding:8px; border-radius:6px; font-weight:bold; font-size:11px; cursor:pointer;">🔴 Tesisten Çık<\/button>' +
+      '<\/div>';
+    }
+
+    var iptalBtnHtml = (!isIptal && x.akilliDurum !== "BİTTİ") ? 
+      '<button onclick="mobilPlaniIptalEt(\'' + x.id + '\')" style="background:none; border:none; font-size:16px; cursor:pointer; margin-left:8px;" title="Planı İptal Et">🗑️<\/button>' : '';
+
+    return '<div style="background:white; border-radius:14px; padding:20px; box-shadow:0 6px 15px rgba(0,0,0,0.06); border-top:5px solid ' + x.renk + '; display:flex; flex-direction:column; justify-content:space-between; opacity:' + (isIptal ? "0.6" : "1") + ';">' +
+      '<div>' + 
+        '<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">' +
+          '<div style="font-weight:900; color:#1e293b; font-size:16px; line-height:1.2; ' + ustCizgi + '">' + esc(x.firmaAdi) + '<\/div>' +
+          '<div style="display:flex; align-items:center;">' +
+            '<span style="background:' + x.renk + '20; color:' + x.renk + '; padding:4px 8px; border-radius:6px; font-size:10px; font-weight:900; text-align:center; line-height:1.1;">' + x.akilliDurum + '<\/span>' +
+            iptalBtnHtml +
+          '<\/div>' +
+        '<\/div>' +
+        '<div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:15px; color:#475569; ' + ustCizgi + '">' +
+          '<span>📅 Saha: <b style="color:#0f172a;">' + (x.islemTarihi || "Belirsiz") + '<\/b><\/span>' +
+          '<span>👥 <b>' + (x.kisiSayisi || "-") + ' kişi<\/b><\/span>' +
+        '<\/div>' +
+        (x.tetkikler ? '<div style="font-size:11px; color:#475569; margin-bottom:8px;">🧪 ' + x.tetkikler + '<\/div>' : '') +
+        (x.arac ? '<div style="font-size:11px; color:#475569; margin-bottom:8px;">🚐 Araç: <b>' + x.arac + '<\/b><\/div>' : '') +
+        (x.kargoNo ? '<div style="font-size:11px; color:#475569; margin-bottom:8px;">📦 Kargo: <b>' + x.kargoNo + '<\/b><\/div>' : '') +
+        '<div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:15px; color:#475569;">'+
+          '<span>👤 ' + (x.kaydeden || "").split("@")[0] + '<\/span>' +
+        '<\/div>' +
+      '<\/div>' +
+      '<div style="width:100%; height:8px; background:#f1f5f9; border-radius:4px; overflow:hidden; margin-bottom:15px;">' +
+        '<div style="width:' + x.yuzde + '%; height:100%; background:' + x.renk + '; transition:width 0.5s ease;"><\/div>' +
+      '<\/div>' +
+      '<div style="background:#f8fafc; padding:12px; border-radius:10px; border:1px dashed #cbd5e1;">' +
+        sonucSelect + teslimatSelect +
+      '<\/div>' +
+      sahaAksiyonButonlari +
+    '<\/div>';
+  }).join("");
+}
+
+// MOBİL İPTAL FONKSİYONU
+window.mobilPlaniIptalEt = function(id) {
+    if(!confirm("Bu mobil saha planını İPTAL etmek istediğinize emin misiniz?")) return;
+    notify("İptal ediliyor...", "info");
+    google.script.run
+        .withSuccessHandler(function(res) {
+            if(res && res.ok) { notify("✅ Mobil operasyon iptal edildi", "success"); loadMobilList(); }
+            else { alert("Hata: " + res.msg); }
+        })
+        .api_mobilPlanIptal(id, window.currentUserEmail);
+};
+function renderMobilTakvim(liste) {
+  var kutu = document.getElementById("mobilKutuListesi");
+  if (!kutu) return;
+
+  if (window._mobilTakvimAy === undefined) {
+    window._mobilTakvimAy = new Date().getMonth();
+    window._mobilTakvimYil = new Date().getFullYear();
+  }
+
+  var ay = window._mobilTakvimAy;
+  var yil = window._mobilTakvimYil;
+  var aylar = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+
+  var gruplar = {};
+  liste.forEach(function(x) {
+    if (!x.islemTarihi || x.islemTarihi.trim() === "") return;
+    var p = x.islemTarihi.split(".");
+    var dObj = p.length === 3 ? new Date(p[2], p[1]-1, p[0]) : new Date(x.islemTarihi);
+    if (!isNaN(dObj.getTime())) {
+      var dStr = dObj.getFullYear() + "-" + String(dObj.getMonth()+1).padStart(2,"0") + "-" + String(dObj.getDate()).padStart(2,"0");
+      if (!gruplar[dStr]) gruplar[dStr] = [];
+      gruplar[dStr].push(x);
+    }
+  });
+
+  var headerHtml = '<div style="grid-column:1/-1; display:flex; justify-content:space-between; align-items:center; background:linear-gradient(135deg,#1e293b,#0f172a); color:white; padding:15px 25px; border-radius:12px; margin-bottom:5px;">' +
+    '<button onclick="mobilTakvimAyDegistir(-1)" style="background:#334155; color:white; border:1px solid #475569; padding:10px 20px; border-radius:8px; cursor:pointer; font-weight:bold;">◀ Önceki Ay<\/button>' +
+    '<div style="font-size:22px; font-weight:900; color:#38bdf8;">📅 ' + aylar[ay] + ' ' + yil + '<\/div>' +
+    '<button onclick="mobilTakvimAyDegistir(1)" style="background:#334155; color:white; border:1px solid #475569; padding:10px 20px; border-radius:8px; cursor:pointer; font-weight:bold;">Sonraki Ay ▶<\/button>' +
+    '<\/div>';
+
+  var gridHtml = '<div style="grid-column:1/-1; overflow-x:auto; padding-bottom:15px;"><div style="min-width:900px; display:grid; grid-template-columns:repeat(7,1fr); gap:8px;">';
+
+  var gunler = ["Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi","Pazar"];
+  gunler.forEach(function(g) {
+    gridHtml += '<div style="text-align:center; font-weight:900; color:#475569; background:#e2e8f0; padding:12px; border-radius:8px; font-size:13px;">' + g + '<\/div>';
+  });
+
+  var ilkGun = new Date(yil, ay, 1).getDay();
+  var boslukSayisi = (ilkGun === 0) ? 6 : ilkGun - 1;
+  var ayinKacGunu = new Date(yil, ay + 1, 0).getDate();
+  var bugun = new Date();
+  var bugunStr = bugun.getFullYear() + "-" + String(bugun.getMonth()+1).padStart(2,"0") + "-" + String(bugun.getDate()).padStart(2,"0");
+
+  for (var i=0; i<boslukSayisi; i++) {
+    gridHtml += '<div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px; min-height:120px; opacity:0.6;"><\/div>';
+  }
+
+  for (var d=1; d<=ayinKacGunu; d++) {
+    var currStr = yil + "-" + String(ay+1).padStart(2,"0") + "-" + String(d).padStart(2,"0");
+    var isToday = (currStr === bugunStr);
+    var dayData = gruplar[currStr] || [];
+    var cellBg = isToday ? "#f0f9ff" : "#fff";
+    var cellBorder = isToday ? "2px solid #0ea5e9" : "1px solid #e2e8f0";
+    var dateColor = isToday ? "#0284c7" : "#1e293b";
+    var todayBadge = isToday ? '<span style="background:#0ea5e9; color:white; font-size:9px; padding:2px 6px; border-radius:4px; float:left; margin-top:2px;">BUGÜN<\/span>' : "";
+
+    var itemsHtml = "";
+    dayData.forEach(function(item) {
+      var fAdi = typeof esc === "function" ? esc(item.firmaAdi||"") : (item.firmaAdi||"");
+      var isIptal = item.akilliDurum === "İPTAL EDİLDİ";
+      var cizgi = isIptal ? "text-decoration:line-through; opacity:0.5;" : "";
+      itemsHtml += '<div style="background:' + item.renk + '15; border-left:4px solid ' + item.renk + '; padding:6px; margin-top:6px; border-radius:4px; font-size:11px; color:#0f172a; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:help; ' + cizgi + '" title="' + fAdi + (item.saatBaslangic ? ' | ' + item.saatBaslangic + '-' + item.saatBitis : '') + (item.notlar ? ' | ' + item.notlar : '') + '">' + fAdi + (item.saatBaslangic ? ' <span style=\'font-weight:normal;font-size:10px;\'>(' + item.saatBaslangic + '-' + item.saatBitis + ')<\/span>' : '') + '<\/div>';
+    });
+
+    gridHtml += '<div style="background:' + cellBg + '; border:' + cellBorder + '; border-radius:8px; min-height:130px; padding:10px; display:flex; flex-direction:column;">' +
+      '<div style="text-align:right; font-size:16px; font-weight:900; color:' + dateColor + '; margin-bottom:5px;">' + todayBadge + ' ' + d + '<\/div>' +
+      '<div style="flex:1; display:flex; flex-direction:column; gap:2px; overflow-y:auto; max-height:90px;">' + itemsHtml + '<\/div>' +
+      '<\/div>';
+  }
+
+  gridHtml += '<\/div><\/div>';
+
+  var buAyinPlanlari = liste.filter(function(x) {
+    if (!x.islemTarihi) return false;
+    var p = x.islemTarihi.split(".");
+    var dObj = p.length === 3 ? new Date(p[2], p[1]-1, p[0]) : new Date(x.islemTarihi);
+    return !isNaN(dObj) && dObj.getMonth() === ay && dObj.getFullYear() === yil;
+  });
+
+  var listeHtml = '<div style="grid-column:1/-1; margin-top:10px; font-weight:900; color:#1e293b; font-size:18px; border-bottom:2px solid #e2e8f0; padding-bottom:10px; margin-bottom:10px;">📋 ' + aylar[ay] + ' Ayı İş Listesi<\/div>';
+
+  if (buAyinPlanlari.length === 0) {
+    listeHtml += '<div style="grid-column:1/-1; text-align:center; padding:30px; color:#94a3b8; border:2px dashed #cbd5e1; border-radius:10px; font-size:14px; font-weight:bold;">Bu aya planlanmış operasyon bulunmuyor.<\/div>';
+  } else {
+    buAyinPlanlari.sort(function(a,b) {
+      var pA=a.islemTarihi.split("."); var dA=pA.length===3?new Date(pA[2],pA[1]-1,pA[0]):new Date(a.islemTarihi);
+      var pB=b.islemTarihi.split("."); var dB=pB.length===3?new Date(pB[2],pB[1]-1,pB[0]):new Date(b.islemTarihi);
+      return dA-dB;
+    });
+
+    listeHtml += buAyinPlanlari.map(function(x) {
+      var isIptal = x.akilliDurum === "İPTAL EDİLDİ";
+      var person = x.kaydeden ? x.kaydeden.split("@")[0].toUpperCase() : "Ekip";
+      var pA=x.islemTarihi.split("."); var dA=pA.length===3?new Date(pA[2],pA[1]-1,pA[0]):new Date(x.islemTarihi);
+      var tStr = isNaN(dA) ? x.islemTarihi : dA.toLocaleDateString("tr-TR",{weekday:"short",day:"numeric",month:"long"});
+      var cizgi = isIptal ? "text-decoration:line-through;" : "";
+      var fAdi = typeof esc === "function" ? esc(x.firmaAdi||"") : (x.firmaAdi||"");
+      var iptalBtn = (!isIptal && x.akilliDurum !== "BİTTİ") ?
+        '<button onclick="mobilPlaniIptalEt(\'' + x.id + '\')" style="background:none; border:none; font-size:14px; cursor:pointer;" title="Planı İptal Et">🗑️<\/button>' : "";
+      var ciroText = parseFloat(x.ciro) > 0 ? Number(x.ciro).toLocaleString("tr-TR") + " ₺" : "-";
+
+      return '<div style="background:white; opacity:' + (isIptal?"0.5":"1") + '; border-left:5px solid ' + x.renk + '; padding:15px; border-radius:10px; border-top:1px solid #f1f5f9; border-right:1px solid #f1f5f9; border-bottom:1px solid #f1f5f9; box-shadow:0 4px 6px rgba(0,0,0,0.03); display:flex; justify-content:space-between; align-items:center; grid-column:1/-1; margin-bottom:10px;">' +
+        '<div style="' + cizgi + '"><div style="font-weight:900; color:#0f172a; font-size:15px;">' + fAdi + '<\/div>' +
+        '<div style="font-size:12px; color:#64748b; margin-top:6px;">👤 ' + person + ' &nbsp;|&nbsp; <span style="background:' + x.renk + '15; color:' + x.renk + '; padding:3px 8px; border-radius:4px; font-weight:bold;">' + x.akilliDurum + '<\/span><\/div><\/div>' +
+        '<div style="text-align:right; display:flex; align-items:center; gap:10px;">' +
+        '<div><div style="font-size:15px; font-weight:900; color:#1e293b; ' + cizgi + '">' + tStr + '<\/div>' +
+        '<div style="font-size:13px; color:#059669; font-weight:bold; margin-top:6px; ' + cizgi + '">' + ciroText + '<\/div><\/div>' +
+        iptalBtn + '<\/div><\/div>';
+    }).join("");
+  }
+
+  kutu.innerHTML = headerHtml + gridHtml + listeHtml;
+}
+
+window.mobilTakvimAyDegistir = function(yon) {
+  window._mobilTakvimAy += yon;
+  if (window._mobilTakvimAy > 11) { window._mobilTakvimAy = 0; window._mobilTakvimYil++; }
+  else if (window._mobilTakvimAy < 0) { window._mobilTakvimAy = 11; window._mobilTakvimYil--; }
+  renderMobilPano();
+};
+function hizliMobilGuncelle(id, tip, deger) {
+  notify("Durum Güncelleniyor... ⏳", "info");
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res && res.ok) {
+        notify("✅ Operasyon aşaması güncellendi!", "success");
+        // Kargo teslim edildi/yola çıktı ise kargo sekmesine geç ve yenile
+        if (tip === "TESLIMAT" && (
+          deger.indexOf("Kargoya Verildi") > -1 ||
+          deger.indexOf("Elden Teslim Edildi") > -1 ||
+          deger.indexOf("Yola Çıktı") > -1
+        )) {
+          // Kargo sayfasına geç
+          mobilDurumGoster("KARGO", document.querySelector('[onclick*="KARGO"]'));
+          // Biraz bekleyip yenile (firma kaybolsun)
+          setTimeout(function() { loadMobilList(); }, 500);
+        } else {
+          loadMobilList();
+        }
+      } else { alert("Hata: " + res.msg); }
+    })
+    .api_mobilDurumGuncelle(id, tip, deger);
+}
+
+// YENİ: MODAL İÇİ FİRMA ARAMA MOTORU
+function mobilFirmaAra(kelime) {
+    var sel = document.getElementById("mgFirmaId");
+    if (!sel || !window._mobilFirmaOptions) return;
+    
+    var k = String(kelime).toLowerCase().trim();
+    if (k === "") {
+        sel.innerHTML = '<option value="">-- CRM\'den Firma Seçin --<\/option>' + window._mobilFirmaOptions.join("");
+        return;
+    }
+    
+    var filtrelenmis = window._firmaCache.filter(function(f) {
+        return String(f.firma).toLowerCase().indexOf(k) > -1;
+    }).map(function(f) {
+        return '<option value="' + f.firmaId + '">' + f.firma + '<\/option>';
+    });
+    
+    sel.innerHTML = '<option value="">-- Bulunan Firmalar (' + filtrelenmis.length + ') --<\/option>' + filtrelenmis.join("");
+}
+
+function mobilGorevEkleAc() {
+  var araKutu = document.getElementById("mgFirmaAra");
+  if(araKutu) araKutu.value = "";
+  if(typeof mobilFirmaAra === "function") mobilFirmaAra("");
+  document.getElementById("mgFirmaId").value = "";
+  document.getElementById("mgPersonelEmail") && (document.getElementById("mgPersonelEmail").value = "");
+  document.getElementById("mgTarih").value = "";
+  document.getElementById("mgSaatBaslangic").value = "08:00";
+  document.getElementById("mgSaatBitis").value = "12:00";
+  document.getElementById("mgCiro").value = "";
+  document.getElementById("mgNot").value = "";
+  document.getElementById("mgEkipListesi").innerHTML = "";
+  
+  // Personel seçeneklerini hazırla
+  google.script.run
+    .withSuccessHandler(function(res) {
+      var liste = (res && res.liste) ? res.liste : [];
+      _mgPersonelOptions = liste.map(function(p) {
+        return '<option value="' + p.email + '">' + p.ad + '<\/option>';
+      });
+      mgEkipEkle(); // İlk ekip üyesini otomatik ekle
+    })
+    .api_personelListesiGetir();
+
+  document.getElementById("mobilGorevModal").style.display = "flex";
+}
+// Ekip listesi yönetimi
+var _mgPersonelOptions = [];
+
+function mgEkipEkle() {
+  var div = document.getElementById('mgEkipListesi');
+  var idx = div.children.length;
+  var satir = document.createElement('div');
+  satir.style.cssText = 'display:flex; gap:8px; align-items:center;';
+  satir.innerHTML = 
+    '<select class="mg-ekip-sel field-input" style="flex:1; font-weight:bold; border-color:#f59e0b;">' +
+      '<option value="">-- Personel Seçin --<\/option>' +
+      _mgPersonelOptions.join('') +
+    '<\/select>' +
+    '<button type="button" onclick="this.parentNode.remove()" style="background:#fee2e2; color:#ef4444; border:none; padding:8px 10px; border-radius:6px; font-weight:bold; cursor:pointer;">✖<\/button>';
+  div.appendChild(satir);
+}
+
+function yeniMobilGorevKaydet() {
+  var fId = document.getElementById("mgFirmaId").value;
+  var selF = document.getElementById("mgFirmaId");
+  var fAdi = selF.options[selF.selectedIndex] ? selF.options[selF.selectedIndex].text : "Bilinmeyen";
+  
+  var ekip = [];
+document.querySelectorAll('.mg-ekip-sel').forEach(function(sel) {
+  if (sel.value) ekip.push(sel.value);
+});
+var pEmail = ekip[0] || ""; // Ekip dizisinin ilk elemanını alıyoruz
+var selP = document.getElementById("mgPersonelEmail");
+var pAdi = "Ekip"; // Varsayılan değer
+
+// Eğer mgPersonelEmail diye bir element varsa adını oradan çek, yoksa hata verme
+if (selP && selP.options && selP.selectedIndex !== -1) {
+  pAdi = selP.options[selP.selectedIndex].text;
+} else if (ekip.length > 0) {
+  pAdi = "Atanan Ekip"; // Element yoksa ama ekip varsa bu ismi kullan
+}
+
+  var durum = document.getElementById("mgDurum").value;
+  var notlar = document.getElementById("mgNot").value.trim();
+  
+  if(!fId) { notify("Lütfen CRM'den bir firma seçin!", "error"); return; }
+  if(!pEmail && durum === "YAPILACAK") { notify("Sahaya gidilecekse lütfen personel atayın!", "error"); return; }
+  
+  var gercekSonuc = (durum === "PLAN BEKLEYEN" || durum === "YAPILACAK") ? "Laboratuvarda Bekliyor" : "Sonuçlar Hazır";
+  var gercekTeslimat = (durum === "KARGO" || durum === "BİTTİ") ? "Kargoya Verildi" : "Henüz Çıkmadı";
+
+  var btn = document.getElementById("btnMgKaydet");
+  btn.disabled = true; btn.innerHTML = "Sisteme Kaydediliyor... ⏳";
+  
+  var tetkikler = [];
+  document.querySelectorAll(".mg-tetkik:checked").forEach(function(cb) {
+    tetkikler.push(cb.value);
+  });
+
+  var ekip = [];
+document.querySelectorAll('.mg-ekip-sel').forEach(function(sel) {
+  if (sel.value) ekip.push(sel.value);
+});
+var pEmail = ekip[0] || "";
+
+// Sonra p objesi:
+var p = {
+  firmaId:       fId,
+  firmaAdi:      fAdi,
+  islemTarihi:   document.getElementById("mgTarih").value,
+  sonucDurumu:   gercekSonuc,
+  teslimatDurumu: gercekTeslimat,
+  kullanici:     window.currentUserEmail,
+  kisiSayisi:    document.getElementById("mgKisiSayisi").value || 0,
+  arac:          document.getElementById("mgArac").value || "",
+  tetkikler:     tetkikler.join(", "),
+  saatBaslangic: document.getElementById("mgSaatBaslangic").value || "",
+  saatBitis:     document.getElementById("mgSaatBitis").value || "",
+  ekip:          ekip.join(","),
+  kargoNo:       document.getElementById("mgKargoNo").value || "",
+  notlar:        notlar
+};
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      btn.disabled = false; btn.innerHTML = "💾 PLANI SİSTEME İŞLE";
+      if (res && res.ok) {
+        var gorevModal = document.getElementById("mobilGorevModal");
+        if (gorevModal) gorevModal.style.display = "none";
+        notify("✅ Plan başarıyla eklendi!", "success");
+        
+        if(durum === "YAPILACAK") {
+            google.script.run.api_isgPlanKaydet({
+              tarih: document.getElementById("mgTarih").value,
+              firmaId: fId,
+              firmaAdi: fAdi,
+              personelEmail: pEmail, 
+              personelAd: pAdi,
+              hizmetTipi: "Mobil Sağlık",
+              planlananDk: 120, 
+              notlar: notlar,
+              olusturanEmail: window.currentUserEmail
+            });
+        }
+        
+        loadMobilList();
+        
+        // Atama talebi varsa tamamla
+        if (window._mobilAtamaKayit && window._mobilAtamaKayit.atamaId) {
+          google.script.run
+            .withSuccessHandler(function() {
+              mobilAtamaKontrol();
+              var detayDiv = document.getElementById('mobilAtamaDetayDiv');
+              if (detayDiv) detayDiv.style.display = 'none';
+            })
+            .api_atamaTamamla(window._mobilAtamaKayit.atamaId, window._mobilAtamaKayit.atamaSatir);
+          window._mobilAtamaKayit = null;
+        }
+      } else {
+        alert("Hata: " + res.msg);
+      }
+    })
+    .withFailureHandler(function(err) {
+      btn.disabled = false; btn.innerHTML = "💾 PLANI SİSTEME İŞLE";
+      document.getElementById("mobilGorevModal").style.display = "none";
+      alert("Hata: " + err.message);
+    })
+    .api_mobilOperasyonKaydet(p);
+}
+// --- ESKİ MOBİL EXCELİNİ OKUMA VE SİSTEME YÜKLEME ---
+function eskiMobilImportEt() {
+  var fileInput = document.getElementById("eskiMobilImportFile");
+  if(!fileInput) return;
+  var file = fileInput.files[0];
+  if (!file) return;
+
+  notify("📥 Excel okunuyor...", "info");
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = new Uint8Array(e.target.result);
+      var workbook = XLSX.read(data, { type: "array" });
+      var sheet = workbook.Sheets[workbook.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+      if (rows.length < 2) { notify("❌ Excel boş veya hatalı!", "error"); return; }
+
+      var basliklar = rows[0];
+      var bul = function(aranan) {
+        for (var x = 0; x < basliklar.length; x++) {
+          var bt = String(basliklar[x]).toLowerCase()
+            .replace(/i̇/g,"i").replace(/ı/g,"i").replace(/ş/g,"s")
+            .replace(/ç/g,"c").replace(/ö/g,"o").replace(/ü/g,"u").replace(/ğ/g,"g").replace(/\s/g,"");
+          if (bt.indexOf(aranan) > -1) return x;
+        }
+        return -1;
+      };
+
+      // Excelinizdeki başlıklara göre arama yapıyoruz (boşluksuz ve küçük harf hali)
+      var cxFirma = bul("firmaadi") > -1 ? bul("firmaadi") : bul("firma");
+      var cxTel = bul("telefon") > -1 ? bul("telefon") : bul("tel");
+      var cxIlce = bul("ilce");
+      var cxYetkili = bul("yetkiliadi") > -1 ? bul("yetkiliadi") : bul("yetkili");
+      var cxMail = bul("mail") > -1 ? bul("mail") : bul("eposta");
+
+      if (cxFirma === -1) { 
+        notify("❌ Excel'de 'Firma Adı' sütunu bulunamadı!", "error"); 
+        return; 
+      }
+
+      var hamKayitlar = [];
+      for (var i = 1; i < rows.length; i++) {
+        var r = rows[i];
+        if (!r[cxFirma]) continue; // Firma adı boşsa atla
+        
+        hamKayitlar.push({
+          firmaAdi: String(r[cxFirma]||"").trim(),
+          tel: cxTel > -1 ? String(r[cxTel]||"").trim() : "",
+          ilce: cxIlce > -1 ? String(r[cxIlce]||"").trim() : "",
+          yetkili: cxYetkili > -1 ? String(r[cxYetkili]||"").trim() : "",
+          mail: cxMail > -1 ? String(r[cxMail]||"").trim() : ""
+        });
+      }
+
+      if (hamKayitlar.length === 0) { notify("❌ Aktarılacak veri bulunamadı!", "error"); return; }
+
+      notify("⏳ " + hamKayitlar.length + " firma sisteme aktarılıyor... Lütfen bekleyin.", "info");
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (res && res.ok) {
+            notify("✅ " + res.eklenen + " yeni eklendi, " + res.guncellenen + " firmanın etiketleri güncellendi!", "success");
+            fileInput.value = ""; // Butonu sıfırla
+            if (typeof loadFirmalar === "function") loadFirmalar(); // Ana listeyi yenile
+          } else {
+            notify("❌ " + (res ? res.msg : "Hata"), "error");
+            fileInput.value = "";
+          }
+        })
+        .withFailureHandler(function(err) {
+          notify("❌ Bağlantı Koptu: " + err.message, "error");
+          fileInput.value = "";
+        })
+        .api_eskiMobilImport(hamKayitlar);
+
+    } catch(err) {
+      notify("Excel okuma hatası: " + err.message, "error");
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// --- ARA GÖREV (ANGARYA) FONKSİYONLARI ---
+function isgAraGorevModalAc() {
+  document.getElementById("agTarih").value = new Date().toISOString().split("T")[0];
+  document.getElementById("agBaslik").value = "";
+  document.getElementById("agNot").value = "";
+  document.getElementById("isgAraGorevModal").style.display = "flex";
+  
+  // Personel listesini doldur
+  var selPer = document.getElementById("agPersonel");
+  if (selPer) {
+      selPer.innerHTML = '<option value="">Yükleniyor...<\/option>';
+      google.script.run.withSuccessHandler(function(perList) {
+   var _perList = Array.isArray(perList) ? perList : (perList && perList.liste ? perList.liste : []);
+   selPer.innerHTML = '<option value="">-- Personel Seçin --<\/option>' +
+   _perList.map(function(p) {
+             return "<option value='" + p.mail + "'>" + p.ad + "<\/option>";
+         }).join("");
+      }).api_personelListesiGetir(window.currentUserEmail || "");
+  }
+}
+
+function isgAraGorevKaydet() {
+  var tarih = document.getElementById("agTarih").value;
+  var selP = document.getElementById("agPersonel");
+var pEmail = selP.value;
+var pAdi = selP.options[selP.selectedIndex] ? selP.options[selP.selectedIndex].text.trim() : pEmail.split("@")[0];
+  var baslik = document.getElementById("agBaslik").value.trim();
+  var sure = parseInt(document.getElementById("agSure").value) || 45;
+  var notlar = document.getElementById("agNot").value.trim();
+  
+  if(!tarih || !pEmail || !baslik) { notify("Tarih, Personel ve Görev Başlığı zorunludur!", "error"); return; }
+  
+  var btn = document.getElementById("btnAgKaydet");
+  btn.disabled = true; btn.innerHTML = "Ekleniyor... ⏳";
+  
+  // Mevcut İSG Plan kaydetme API'sini kullanıyoruz. Firma ID yerine "GOREV_..." gönderiyoruz.
+  google.script.run
+    .withSuccessHandler(function(res) {
+      btn.disabled = false; btn.innerHTML = "💾 GÖREVİ PLANA EKLE";
+      if (res && res.ok) {
+        notify("Ara gorev plana eklendi!", "success");
+document.getElementById("isgAraGorevModal").style.display = "none";
+
+        if(typeof isgPlanlariYukle === "function") isgPlanlariYukle(); // Plan listesini yenile
+      } else {
+        alert("Hata: " + res.msg);
+      }
+    })
+    .api_isgPlanKaydet({
+      tarih: tarih,
+      firmaId: "GOREV_" + new Date().getTime(),
+      firmaAdi: "📌 " + baslik, // Başına pin koyuyoruz ki firma olmadığı anlaşılsın
+      personelEmail: pEmail,
+      personelAd: pAdi,
+      hizmetTipi: "Ara Görev / Evrak",
+      planlananDk: sure,
+      notlar: notlar,
+      olusturanEmail: window.currentUserEmail
+    });
+}
+
+// --- GLOBAL DEĞİŞKENLER (Kodun en başında durmalı) ---
+var _baslikInterval = null;
+var _baslikOrijinal = document.title;
+var _sonUyariPlanId = ""; // HATA BURADAYDI: Tanımlanmamış değişken eklendi.
+
+/**
+ * Paraşüt Senkronizasyon Fonksiyonu
+ */
+function parasutSenkronizeEt() {
+  var btn = document.querySelector('[onclick*="parasutSenkron"]') || document.querySelector('[onclick*="parasutSenkronizeEt"]');
+  if (btn) { btn.innerHTML = "⏳ Senkron yapılıyor..."; btn.disabled = true; }
+  
+  var bilgi = document.getElementById("topBildirim");
+  if (!bilgi) {
+    bilgi = document.createElement("div");
+    bilgi.id = "topBildirim";
+    bilgi.style.cssText = "position:fixed; top:0; left:0; right:0; background:#0284c7; color:white; text-align:center; padding:10px; font-weight:bold; z-index:9999; font-size:14px;";
+    document.body.appendChild(bilgi);
+  }
+  bilgi.innerHTML = "⏳ Paraşüt senkronizasyonu yapılıyor... Lütfen bekleyin.";
+  bilgi.style.display = "block";
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      bilgi.style.background = (res && res.ok) ? "#16a34a" : "#dc2626";
+      bilgi.innerHTML = (res && res.ok ? "✅ " : "❌ ") + (res ? res.msg : "Bilinmeyen hata");
+      if (btn) { btn.innerHTML = "🔄 PARAŞÜT SENKRON"; btn.disabled = false; }
+      setTimeout(function() { bilgi.style.display = "none"; }, 15000);
+    })
+    .withFailureHandler(function(err) {
+      bilgi.style.background = "#dc2626";
+      bilgi.innerHTML = "❌ Bağlantı kurulamadı: " + err;
+      if (btn) { btn.innerHTML = "🔄 PARAŞÜT SENKRON"; btn.disabled = false; }
+      setTimeout(function() { bilgi.style.display = "none"; }, 15000);
+    })
+    .api_parasutSenkron();
+}
+
+// ═══ KUTLAMA KONTROL — TÜM EKRANLAR ═══
+function kutlamaKontrolBaslat() {
+  kutlamaKontrolEt();
+  setInterval(kutlamaKontrolEt, 30000);
+}
+
+function kutlamaKontrolEt() {
+  if (document.getElementById('kutlamaOverlay')) return;
+  var email = (window.currentUserEmail || '').toLowerCase().trim();
+  if (!email) return;
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.ok || !r.kutlama) return;
+      var k = r.kutlama;
+      teklifOnayShowYap(k.firmaAdi, k.personelAd);
+      try { google.script.run.api_kutlamaGoruldu(k.id, email); } catch(e) {}
+    })
+    .withFailureHandler(function() {})
+    .api_kutlamaKontrol(email);
+}
+
+/**
+ * Başlık Uyarı Fonksiyonları
+ */
+function baslikYanipSonsun(mesaj) {
+  if (_baslikInterval) baslikDurdur(); // Varsa önce temizle, sonra yenisini başlat
+  var yanip = true;
+  _baslikInterval = setInterval(function() {
+    document.title = yanip ? ("🚨 " + mesaj) : _baslikOrijinal;
+    yanip = !yanip;
+  }, 1000);
+  
+  try { uyariSesCaldir(); } catch(e) {}
+}
+
+function baslikDurdur() {
+  if (_baslikInterval) { 
+    clearInterval(_baslikInterval); 
+    _baslikInterval = null; 
+  }
+  document.title = _baslikOrijinal;
+}
+
+/**
+ * Ziyaret Uyarı Kontrolü
+ */
+function ziyaretUyariKontrol() {
+  if (!window.currentUserEmail) return;
+  
+  google.script.run
+    .withSuccessHandler(function(planlar) {
+      if (!planlar || !Array.isArray(planlar) || !planlar.length) return;
+      
+      var simdi = new Date();
+      var simdDk = simdi.getHours() * 60 + simdi.getMinutes();
+      
+      for (var i = 0; i < planlar.length; i++) {
+        var p = planlar[i];
+        if (!p || !p.planlananSaat) continue;
+        if (p.durum === "TAMAMLANDI" || p.durum === "İPTAL") continue;
+        
+        // Personel mail kontrolü
+        if (String(p.personelEmail||'').toLowerCase() !== String(window.currentUserEmail||'').toLowerCase()) continue;
+        
+        var saatParts = String(p.planlananSaat).match(/(\d+):(\d+)/);
+        if (!saatParts) continue;
+        
+        var planDk = parseInt(saatParts[1]) * 60 + parseInt(saatParts[2]);
+        var fark = planDk - simdDk;
+        
+        // Uyarı aralığı kontrolü
+        if ((fark >= 55 && fark <= 65) || (fark >= -5 && fark <= 5)) {
+          var planId = p.planId || i;
+          var uniqueKey = planId + "_" + (fark > 0 ? "saatKala" : "vakti");
+          
+          if (_sonUyariPlanId === uniqueKey) continue; 
+          _sonUyariPlanId = uniqueKey;
+          
+          var mesaj = fark > 0 ? "1 SAAT SONRA ZİYARET: " + p.firmaAdi : "ZİYARET VAKTİ: " + p.firmaAdi;
+          
+          baslikYanipSonsun(mesaj);
+          setTimeout(baslikDurdur, 30000);
+          break;
+        }
+      }
+    })
+    .withFailureHandler(function(err) { console.error("Ziyaret kontrol hatası:", err); })
+    .api_isgPlanListeGetir(new Date().toISOString().split("T")[0], window.currentUserEmail, window.userRole);
+}
+
+// Zamanlayıcılar
+setInterval(ziyaretUyariKontrol, 2 * 60 * 1000);
+setTimeout(ziyaretUyariKontrol, 5000);
+
+function toplantiModalAc() {
+  var bugun = new Date().toISOString().split('T')[0];
+  document.getElementById('tplTarih').value = bugun;
+  document.getElementById('tplFirmaInput').value = '';
+  document.getElementById('tplFirmaId').value = '';
+  document.getElementById('tplFirmaAdi').value = '';
+  document.getElementById('tplKonu').value = '';
+  document.getElementById('tplAciklama').value = '';
+  document.getElementById('tplSaat').value = '09:00';
+  var label = document.getElementById('toplantiPlanlayanLabel');
+  if (label) label.textContent = 'Planlayan: ' + (window.currentUserEmail || '');
+  toplantiPersonelListesiDoldur();
+  document.getElementById('toplantiModal').style.display = 'flex';
+}
+
+function toplantiModalAcFirmaIle() {
+  toplantiModalAc();
+  setTimeout(function() {
+    var firmaAdi = window._selectedFirma    || '';
+    var firmaId  = window._selectedFirmaId  || '';
+    document.getElementById('tplFirmaId').value    = firmaId;
+    document.getElementById('tplFirmaAdi').value   = firmaAdi;
+    document.getElementById('tplFirmaInput').value = firmaAdi;
+  }, 150);
+}
+
+function toplantiModalKapat() {
+  document.getElementById('toplantiModal').style.display = 'none';
+}
+
+function toplantiPersonelListesiDoldur() {
+  var sel = document.getElementById('tplRefakatci');
+  sel.innerHTML = '<option value="">-- Personel Seçin --<\/option>';
+  google.script.run
+    .withSuccessHandler(function(res) {
+      var liste = (res && res.liste) ? res.liste : [];
+      liste.forEach(function(p) {
+        if (p.email === window.currentUserEmail) return;
+        var opt = document.createElement('option');
+        opt.value = p.email;
+        opt.textContent = p.ad + ' — ' + p.email;
+        sel.appendChild(opt);
+      });
+    })
+    .withFailureHandler(function() {})
+    .api_personelListesiGetir();
+}
+function toplantiKaydet() {
+  var firmaAdi  = document.getElementById('tplFirmaAdi').value.trim();
+  var firmaId   = document.getElementById('tplFirmaId').value.trim();
+  var tarih     = document.getElementById('tplTarih').value;
+  var saat      = document.getElementById('tplSaat').value;
+  var konu      = document.getElementById('tplKonu').value.trim();
+  var aciklama  = document.getElementById('tplAciklama').value.trim();
+  var refakatci = document.getElementById('tplRefakatci').value;
+  if (!firmaAdi)  { alert('⚠️ Lütfen firma seçin!'); return; }
+  if (!tarih)     { alert('⚠️ Tarih seçin!'); return; }
+  if (!konu)      { alert('⚠️ Konu girin!'); return; }
+  if (!refakatci) { alert('⚠️ Refakatçı seçin!'); return; }
+  var btn = document.getElementById('btnToplantiKaydet');
+  btn.disabled = true;
+  btn.textContent = '⏳ Kaydediliyor...';
+  google.script.run
+    .withSuccessHandler(function(res) {
+      btn.disabled = false;
+      btn.textContent = '📅 TOPLANTI PLANINI OLUŞTUR';
+      if (res && res.ok) {
+        notify('✅ Toplantı planı oluşturuldu!', 'success');
+        toplantiModalKapat();
+      } else {
+        alert('❌ Hata: ' + (res ? res.msg : 'Bilinmeyen hata'));
+      }
+    })
+    .withFailureHandler(function(e) {
+      btn.disabled = false;
+      btn.textContent = '📅 TOPLANTI PLANINI OLUŞTUR';
+      alert('❌ Bağlantı hatası: ' + e.message);
+    })
+    .api_toplantiOlustur({
+      firmaId: firmaId, firmaAdi: firmaAdi, tarih: tarih,
+      saat: saat, konu: konu, aciklama: aciklama,
+      refakatci: refakatci, planlayan: window.currentUserEmail
+    });
+}
+
+
+function toplantiTabSec(tab) {
+  _tplAktifTab = tab;
+  var tabP = document.getElementById('tabPlanladigim');
+  var tabD = document.getElementById('tabDavetli');
+  if (tab === 'planladigim') {
+    if (tabP) { tabP.style.background = '#4f46e5'; tabP.style.color = 'white'; tabP.style.border = 'none'; }
+    if (tabD) { tabD.style.background = 'white'; tabD.style.color = '#4f46e5'; tabD.style.border = '2px solid #4f46e5'; }
+  } else {
+    if (tabD) { tabD.style.background = '#4f46e5'; tabD.style.color = 'white'; tabD.style.border = 'none'; }
+    if (tabP) { tabP.style.background = 'white'; tabP.style.color = '#4f46e5'; tabP.style.border = '2px solid #4f46e5'; }
+  }
+  toplantiListeYukle();
+}
+
+function toplantiCevapModalAc(id, firma, tarih, saat, konu, planlayan) {
+  document.getElementById('tcToplantiId').value = id;
+  document.getElementById('tcFirma').textContent = firma;
+  document.getElementById('tcTarihSaat').textContent = '📆 ' + tarih + ' — 🕐 ' + saat;
+  document.getElementById('tcKonu').textContent = '📝 ' + konu;
+  document.getElementById('tcPlanlayan').textContent = '📤 Davet eden: ' + planlayan;
+  document.getElementById('toplantiCevapModal').style.display = 'flex';
+}
+function toplantiFiremaAra(q) {
+  var oneri = document.getElementById('tplFirmaOneri');
+  if (!q || q.length < 2) { oneri.style.display = 'none'; return; }
+  google.script.run
+    .withSuccessHandler(function(res) {
+      var liste = (res && res.liste) ? res.liste : [];
+      if (!liste.length) { oneri.style.display = 'none'; return; }
+      oneri.innerHTML = liste.slice(0, 8).map(function(f) {
+        var ad = f.firmaAdi || f.firma || '';
+        var id = f.firmaId  || f.id   || '';
+        return '<div onclick="toplantiFiremaSec(\'' + id + '\',\'' + ad.replace(/'/g,'') + '\')" ' +
+          'style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;font-weight:600;color:#1e293b;" ' +
+          'onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'#fff\'">🏢 ' + ad + '<\/div>';
+      }).join('');
+      oneri.style.display = 'block';
+    })
+    .withFailureHandler(function() { oneri.style.display = 'none'; })
+    .api_firmaListesiGetir(q);
+}
+
+function toplantiFiremaSec(id, ad) {
+  document.getElementById('tplFirmaId').value    = id;
+  document.getElementById('tplFirmaAdi').value   = ad;
+  document.getElementById('tplFirmaInput').value = ad;
+  document.getElementById('tplFirmaOneri').style.display = 'none';
+}
+
+
+var _tplAktifTab = 'planladigim';
+
+
+
+function toplantiDetayGoster(t) {
+  // Eğer t objesi boş gelirse işlemi durdur
+  if (!t) return;
+
+  // Verileri hazırlayalım (Eksik veri varsa '-' koyar)
+  var firma = t.firmaAdi || t.firma || "Bilinmeyen Firma";
+  var tarih = t.tarih || "-";
+  var saat  = (t.saatBaslangic || t.saat || "-") + (t.saatBitis ? " - " + t.saatBitis : "");
+  var ekip  = t.ekip || "Atanan ekip bilgisi yok.";
+  var konu  = t.konu || t.notlar || "Detay belirtilmemiş.";
+
+  // Şık bir mesaj kutusu içeriği
+  var detayMetni = "🏢 FİRMA: " + firma + "\n" +
+                   "📅 TARİH: " + tarih + "\n" +
+                   "🕐 SAAT:  " + saat + "\n" +
+                   "👥 EKİP:  " + ekip + "\n" +
+                   "----------------------------------\n" +
+                   "📝 NOTLAR / KONU:\n" + konu;
+
+  // Bilgileri ekranda göster (Basit uyarı penceresi)
+  alert(detayMetni);
+}
+
+function toplantiListeYukle() {
+  var div = document.getElementById('toplantiListeDiv');
+  if (!div) {
+    console.log('❌ toplantiListeDiv bulunamadı!');
+    return;
+  }
+  
+  var email = window.currentUserEmail || window.aktifKullanici || '';
+  console.log('📧 Toplanti email:', email);
+  console.log('🔖 Aktif tab:', _tplAktifTab);
+  
+  div.innerHTML = '<div style="text-align:center;padding:30px;color:#94a3b8;">⏳ Yükleniyor...<\/div>';
+  
+  var filtreTarih = (document.getElementById('tplFiltreTarih') || {}).value || '';
+  var filtreDurum = (document.getElementById('tplFiltreDurum') || {}).value || '';
+  
+  google.script.run
+    .withSuccessHandler(function(response) {
+      console.log('✅ API Yanıt:', response);
+      var liste = (response && response.liste) ? response.liste : [];
+      console.log('📋 Liste:', liste);
+      toplantiListeRender(liste);
+    })
+    .withFailureHandler(function(e) {
+      console.log('❌ HATA:', e.message);
+      div.innerHTML = '<div style="color:#ef4444;padding:20px;">❌ Hata: ' + e.message + '<\/div>';
+    })
+    .api_toplantiListeGetir({
+      tip: _tplAktifTab === 'planladigim' ? 'planladiklari' : 'davetedildikleri',
+      email: email,
+      tarih: filtreTarih,
+      durum: filtreDurum
+    });
+}
+function toplantiListeRender(liste) {
+  console.log('Liste geldi:', liste ? liste.length : 'null');
+  var div = document.getElementById('toplantiListeDiv');
+  if (!div) return;
+  if (!liste || !liste.length) {
+    div.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;font-size:13px;">📭 Toplantı bulunamadı.<\/div>';
+    return;
+  }
+  var html = '<div style="display:flex;flex-direction:column;gap:10px;">';
+  liste.forEach(function(t) {
+    // Renk ve İkon Ayarları
+    var durumRenk  = t.durum === 'kabul' ? '#10b981' : t.durum === 'red' ? '#ef4444' : '#f59e0b';
+    var durumIkon  = t.durum === 'kabul' ? '✅' : t.durum === 'red' ? '❌' : '⏳';
+    var durumLabel = t.durum === 'kabul' ? 'Kabul' : t.durum === 'red' ? 'Reddedildi' : 'Bekliyor';
+    
+    // Tarih ve Saat Güvenlik Kontrolü (Invalid Date hatasını önlemek için)
+    var tarihStr = t.tarih ? (t.tarih.indexOf('.') > -1 ? t.tarih : new Date(t.tarih).toLocaleDateString('tr-TR')) : '-';
+    var saatStr  = t.saatBaslangic || t.saat || '-';
+    
+    // --- TAKVİM KARTI BAŞLANGICI ---
+html += '<div onclick="toplantiDetayGoster(' + JSON.stringify(t).replace(/"/g, '&quot;') + ')" style="background:#eff6ff; border:1px solid #bfdbfe; border-left:4px solid #3b82f6; border-radius:8px; padding:10px; margin-bottom:8px; cursor:pointer; position:relative;">' +
+      '<div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">' +
+        '<div>' +
+          '<div style="font-weight:900; color:#1e293b; font-size:14px;">' + esc(t.firmaAdi || t.firma) + '<\/div>' +
+          '<div style="font-size:12px; color:#475569; margin-top:3px;">📆 ' + tarihStr + ' — 🕐 ' + saatStr + '<\/div>' +
+          '<div style="font-size:12px; color:#475569; margin-top:2px;">📝 ' + esc(t.konu || t.notlar || 'Detay yok') + '<\/div>' +
+        '<\/div>' +
+        '<div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">' +
+          '<span style="background:' + durumRenk + '20; color:' + durumRenk + '; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:900;">' + durumIkon + ' ' + durumLabel + '<\/span>' +
+        '<\/div>' +
+      '<\/div>' +
+    '<\/div>';
+// Kabul/Red Butonları
+    if (t.durum === 'bekliyor') {
+      html += '<div style="display:flex; gap:6px; margin-top:8px;">' +
+                '<button onclick="event.stopPropagation(); document.getElementById(\'tcToplantiId\').value=\'' + t.id + '\'; toplantiCevapla(\'kabul\')" style="background:#10b981; color:white; border:none; padding:6px 10px; border-radius:6px; font-weight:700; cursor:pointer; font-size:10px;">✅ KABUL</button>' +
+                '<button onclick="event.stopPropagation(); document.getElementById(\'tcToplantiId\').value=\'' + t.id + '\'; toplantiCevapla(\'red\')" style="background:#ef4444; color:white; border:none; padding:6px 10px; border-radius:6px; font-weight:700; cursor:pointer; font-size:10px;">❌ RED</button>' +
+              '<\/div>';
+    }
+
+    html += '<\/div>'; // Tek bir kartın (div) kapanışı
+  }); // ForEach döngüsünün sonu
+
+  html += '<\/div>'; // En dıştaki ana flex div'in kapanışı
+  div.innerHTML = html;
+}
+function toplantiCevapla(karar) {
+  var id = document.getElementById('tcToplantiId').value;
+  if (!id) return;
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res && res.ok) {
+        // 1. Bildirim ver
+        notify(karar === 'kabul' ? '✅ Kabul edildi!' : '❌ Reddedildi.', 'success');
+        
+        // 2. EĞER MODAL AÇIKSA KAPAT
+        var modal = document.getElementById('toplantiCevapModal');
+        if (modal) modal.style.display = 'none';
+
+        toplantiListeYukle();
+        
+      } else {
+        alert('Hata: ' + (res ? res.msg : 'Bilinmeyen hata'));
+      }
+    })
+    .withFailureHandler(function(e) { 
+      alert('Sistem Hatası: ' + e.message); 
+    })
+    .api_toplantiCevapla({ id: id, karar: karar, email: window.currentUserEmail });
+}
+
+function toplantiCevapModalAc(id, firma, tarih, saat, konu, planlayan) {
+  document.getElementById('tcToplantiId').value = id;
+  document.getElementById('tcFirma').textContent = firma;
+  document.getElementById('tcTarihSaat').textContent = '📆 ' + tarih + ' — 🕐 ' + saat;
+  document.getElementById('tcKonu').textContent = '📝 ' + konu;
+  document.getElementById('tcPlanlayan').textContent = '📤 Davet eden: ' + planlayan;
+  document.getElementById('toplantiCevapModal').style.display = 'flex';
+}
+
+function toplantiFiremaAra(q) {
+  var oneri = document.getElementById('tplFirmaOneri');
+  if (!q || q.length < 2) { oneri.style.display = 'none'; return; }
+  google.script.run
+    .withSuccessHandler(function(res) {
+      var liste = (res && res.liste) ? res.liste : [];
+      if (!liste.length) { oneri.style.display = 'none'; return; }
+      oneri.innerHTML = liste.slice(0, 8).map(function(f) {
+        var ad = f.firmaAdi || f.firma || '';
+        var id = f.firmaId  || f.id   || '';
+        return '<div onclick="toplantiFiremaSec(\'' + id + '\',\'' + ad.replace(/'/g,'') + '\')" ' +
+          'style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;font-weight:600;color:#1e293b;" ' +
+          'onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'#fff\'">🏢 ' + ad + '<\/div>';
+      }).join('');
+      oneri.style.display = 'block';
+    })
+    .withFailureHandler(function() { oneri.style.display = 'none'; })
+    .api_firmaListesiGetir(q);
+}
+
+function toplantiFiremaSec(id, ad) {
+  document.getElementById('tplFirmaId').value    = id;
+  document.getElementById('tplFirmaAdi').value   = ad;
+  document.getElementById('tplFirmaInput').value = ad;
+  document.getElementById('tplFirmaOneri').style.display = 'none';
+}
+
+function toplantiIptalEt(id) {
+  if (!confirm('Bu toplantı planını iptal etmek istiyor musunuz?')) return;
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res && res.ok) { notify('Toplantı iptal edildi.', 'info'); toplantiListeYukle(); }
+      else { alert('Hata: ' + (res ? res.msg : '')); }
+    })
+    .withFailureHandler(function(e) { alert('Hata: ' + e.message); })
+    .api_toplantiIptal({ id: id, email: window.currentUserEmail });
+}
+
+function topBekleyenKontrol() {
+  var email = (window.currentUserEmail || '').toLowerCase().trim();
+  if (!email) return;
+  google.script.run
+    .withSuccessHandler(function(r) {
+      var btn = document.querySelector('[onclick*="toplantilarimAc"]');
+      if (!btn) return;
+      var bekleyen = (r && r.ok && r.liste) ? r.liste.filter(function(t) { return t.durum === 'bekliyor'; }).length : 0;
+      if (bekleyen > 0) {
+        btn.classList.add('toplanti-bildirim');
+        btn.setAttribute('data-badge', bekleyen);
+      } else {
+        btn.classList.remove('toplanti-bildirim');
+        btn.removeAttribute('data-badge');
+      }
+    })
+    .withFailureHandler(function() {})
+    .api_toplantiListeGetir({ tip: 'davetedildikleri', email: email });
+}
+setInterval(topBekleyenKontrol, 60000);
+
+
+
+function toplantilarimAc() {
+  document.querySelectorAll('[id^="panel"]').forEach(function(p) { 
+    if (p.id !== 'toplantiPaneli') p.style.display = 'none'; 
+  });
+  var panel = document.getElementById('toplantiPaneli');
+  if (panel) {
+    panel.style.display = 'flex';
+    _tplAktifTab = 'planladigim';
+    toplantiTabSec('planladigim');
+    topBekleyenKontrol();
+  }
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+
+</script>
