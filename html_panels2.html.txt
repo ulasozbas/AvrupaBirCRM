@@ -1,0 +1,1189 @@
+<div id="panelISG" class="panel hidden-panel">
+
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:20px;">
+  <h3 style="margin:0 0 16px;color:#1e293b;font-size:16px;">AvrupaBir AI Analiz</h3>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;">
+    <div>
+      <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Firma Seç</label>
+      <select id="gemFirmaSelect" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;min-width:200px;">
+        <option value="">Firma seçin...</option>
+      </select>
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Fotoğraf</label>
+      <input type="file" id="gemFotoInput" accept="image/*" capture="environment" style="padding:6px;border:1px solid #cbd5e1;border-radius:8px;">
+    </div>
+    <button onclick="geminiAnalizBaslat()" style="background:#7c3aed;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;">Analiz Et</button>
+  </div>
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:20px;">
+  <h3 style="margin:0 0 16px;color:#1e293b;font-size:16px;">Saha Ziyaret Kaydı — GPS + Fotoğraf</h3>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;">
+    <div>
+      <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Firma</label>
+      <select id="ziyFirmaSelect" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;min-width:200px;">
+        <option value="">Firma seçin...</option>
+      </select>
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Fotoğraf</label>
+      <input type="file" id="ziyFotoInput" accept="image/*" capture="environment" style="padding:6px;border:1px solid #cbd5e1;border-radius:8px;">
+    </div>
+    <div>
+      <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">Not</label>
+      <input type="text" id="ziyNot" placeholder="Ziyaret notu..." style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;width:200px;">
+    </div>
+
+    <button onclick="ziyaretKaydetBaslat()" style="background:#059669;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;">Konum Al ve Kaydet</button>
+  </div>
+  <div id="ziyaretSonuc"></div>
+</div>
+  <div id="AvrupaBirSonuc"></div>
+</div>
+
+  <!-- BAŞLIK -->
+  <div style="background:linear-gradient(135deg,#065f46,#047857); padding:20px; border-radius:12px; color:white; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <div>
+      <h2 style="margin:0; font-size:22px;">🦺 ISG Yönetim Merkezi</h2>
+      <p style="opacity:0.9; font-size:13px; margin-top:5px;">Firma hizmetleri, günlük planlar ve saha ziyaretleri</p>
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button type="button" onclick="isgPanelYukle()" style="background:rgba(255,255,255,0.2); color:white; border:1px solid rgba(255,255,255,0.4); padding:8px 16px; border-radius:8px; cursor:pointer; font-weight:bold;">🔄 Tazele</button>
+      <label style="background:#7c3aed; color:white; padding:8px 16px; border-radius:8px; cursor:pointer; font-weight:bold; display:inline-flex; align-items:center; gap:6px;">
+        📥 İSG_KATİP Güncelle
+        <input type="file" id="meditekImportFile" accept=".xlsx" class="hidden-panel" onchange="meditekImportEt()">
+      </label>
+      <button type="button" id="btnIsgPlanEkle" onclick="isgPlanModalAc()" style="background:#fbbf24; color:#1c1917; border:none; padding:8px 16px; border-radius:8px; cursor:pointer; font-weight:900; display:none;">📅 Yeni Plan Ekle</button>
+      <button type="button" id="btnIsgAraGorev" onclick="isgAraGorevModalAc()" style="background:#8b5cf6; color:white; border:none; padding:8px 16px; border-radius:8px; cursor:pointer; font-weight:900; display:none;">🏃‍♂️ Ara Görev Ekle</button>
+    </div>
+  </div>
+
+ <!-- SEKMELER -->
+  <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
+    <button type="button" onclick="isgSekmeGoster('isgFirmalar')" id="isgTab_Firmalar" style="background:#065f46; color:white; border:none; padding:10px 20px; border-radius:8px; font-weight:900; cursor:pointer;">🏢 ISG Firmaları</button>
+    <button type="button" onclick="isgSekmeGoster('isgPlanlar')" id="isgTab_Planlar" class="btn-secondary">🏃‍♂️ Bugünkü Görevlerim</button>
+<button type="button" onclick="isgSekmeGoster('isgZiyaretler')" id="isgTab_Ziyaretler" class="btn-secondary">📅 Ziyaret Takibi</button>
+    <button type="button" onclick="isgSekmeGoster('isgRapor')" id="isgTab_Rapor" class="btn-secondary">📊 Raporlar</button>
+    <button type="button" onclick="isgSekmeGoster('isgPlanOneri')" id="isgTab_PlanOneri" class="btn-secondary">🎯 Aylık Plan Önerisi</button>
+    <button id="isgTab_Takvim" onclick="isgSekmeGoster('isgTakvim')" style="padding:8px 14px;border-radius:8px;border:none;background:#e2e8f0;color:#475569;font-weight:700;cursor:pointer;font-size:12px;">📅 Takvim</button>
+    <button type="button" onclick="isgSekmeGoster('isgHarita')" id="isgTab_Harita" class="btn-secondary">🗺️ Ziyaret Haritası</button>
+    <button type="button" onclick="isgSekmeGoster('isgGorevHavuzu')" id="isgTab_GorevHavuzu" class="btn-secondary">Gorev Havuzu</button>
+    <button type="button" onclick="isgSekmeGoster('isgKapasiteDash')" id="isgTab_KapasiteDash" class="btn-secondary">📊 ISG Firma Atama</button>
+    <button type="button" onclick="isgSekmeGoster('isgAtamalar')" id="isgTab_Atamalar" class="btn-secondary">📋 Bekleyen Atamalar <span id="isgAtamaBadge" style="background:#ef4444;color:#fff;border-radius:99px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:4px;">0</span></button>
+    
+  </div>
+
+  <!-- ISG FİRMALARI SEKMESİ -->
+  <div id="isgFirmalar">
+    <div style="display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
+      <input type="text" id="isgFirmaAra" placeholder="Firma ara..." oninput="isgFirmaFiltrele()" style="flex:1; padding:10px; border-radius:8px; border:1px solid #cbd5e1; min-width:200px;">
+      <select id="isgTehlikeFiltre" onchange="isgFirmaFiltrele()" style="padding:10px; border-radius:8px; border:1px solid #cbd5e1;">
+        <option value="">Tüm Tehlike Sınıfları</option>
+        <option value="Az Tehlikeli">Az Tehlikeli</option>
+        <option value="Tehlikeli">Tehlikeli</option>
+        <option value="Çok Tehlikeli">Çok Tehlikeli</option>
+      </select>
+      <select id="isgHizmetFiltre" onchange="isgFirmaFiltrele()" style="padding:10px; border-radius:8px; border:1px solid #cbd5e1;">
+        <option value="">Tüm Hizmetler</option>
+        <option value="IGU">İş Güvenliği</option>
+        <option value="Hekim">İşyeri Hekimi</option>
+        <option value="DSP">DSP</option>
+        <option value="Mobil">Mobil Sağlık</option>
+      </select>
+    </div>
+    <div id="isgFirmaListesi" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:12px;">
+      <div style="text-align:center; padding:40px; color:#64748b; grid-column:1/-1;">Yükleniyor...</div>
+    </div>
+  </div>
+
+  <!-- GÜNLÜK PLANLAR SEKMESİ -->
+  <div id="isgPlanlar" class="hidden-panel">
+   <div id="isgGunlukGorevlerim">
+  <div style="text-align:center; padding:40px; color:#64748b;">Yükleniyor...</div>
+</div>
+</div>
+
+  <!-- BUGÜNKÜ GÖREVLERİM SEKMESİ -->
+  <div id="isgZiyaretler" class="hidden-panel">
+    <div id="isgTumGunlukPlanlarKutu" style="display:none; margin-top:20px;">
+  <div style="background:#eff6ff; border:2px solid #3b82f6; border-radius:12px; padding:16px;">
+    <div style="font-weight:900; color:#1e3a8a; font-size:15px; margin-bottom:12px;">📋 Tüm Personel Günlük Planları</div>
+    <div id="isgTumGunlukPlanlar"></div>
+  </div>
+</div>
+
+
+    <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; overflow-x:auto;">
+      <table style="width:100%; border-collapse:collapse;">
+        <thead style="background:#f8fafc;">
+          <tr>
+            <th style="padding:12px; text-align:left; font-size:12px; color:#64748b;">TARİH</th>
+            <th style="padding:12px; text-align:left; font-size:12px; color:#64748b;">FİRMA</th>
+            <th style="padding:12px; text-align:left; font-size:12px; color:#64748b;">PERSONEL</th>
+            <th style="padding:12px; text-align:left; font-size:12px; color:#64748b;">HİZMET</th>
+            <th style="padding:12px; text-align:right; font-size:12px; color:#64748b;">PLANLANAN</th>
+            <th style="padding:12px; text-align:right; font-size:12px; color:#64748b;">GERÇEKLEŞEN</th>
+            <th style="padding:12px; text-align:center; font-size:12px; color:#64748b;">DURUM</th>
+          </tr>
+        </thead>
+        <tbody id="isgZiyaretBody">
+          <tr><td colspan="7" style="text-align:center; padding:30px; color:#64748b;">Ziyaret kaydı bulunamadı.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- GÖREV HAVUZU SEKMESİ -->
+  <div id="isgGorevHavuzu" class="hidden-panel" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h3 style="margin:0; color:#7c3aed; font-size:16px;">Gorev Havuzu</h3>
+      <div style="display:flex; gap:8px;">
+        <button onclick="gorevHavuzuYukle()" style="background:#7c3aed; color:white; border:none; padding:7px 14px; border-radius:6px; font-weight:bold; cursor:pointer; font-size:12px;">Yenile</button>
+        <button id="btnGorevOlustur" onclick="gorevModalAc()" style="display:none; background:#065f46; color:white; border:none; padding:7px 14px; border-radius:6px; font-weight:bold; cursor:pointer; font-size:12px;">+ Gorev Olustur</button>
+      </div>
+    </div>
+    <div id="gorevHavuzuListesi" style="margin-bottom:20px;"></div>
+  </div>
+
+  <!-- BEKLEYEN ATAMALAR SEKMESİ -->
+  <div id="isgAtamalar" class="hidden-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 style="margin:0;color:#ef4444;font-size:16px;">📋 Bekleyen Atamalar</h3>
+      <button onclick="isgAtamaListeYukle()" style="background:#065f46;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px;">🔄 Yenile</button>
+    </div>
+    <div id="isgAtamaListesi" style="display:grid;gap:12px;">
+      <div style="text-align:center;padding:40px;color:#64748b;">Yükleniyor...</div>
+    </div>
+  </div>
+
+  <!-- ATAMA MODAL -->
+  <div id="atamaModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.85);z-index:1000010;align-items:center;justify-content:center;backdrop-filter:blur(5px);">
+    <div style="background:white;width:min(500px,92vw);border-radius:16px;padding:25px;box-shadow:0 25px 50px rgba(0,0,0,0.5);">
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #f1f5f9;padding-bottom:12px;margin-bottom:16px;">
+        <h3 style="margin:0;color:#065f46;font-size:16px;">🦺 Personel Atama</h3>
+        <button onclick="document.getElementById('atamaModal').style.display='none'" style="background:#fee2e2;color:#ef4444;border:none;padding:5px 10px;border-radius:6px;font-weight:bold;cursor:pointer;">✖</button>
+      </div>
+      <input type="hidden" id="atamaSatir">
+      <input type="hidden" id="atamaFirmaId">
+      <div id="atamaFirmaGoster" style="background:#f0fdf4;border:1px solid #bbf7d0;padding:12px;border-radius:8px;font-weight:900;color:#065f46;margin-bottom:14px;font-size:15px;"></div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:4px;">Çalışan Sayısı</label>
+        <input type="number" id="atamaCalisan" placeholder="Firma çalışan sayısı" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;box-sizing:border-box;">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:4px;">Hizmet Türleri (seçtikçe personel listesi açılır)</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px;"><input type="checkbox" id="atamaHizIGU" value="IGU" onchange="atamaHizmetDegisti()"> 🦺 İş Güvenliği</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px;"><input type="checkbox" id="atamaHizHekim" value="Hekim" onchange="atamaHizmetDegisti()"> 🩺 İşyeri Hekimi</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px;"><input type="checkbox" id="atamaHizDSP" value="DSP" onchange="atamaHizmetDegisti()"> 📋 DSP</label>
+        </div>
+      </div>
+      <div id="atamaPersonelAlanlari"></div>
+      <input type="hidden" id="atamaPersonel">
+      <input type="hidden" id="atamaDakika">
+      <div style="margin-bottom:16px;">
+        <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:4px;">Notlar</label>
+        <textarea id="atamaNotlar" rows="2" placeholder="Ek not..." style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;box-sizing:border-box;resize:none;"></textarea>
+      </div>
+      <button onclick="atamaKaydetGonder()" id="btnAtamaKaydet" style="width:100%;background:linear-gradient(135deg,#065f46,#047857);color:white;border:none;padding:14px;border-radius:10px;font-weight:900;font-size:15px;cursor:pointer;">✅ ATAMAYI KAYDET</button>
+    </div>
+  </div>
+
+  <!-- ISG FİRMA ATAMA / KAPASİTE DASHBOARD -->
+<div id="isgKapasiteDash" class="hidden-panel">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <h3 style="margin:0;color:#065f46;font-size:16px;">📊 ISG Firma Atama — Kapasite Dashboard</h3>
+    <button onclick="isgKapasiteDashYukle()" style="background:#065f46;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px;">🔄 Yenile</button>
+<label style="background:#7c3aed;color:#fff;padding:7px 14px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px;display:inline-flex;align-items:center;gap:4px;">📥 Excel Import<input type="file" accept=".xlsx" class="hidden-panel" onchange="isgKapasiteExcelImport(this)"></label>
+  </div>
+  <div id="isgKapaKPICards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;"></div>
+  <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;" id="isgKapaFiltreler">
+    <button onclick="isgKapaFiltre('all')" class="isgKapaFBtn active" data-f="all" style="padding:6px 14px;border:1px solid #cbd5e1;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;background:#065f46;color:#fff;">Tümü</button>
+    <button onclick="isgKapaFiltre('Hekim')" class="isgKapaFBtn" data-f="Hekim" style="padding:6px 14px;border:1px solid #cbd5e1;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:#374151;">Hekim</button>
+    <button onclick="isgKapaFiltre('A')" class="isgKapaFBtn" data-f="A" style="padding:6px 14px;border:1px solid #cbd5e1;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:#374151;">A Sınıfı</button>
+    <button onclick="isgKapaFiltre('B')" class="isgKapaFBtn" data-f="B" style="padding:6px 14px;border:1px solid #cbd5e1;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:#374151;">B Sınıfı</button>
+    <button onclick="isgKapaFiltre('C')" class="isgKapaFBtn" data-f="C" style="padding:6px 14px;border:1px solid #cbd5e1;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:#374151;">C Sınıfı</button>
+  </div>
+  <div id="isgKapaBarlar" style="display:flex;flex-direction:column;gap:8px;"></div>
+  <div id="isgKapaVerimsiz" style="margin-top:24px;display:none;"></div>
+  <div style="margin-top:24px;display:flex;gap:8px;margin-bottom:14px;">
+  <button onclick="isgKapaAltSekme('kapasite')" id="isgAltTab_kapasite" style="padding:8px 16px;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;background:#065f46;color:#fff;">📊 Kapasite</button>
+  <button onclick="isgKapaAltSekme('karlilik')" id="isgAltTab_karlilik" style="padding:8px 16px;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;background:#e2e8f0;color:#475569;">💰 Kârlılık Analizi</button>
+  <button onclick="isgKapaAltSekme('cografi')" id="isgAltTab_cografi" style="padding:8px 16px;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;background:#e2e8f0;color:#475569;">🗺️ Coğrafi Analiz</button>
+  <button onclick="isgKapaAltSekme('simulasyon')" id="isgAltTab_simulasyon" style="padding:8px 16px;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;background:#e2e8f0;color:#475569;">🔮 Simülasyon</button>
+</div>
+<div id="isgKarlilikDiv" style="display:none;"></div>
+</div>
+
+<div id="isgCografiDiv" style="display:none;">
+  <div id="isgCografiKPI" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;"></div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    <div id="isgCografiHarita" style="flex:2;min-width:300px;height:500px;border-radius:10px;border:1px solid #e2e8f0;overflow:hidden;"></div>
+    <div id="isgCografiSidebar" style="flex:1;min-width:250px;max-height:500px;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<div id="isgSimulasyonDiv" style="display:none;">
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:16px;">
+    <h4 style="margin:0 0 12px;color:#1e293b;font-size:14px;">🔮 Senaryo Simülasyonu</h4>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+      <div>
+        <label style="font-size:11px;color:#64748b;display:block;margin-bottom:3px;">Aylık Yeni Firma</label>
+        <input type="number" id="simYeniFirma" value="10" style="padding:8px;border:1px solid #cbd5e1;border-radius:6px;width:80px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:#64748b;display:block;margin-bottom:3px;">Ort. Dakika/Firma</label>
+        <input type="number" id="simDkFirma" value="120" style="padding:8px;border:1px solid #cbd5e1;border-radius:6px;width:80px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:#64748b;display:block;margin-bottom:3px;">Kaç Ay Sonra?</label>
+        <input type="number" id="simAy" value="3" style="padding:8px;border:1px solid #cbd5e1;border-radius:6px;width:80px;">
+      </div>
+      <button onclick="isgSimulasyonHesapla()" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;">🔮 Hesapla</button>
+    </div>
+  </div>
+  <div id="simSonucDiv"></div>
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-top:16px;">
+    <h4 style="margin:0 0 12px;color:#1e293b;font-size:14px;">💬 AI'a Soru Sor</h4>
+    <div style="display:flex;gap:8px;">
+      <input type="text" id="simSoruInput" placeholder="Örn: Müslüm Fırat'ı doldurmak için kaç firma lazım?" style="flex:1;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;">
+      <button onclick="isgSimSoruSor()" style="background:#7c3aed;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:700;cursor:pointer;">🤖 Sor</button>
+    </div>
+    <div id="simAiCevap" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+  <!-- RAPORLAR SEKMESİ -->
+  <div id="isgRapor" class="hidden-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 style="margin:0;color:#065f46;font-size:16px;">📊 ISG Uzman Performans Kartı — Bu Ay</h3>
+      <button onclick="isgPerformansYukle()" style="background:#065f46;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px;">🔄 Yenile</button>
+    </div>
+    <div id="isgPerformansDiv" style="text-align:center;padding:40px;color:#64748b;">Yükleniyor...</div>
+  </div>
+
+<!-- PLAN ÖNERİSİ SEKMESİ -->
+  <div id="isgPlanOneri" class="hidden-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 style="margin:0;color:#7c3aed;font-size:16px;">🎯 Aylık Dakika Kotası & Plan Önerisi</h3>
+      <button onclick="isgPlanOneriYukle()" style="background:#7c3aed;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px;">🔄 Hesapla</button>
+    </div>
+    <div id="isgPlanOneriDiv" style="text-align:center;padding:40px;color:#64748b;">Hesaplamak için butona tıklayın.</div>
+  </div>
+
+  <div id="isgTakvim" style="display:none;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+    <button onclick="isgTakvimAyDegistir(-1)" style="background:#1e293b;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;">◀ Önceki</button>
+    <h3 id="isgTakvimBaslik" style="margin:0;color:#1e293b;font-size:16px;">Mart 2026</h3>
+    <button onclick="isgTakvimAyDegistir(1)" style="background:#1e293b;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;">Sonraki ▶</button>
+  </div>
+  <div id="isgTakvimGrid" style="background:#fff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;"></div>
+  <div id="isgTakvimOzet" style="margin-top:12px;"></div>
+
+  <div style="margin-top:16px;background:#fff;border-radius:12px;border:1px solid #e2e8f0;padding:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+      <h3 style="margin:0;font-size:14px;color:#1e293b;">📋 Ziyaret Dökümü</h3>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <input type="date" id="isgDokumBas" style="padding:5px 8px;border:1.5px solid #cbd5e1;border-radius:6px;font-size:12px;">
+        <span style="color:#64748b;font-size:12px;">—</span>
+        <input type="date" id="isgDokumBit" style="padding:5px 8px;border:1.5px solid #cbd5e1;border-radius:6px;font-size:12px;">
+        <button onclick="isgDokumYukle()" style="background:#065f46;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">🔍 Getir</button>
+        <button onclick="isgDokumExcel()" style="background:#1e40af;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">📥 Excel</button>
+      </div>
+    </div>
+    <div id="isgDokumPersonelOzet" style="margin-bottom:10px;"></div>
+    <div id="isgDokumTablo" style="max-height:400px;overflow-y:auto;"><div style="color:#64748b;font-size:13px;padding:12px;">Tarih seçip Getir butonuna basın.</div></div>
+  </div>
+</div>
+  
+
+  <!-- ZİYARET HARİTASI SEKMESİ -->
+  <div id="isgHarita" class="hidden-panel">
+    <div id="isgHaritaContainer" style="position:relative;">
+      <div id="isgHaritaLoading">
+        <div class="harita-spinner"></div>
+        <div id="isgHaritaLoadingText">Firmalar yukleniyor...<br><small id="isgHaritaGeoText" style="color:#64748b;font-weight:400;"></small></div>
+      </div>
+      <div id="isgHaritaToolbar">
+        <h3>ISG Ziyaret Haritasi</h3>
+        <input type="date" id="isgHaritaTarih"/>
+        <button id="isgHaritaYukleBtn" onclick="isgHaritaYukle()">Haritayi Yukle</button>
+        <button id="isgHaritaRotaBtn" onclick="isgHaritaRotaAc()">Rotayi Ac</button>
+      </div>
+      <div id="isgHaritaLegend">
+        <div class="legend-item"><div class="legend-dot" style="background:#64748b;"></div>Planlanmamis</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;"></div>Bugun Planlandi</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#10b981;"></div>Tamamlandi</div>
+        <div class="legend-item" style="margin-left:auto; color:#94a3b8;" id="isgHaritaFirmaSayisi">-- firma yuklendi</div>
+      </div>
+      <div id="isgHaritaBody">
+        <div id="isgHaritaMap"></div>
+        <div id="isgHaritaSidebar">
+          <div id="isgHaritaSidebarHead">Gunluk Plan <span id="isgPlanSayiBadge">0</span></div>
+          <div id="isgHaritaPlanList">
+            <div id="isgHaritaEmpty">Sol haritadan firma secerek<br>gunluk ziyaret plani olusturun.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div> <!-- İSG PANELİ BURADA KAPANIR -->
+
+
+<!-- ============================================== -->
+<!-- 🚐 MOBİL SAĞLIK YÖNETİM PANELİ -->
+<!-- ============================================== -->
+<div id="panelMobil" class="panel hidden-panel" style="background:#f1f5f9; min-height:85vh; padding:20px; border-radius:12px;">
+  
+  <div style="background: linear-gradient(135deg, #0ea5e9, #0369a1); padding: 25px; border-radius: 16px; color: white; margin-bottom: 25px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px; box-shadow:0 10px 25px rgba(14,165,233,0.3);">
+    <div>
+      <h2 style="margin:0; font-size:26px; font-weight:900; letter-spacing:0.5px;">🚐 Mobil Sağlık Operasyon Merkezi</h2>
+      <label style="background:#8b5cf6; color:white; padding:12px 20px; border-radius:10px; font-weight:900; cursor:pointer; box-shadow:0 4px 6px rgba(0,0,0,0.2); display:inline-flex; align-items:center; gap:6px;">
+  📥 Geçmiş Mobil Excelini Yükle
+  <input type="file" id="eskiMobilImportFileMobil" accept=".xlsx" class="hidden-panel" onchange="eskiMobilImportEtMobil()">
+</label>
+      <p style="opacity: 0.9; font-size: 14px; margin-top:8px;">Planlama, saha operasyonları, tahlil süreçleri ve kargo gönderimlerinin tamamı.</p>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button type="button" onclick="mobilGorevEkleAc()" style="background:#f59e0b; color:white; border:none; padding:12px 20px; border-radius:10px; font-weight:900; cursor:pointer; box-shadow:0 4px 6px rgba(0,0,0,0.2);">➕ Yeni Plan Ekle</button>
+      <button type="button" onclick="loadMobilList()" style="background:#bae6fd; color:#0369a1; border:none; padding:12px 20px; border-radius:10px; font-weight:900; cursor:pointer; box-shadow:0 4px 6px rgba(0,0,0,0.2);">🔄 Yenile</button>
+    </div>
+  </div>
+
+  <!-- BEKLEYEN ATAMA UYARISI -->
+  <div id="mobilAtamaUyari" style="display:none;background:linear-gradient(135deg,#fef2f2,#fff1f2);border:2px solid #fecaca;border-radius:12px;padding:14px 20px;margin-bottom:16px;cursor:pointer;" onclick="mobilAtamaDetayAc()">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:24px;">🔔</span>
+        <div>
+          <div style="font-weight:900;color:#991b1b;font-size:14px;" id="mobilAtamaUyariBaslik">Bekleyen Atamalar</div>
+          <div style="font-size:12px;color:#64748b;" id="mobilAtamaUyariDetay">Yükleniyor...</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <span id="mobilMobilBadge" style="background:#0ea5e9;color:#fff;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:900;">🚑 0</span>
+        <span id="mobilIseGirisBadge" style="background:#f59e0b;color:#fff;border-radius:99px;padding:4px 12px;font-size:12px;font-weight:900;">🏥 0</span>
+      </div>
+    </div>
+  </div>
+  <div id="mobilAtamaDetayDiv" style="display:none;margin-bottom:16px;"></div>
+
+  <!-- SÜREÇ SEKMELERİ (FİLTRELER) -->
+  <div style="display:flex; gap:10px; margin-bottom:20px; overflow-x:auto; padding-bottom:10px;">
+    <button onclick="mobilDurumGoster('TÜMÜ', this)" class="mobil-tab-btn" style="background:#1e293b; color:white; border:none; padding:12px 20px; border-radius:10px; font-weight:bold; cursor:pointer; flex-shrink:0;">📋 Tüm Süreçler</button>
+    <button onclick="mobilDurumGoster('TAKVIM', this)" class="mobil-tab-btn" style="background:#f1f5f9; color:#475569; border:2px solid #cbd5e1; padding:12px 20px; border-radius:10px; font-weight:bold; cursor:pointer; flex-shrink:0;">📆 Saha Takvimi</button>
+    <button onclick="mobilDurumGoster('PLAN BEKLEYEN', this)" class="mobil-tab-btn" style="background:#f1f5f9; color:#475569; border:2px solid #cbd5e1; padding:12px 20px; border-radius:10px; font-weight:bold; cursor:pointer; flex-shrink:0;">📅 Plan Bekleyenler</button>
+    <button onclick="mobilDurumGoster('YAPILACAK', this)" class="mobil-tab-btn" style="background:#f1f5f9; color:#475569; border:2px solid #cbd5e1; padding:12px 20px; border-radius:10px; font-weight:bold; cursor:pointer; flex-shrink:0;">🚐 Yaklaşan Saha Programı</button>
+    <button onclick="mobilDurumGoster('SONUÇ BEKLEYEN', this)" class="mobil-tab-btn" style="background:#f1f5f9; color:#475569; border:2px solid #cbd5e1; padding:12px 20px; border-radius:10px; font-weight:bold; cursor:pointer; flex-shrink:0;">🧪 Sonuç Bekleyenler</button>
+    <button onclick="mobilDurumGoster('KARGO', this)" class="mobil-tab-btn" style="background:#f1f5f9; color:#475569; border:2px solid #cbd5e1; padding:12px 20px; border-radius:10px; font-weight:bold; cursor:pointer; flex-shrink:0;">📦 Kargo / Teslimat</button>
+    <button onclick="mobilVerimlilikAc()" class="mobil-tab-btn" style="background:#f1f5f9; color:#475569; border:2px solid #cbd5e1; padding:12px 20px; border-radius:10px; font-weight:bold; cursor:pointer; flex-shrink:0;">📊 Ekip Verimlilik</button>
+  </div>
+
+  <!-- KARTLARIN DÜŞECEĞİ ALAN (GRID) -->
+  <div id="mobilKutuListesi" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;">
+    <div style="grid-column:1/-1; text-align:center; padding:40px; color:#64748b; font-size:16px;">Veriler yükleniyor... ⏳</div>
+  </div>
+</div> <!-- MOBİL PANELİ BURADA KAPANIR -->
+
+<div id="mobilGorevModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.85); z-index:1000006; align-items:center; justify-content:center; backdrop-filter:blur(5px);">
+  <div style="background:#fff; width:min(580px,92vw); border-radius:16px; padding:25px; box-shadow:0 25px 50px rgba(0,0,0,0.5); max-height:90vh; overflow-y:auto;">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #f1f5f9; padding-bottom:15px; margin-bottom:20px;">
+      <h3 style="margin:0; color:#0ea5e9; font-size:20px;">➕ Yeni Mobil Saha / Plan Ekle</h3>
+      <button onclick="document.getElementById('mobilGorevModal').style.display='none'" style="background:#fee2e2; color:#ef4444; border:none; padding:8px 12px; border-radius:8px; font-weight:bold; cursor:pointer;">✖ Kapat</button>
+    </div>
+    
+    <!-- FİRMA -->
+    <label class="field-label" style="color:#0369a1;">Hangi Firma İçin Plan Yapılıyor?</label>
+    <input type="text" id="mgFirmaAra" placeholder="🔍 Firma adını yazarak arayın..." class="field-input" style="margin-bottom:5px; border-color:#bae6fd; background:#f0f9ff;" oninput="mobilFirmaAra(this.value)">
+    <select id="mgFirmaId" class="field-input" style="margin-bottom:15px; font-weight:bold; border-color:#0ea5e9;">
+      <option value="">-- Önce yukarıdan arayın veya listeden seçin --</option>
+    </select>
+
+    <!-- TARİH + SAAT ARALIĞI -->
+    <div style="display:flex; gap:12px; margin-bottom:15px;">
+      <div style="flex:2;">
+        <label class="field-label">📅 Saha / İşlem Tarihi</label>
+        <input type="date" id="mgTarih" class="field-input">
+      </div>
+      <div style="flex:1;">
+        <label class="field-label">🕐 Başlangıç Saati</label>
+        <input type="time" id="mgSaatBaslangic" class="field-input" value="08:00">
+      </div>
+      <div style="flex:1;">
+        <label class="field-label">🕐 Bitiş Saati</label>
+        <input type="time" id="mgSaatBitis" class="field-input" value="12:00">
+      </div>
+    </div>
+
+    <!-- DURUM -->
+    <label class="field-label">Sürecin Şu Anki Durumu</label>
+    <select id="mgDurum" class="field-input" style="margin-bottom:15px; font-weight:bold;">
+      <option value="PLAN BEKLEYEN">📅 Plan / Tarih Bekliyor</option>
+      <option value="YAPILACAK">🚐 Tarih Verildi - Sahaya Gidilecek</option>
+      <option value="SONUÇ BEKLEYEN">🧪 Saha Yapıldı - Lab / Hekim Onayı Bekleniyor</option>
+      <option value="KARGO">📦 Sonuç Çıktı - Kargolanacak</option>
+      <option value="BİTTİ">✅ Tüm Süreç Tamamlandı</option>
+    </select>
+
+    <!-- PERSONEL - ÇOKLU -->
+    <label class="field-label" style="color:#f59e0b;">👥 Sahaya Gidecek Ekip (Birden Fazla Seçilebilir)</label>
+    <div id="mgEkipListesi" style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;"></div>
+    <button type="button" onclick="mgEkipEkle()" style="background:#f0f9ff; color:#0369a1; border:1px solid #bae6fd; padding:8px 14px; border-radius:8px; font-weight:bold; font-size:12px; cursor:pointer; margin-bottom:15px;">+ Ekip Üyesi Ekle</button>
+
+    <!-- KİŞİ SAYISI + ARAÇ -->
+    <div style="display:flex; gap:15px; margin-bottom:15px;">
+      <div style="flex:1;">
+        <label class="field-label">👤 Muayene Edilecek Kişi Sayısı</label>
+        <input type="number" id="mgKisiSayisi" placeholder="0" class="field-input">
+      </div>
+      <div style="flex:1;">
+        <label class="field-label">🚐 Gidecek Araç</label>
+        <select id="mgArac" class="field-input">
+          <option value="">Seçin...</option>
+          <option value="Araç 1">Araç 1</option>
+          <option value="Araç 2">Araç 2</option>
+          <option value="Araç 3">Araç 3</option>
+        </select>
+      </div>
+      <div style="flex:1;">
+        <label class="field-label">💰 Fatura / Ciro (₺)</label>
+        <input type="number" id="mgCiro" placeholder="Opsiyonel" class="field-input">
+      </div>
+    </div>
+
+    <!-- TETKİKLER -->
+    <label class="field-label">🧪 Yapılacak Tetkikler</label>
+    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:15px; background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #cbd5e1;">
+      <label style="display:flex; align-items:center; gap:5px; font-size:13px;"><input type="checkbox" class="mg-tetkik" value="Hemogram"> Hemogram</label>
+      <label style="display:flex; align-items:center; gap:5px; font-size:13px;"><input type="checkbox" class="mg-tetkik" value="Tam İdrar"> Tam İdrar</label>
+      <label style="display:flex; align-items:center; gap:5px; font-size:13px;"><input type="checkbox" class="mg-tetkik" value="EKG"> EKG</label>
+      <label style="display:flex; align-items:center; gap:5px; font-size:13px;"><input type="checkbox" class="mg-tetkik" value="Akciğer Grafisi"> Akciğer Grafisi</label>
+      <label style="display:flex; align-items:center; gap:5px; font-size:13px;"><input type="checkbox" class="mg-tetkik" value="Odyometri"> Odyometri</label>
+      <label style="display:flex; align-items:center; gap:5px; font-size:13px;"><input type="checkbox" class="mg-tetkik" value="Solunum Fonksiyon"> Solunum Fonksiyon</label>
+      <label style="display:flex; align-items:center; gap:5px; font-size:13px;"><input type="checkbox" class="mg-tetkik" value="Göz Muayenesi"> Göz Muayenesi</label>
+      <label style="display:flex; align-items:center; gap:5px; font-size:13px;"><input type="checkbox" class="mg-tetkik" value="Biyokimya"> Biyokimya</label>
+    </div>
+
+    <!-- KARGO NO -->
+    <label class="field-label">📦 Kargo No</label>
+    <input type="text" id="mgKargoNo" placeholder="Kargo takip numarası..." class="field-input" style="margin-bottom:15px;">
+
+    <!-- NOT -->
+    <label class="field-label">📝 Notlar / Detay (Takvimde Görünür)</label>
+    <textarea id="mgNot" rows="3" placeholder="Örn: Saat 09:00'da tesiste olunacak. Yetkili Ahmet Bey ile görüşülecek..." class="field-input" style="margin-bottom:20px; resize:none;"></textarea>
+    
+    <button id="btnMgKaydet" onclick="yeniMobilGorevKaydet()" style="width:100%; background:linear-gradient(135deg, #0ea5e9, #2563eb); color:white; border:none; padding:16px; border-radius:10px; font-weight:900; font-size:16px; cursor:pointer;">💾 PLANI SİSTEME İŞLE</button>
+  </div>
+</div>
+
+<script>
+
+  
+(function() {
+  var _map  = null;
+  var _markers  = {};
+  var _firmalar  = [];
+  var _planlar  = {};
+  var _seciliTarih = "";
+  var IKON  = null;
+
+  function ikonYap(renk, boyut) {
+  boyut = boyut || 14;
+  return L.divIcon({
+  html: '<div style="width:' + boyut + 'px;height:' + boyut + 'px;background:' + renk + ';border:2px solid rgba(0,0,0,0.25);border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 6px rgba(0,0,0,0.3);"><\/div>',
+  className: "",
+  iconSize:  [boyut, boyut],
+  iconAnchor:  [boyut / 2, boyut],
+  popupAnchor: [0, -boyut]
+  });
+  }
+
+  function ikonlariBaslat() {
+  if (IKON || typeof L === "undefined") return;
+  IKON = {
+  normal:       ikonYap("#64748b"),
+  planli:       ikonYap("#f59e0b", 16),
+  tamamlandi:   ikonYap("#10b981"),
+  secili:       ikonYap("#3b82f6", 18),
+  azTehlikeli:  ikonYap("#10b981"),
+  tehlikeli:    ikonYap("#f59e0b"),
+  cokTehlikeli: ikonYap("#ef4444")
+  };
+  }
+
+  function haritaBaslat() {
+  ikonlariBaslat();
+  if (_map) return;
+  _map = L.map("isgHaritaMap", { center: [41.015, 28.979], zoom: 11 });
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "OpenStreetMap contributors",
+  maxZoom: 19
+  }).addTo(_map);
+
+  google.script.run
+  .withSuccessHandler(function(list) {
+  _personelListesi = (list && list.liste) ? list.liste : (list || []);
+  })
+  .api_personelListesiGetir(window.currentUserEmail || "");
+}
+
+ function popupHtmlUret(firma) {
+  var planVar = !!_planlar[firma.firmaId];
+  var fId = firma.firmaId;
+
+  var btnHtml = planVar
+  ? '<button class="popup-plan-btn cikar" onclick="isgHaritaFirmaCikar(\'' + fId + '\')">Plandan Cikar<\/button>'
+  : '<button class="popup-plan-btn ekle" onclick="isgHaritaFirmaEkle(\'' + fId + '\')">Bugune Planla<\/button>';
+
+  var personelOptions = _personelListesi.map(function(p) {
+  return '<option value="' + (p.mail||"") + '"' + (p.mail === window.currentUserEmail ? ' selected' : '') + '>' + (p.ad||p.mail) + '<\/option>';
+  }).join("");
+
+  var formHtml = planVar ? "" :
+  '<div class="harita-plan-form hidden-panel" id="planForm_' + fId + '">'
+  + '<label>Gidecek Personel<\/label>'
+  + '<select id="pEmail_' + fId + '" style="width:100%; padding:5px; border-radius:4px; border:1px solid #cbd5e1; margin-bottom:6px;">'
+  + personelOptions
+  + '<\/select>'
+  + '<label>Hizmet Tipi<\/label>'
+  + '<select id="pHizmet_' + fId + '">'
+  + '<option value="IGU">Is Guvenligi Uzmani<\/option>'
+  + '<option value="Hekim">Isyeri Hekimi<\/option>'
+  + '<option value="DSP">Diger Saglik Personeli<\/option>'
+  + '<\/select>'
+  + '<label>Suresi (dk)<\/label>'
+  + '<input type="number" id="pSure_' + fId + '" value="' + (firma.aylikDk || 60) + '" min="15" step="15">'
+  + '<label>Not<\/label>'
+  + '<input type="text" id="pNot_' + fId + '" placeholder="Ziyaret notu...">'
+  + '<button class="popup-kaydet-btn" onclick="isgHaritaKaydet(\'' + fId + '\')">Kaydet<\/button>'
+  + '<\/div>';
+
+  var tehlikeRenk = firma.tehlikeSinifi && firma.tehlikeSinifi.indexOf("Az") > -1 ? "#10b981"
+  : firma.tehlikeSinifi && firma.tehlikeSinifi.indexOf("ok") > -1 ? "#ef4444" : "#f59e0b";
+
+  return '<div class="harita-popup">'
+  + '<h4>' + firma.firmaAdi + '<\/h4>'
+  + '<div class="popup-row"><span>Tehlike<\/span><strong style="color:' + tehlikeRenk + '">' + (firma.tehlikeSinifi || "-") + '<\/strong><\/div>'
+  + '<div class="popup-row"><span>Calisan<\/span><strong>' + firma.calisanSayisi + ' kisi<\/strong><\/div>'
+  + '<div class="popup-row"><span>Hizmet<\/span><strong>' + firma.hizmetTipi + ' (' + firma.iguSinifi + ')<\/strong><\/div>'
+  + '<div class="popup-row"><span>Aylik Sure<\/span><strong>' + firma.aylikDk + ' dk<\/strong><\/div>'
+  + '<div class="popup-row"><span>Sozlesme Bitis<\/span><strong>' + (firma.sozlesmeBit || "-") + '<\/strong><\/div>'
+  + '<div class="popup-adres">' + firma.adres + '<\/div>'
+  + btnHtml + formHtml
+  + '<\/div>';
+}
+  function markerGuncelle(firmaId) {
+  var m = _markers[firmaId];
+  if (!m) return;
+  var plan = _planlar[firmaId];
+  m.setIcon(plan ? (plan.durum === "TAMAMLANDI" ? IKON.tamamlandi : IKON.planli) : IKON.normal);
+  for (var i = 0; i < _firmalar.length; i++) {
+  if (_firmalar[i].firmaId === firmaId) { m.setPopupContent(popupHtmlUret(_firmalar[i])); break; }
+  }
+  }
+
+  function markerlariCiz() {
+  ikonlariBaslat();
+  Object.keys(_markers).forEach(function(id) { _map.removeLayer(_markers[id]); });
+  _markers = {};
+  _firmalar.forEach(function(firma) {
+  var plan = _planlar[firma.firmaId];
+  var ikon;
+  if (plan) {
+    ikon = plan.durum === "TAMAMLANDI" ? IKON.tamamlandi : IKON.planli;
+  } else {
+    var ts = String(firma.tehlikeSinifi || "");
+    ikon = ts.indexOf("ok") > -1 ? IKON.cokTehlikeli
+         : ts.indexOf("Tehlikeli") > -1 ? IKON.tehlikeli
+         : ts.indexOf("Az") > -1 ? IKON.azTehlikeli
+         : IKON.normal;
+  }
+  _markers[firma.firmaId] = L.marker([firma.lat, firma.lng], { icon: ikon })
+  .addTo(_map)
+  .bindPopup(popupHtmlUret(firma), { maxWidth: 280 });
+  });
+  }
+
+  function sidebarGuncelle() {
+  var liste  = document.getElementById("isgHaritaPlanList");
+  var badge  = document.getElementById("isgPlanSayiBadge");
+  var rotaBtn  = document.getElementById("isgHaritaRotaBtn");
+  var planList = Object.keys(_planlar).map(function(k) { return _planlar[k]; });
+
+  badge.textContent = planList.length;
+
+  if (planList.length === 0) {
+  liste.innerHTML = '<div id="isgHaritaEmpty">Sol haritadan firma secerek gunluk ziyaret plani olusturun.<\/div>';
+  rotaBtn.style.display = "none";
+  return;
+  }
+
+  rotaBtn.style.display = "inline-block";
+  var html = "";
+  planList.forEach(function(plan, idx) {
+  var adres = "";
+  for (var i = 0; i < _firmalar.length; i++) {
+  if (_firmalar[i].firmaId === plan.firmaId) { adres = _firmalar[i].adres; break; }
+  }
+  if (adres.length > 45) adres = adres.substring(0, 45) + "...";
+  html += '<div class="plan-item">'
+  + '<button class="plan-sil-btn" onclick="isgHaritaFirmaCikar(\'' + plan.firmaId + '\')">x<\/button>'
+  + '<div class="plan-firma">' + (idx + 1) + '. ' + plan.firmaAdi + '<\/div>'
+  + '<div class="plan-meta">' + (plan.hizmetTipi || "IGU") + ' - ' + (plan.planlananDk || 0) + ' dk<\/div>'
+  + '<div class="plan-meta" style="color:#2563eb; font-weight:bold;">' + (plan.personelEmail ? plan.personelEmail.split("@")[0] : "Personel atanmadi") + '<\/div>'
+  + '<div class="plan-adres">' + adres + '<\/div>'
+  + '<\/div>';
+  });
+  liste.innerHTML = html;
+  }
+
+  window.isgHaritaYukle = function() {
+  var tarih = document.getElementById("isgHaritaTarih").value;
+  if (!tarih) { notify("Lutfen tarih secin!", "error"); return; }
+  _seciliTarih = tarih;
+
+  var loading = document.getElementById("isgHaritaLoading");
+  loading.style.display = "flex";
+  document.getElementById("isgHaritaGeoText").textContent = "";
+
+  function devamEt() {
+  haritaBaslat();
+
+  google.script.run
+  .withSuccessHandler(function(res) {
+  if (!res || !res.ok) {
+  loading.style.display = "none";
+  notify("Hata: " + (res ? res.msg : "Veri alinamadi"), "error");
+  return;
+  }
+  _firmalar = res.firmalar || [];
+  if (res.geocodedNew > 0) {
+  document.getElementById("isgHaritaGeoText").textContent = res.geocodedNew + " yeni adres konumlandirildi";
+  }
+  var sayiEl = document.getElementById("isgHaritaFirmaSayisi");
+  if (sayiEl) sayiEl.textContent = _firmalar.length + " firma yuklendi";
+
+  google.script.run
+  .withSuccessHandler(function(planRes) {
+  loading.style.display = "none";
+  _planlar = {};
+  if (planRes && planRes.ok && planRes.planlar) {
+  planRes.planlar.forEach(function(p) { _planlar[p.firmaId] = p; });
+  }
+  markerlariCiz();
+  // Ziyaret kanıt noktaları
+var tarih = document.getElementById("isgHaritaTarih") ? document.getElementById("isgHaritaTarih").value : "";
+google.script.run
+  .withSuccessHandler(function(kanıtlar) {
+    if (!kanitlar || !kanitlar.length) return;
+    kanitlar.forEach(function(k) {
+      if (!k.lat || !k.lng) return;
+      var renk = k.durum === "TAMAMLANDI" ? "#10b981" : "#3b82f6";
+      L.circleMarker([k.lat, k.lng], {
+        radius: 8, fillColor: renk, color: "#fff",
+        weight: 2, opacity: 1, fillOpacity: 0.85
+      })
+      .addTo(_map)
+      .bindPopup(
+  '<b>' + k.firmaAdi + '<\/b><br>' +
+  'Personel: ' + k.email + '<br>' +
+  'Giris: ' + k.saat + '<br>' +
+  '<span style="color:' + renk + '; font-weight:bold;">' + k.durum + '<\/span>'
+);
+    });
+  })
+  .api_isgZiyaretKanitlariGetir(tarih);
+  sidebarGuncelle();
+  if (_firmalar.length > 0) {
+  _map.fitBounds(
+  L.latLngBounds(_firmalar.map(function(f) { return [f.lat, f.lng]; })),
+  { padding: [30, 30] }
+  );
+  }
+  notify(_firmalar.length + " firma haritada gosteriliyor", "success");
+  })
+  .withFailureHandler(function(err) {
+  loading.style.display = "none";
+  notify("Hata: " + err.message, "error");
+  markerlariCiz();
+  sidebarGuncelle();
+  })
+  .api_isgGunPlanlariGetir(tarih, window.currentUserEmail, window.userRole);
+  })
+  .withFailureHandler(function(err) {
+  loading.style.display = "none";
+  notify("Hata: " + err.message, "error");
+  })
+  .api_isgHaritaVerisiGetir();
+  }
+  if (typeof L === "undefined") {
+  var cssYuklendi = document.querySelector("link[href*='leaflet']");
+  if (!cssYuklendi) {
+  var css = document.createElement("link");
+  css.rel = "stylesheet";
+  css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+  document.head.appendChild(css);
+  }
+  var js = document.createElement("script");
+  js.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+  js.onload = function() { devamEt(); };
+  js.onerror = function() {
+  loading.style.display = "none";
+  alert("Harita kutuphanesi yuklenemedi. Internet baglantinizi kontrol edin.");
+  };
+  document.head.appendChild(js);
+  } else {
+  devamEt();
+  }
+};
+
+  window.isgHaritaFirmaEkle = function(firmaId) {
+  var form = document.getElementById("planForm_" + firmaId);
+  if (form) form.style.display = form.style.display === "none" ? "block" : "none";
+  };
+
+  window.isgHaritaKaydet = function(firmaId) {
+  var firma = null;
+  for (var i = 0; i < _firmalar.length; i++) {
+  if (_firmalar[i].firmaId === firmaId) { firma = _firmalar[i]; break; }
+  }
+  if (!firma) return;
+
+  var payload = {
+  tarih:  _seciliTarih,
+  firmaId:  firmaId,
+  firmaAdi:  firma.firmaAdi,
+  personelEmail:  (document.getElementById("pEmail_"  + firmaId) || {}).value || "",
+  hizmetTipi:  (document.getElementById("pHizmet_" + firmaId) || {}).value || "IGU",
+  planlananDk:  parseInt((document.getElementById("pSure_" + firmaId) || {}).value) || 60,
+  notlar:  (document.getElementById("pNot_"  + firmaId) || {}).value || "",
+  olusturanEmail: window.currentUserEmail || ""
+  };
+
+  _planlar[firmaId] = payload;
+  markerGuncelle(firmaId);
+  sidebarGuncelle();
+  if (_markers[firmaId]) _markers[firmaId].closePopup();
+
+  google.script.run
+  .withSuccessHandler(function(res) {
+  if (res && res.ok) {
+  notify(firma.firmaAdi + " planlandi!", "success");
+  } else {
+  notify("Hata: " + (res ? res.msg : ""), "error");
+  delete _planlar[firmaId];
+  markerGuncelle(firmaId);
+  sidebarGuncelle();
+  }
+  })
+  .withFailureHandler(function(err) {
+  notify("Hata: " + err.message, "error");
+  delete _planlar[firmaId];
+  markerGuncelle(firmaId);
+  sidebarGuncelle();
+  })
+  .api_isgHaritaPlanKaydet(payload);
+  };
+
+  window.isgHaritaFirmaCikar = function(firmaId) {
+  if (!_planlar[firmaId]) return;
+  var firmaAdi = _planlar[firmaId].firmaAdi;
+  delete _planlar[firmaId];
+  markerGuncelle(firmaId);
+  sidebarGuncelle();
+  google.script.run
+  .withSuccessHandler(function() { notify(firmaAdi + " plandan cikarildi", "info"); })
+  .api_isgHaritaPlanSil(firmaId, _seciliTarih);
+  };
+
+  window.isgHaritaRotaAc = function() {
+  var planList = Object.keys(_planlar).map(function(k) { return _planlar[k]; });
+  if (planList.length === 0) { notify("Once firma secin!", "error"); return; }
+  var adresler = [];
+  planList.forEach(function(plan) {
+  for (var i = 0; i < _firmalar.length; i++) {
+  if (_firmalar[i].firmaId === plan.firmaId) { adresler.push(_firmalar[i].adres); break; }
+  }
+  });
+  if (adresler.length === 1) {
+  window.open("https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(adresler[0]), "_blank");
+  return;
+  }
+  var dest  = encodeURIComponent(adresler[adresler.length - 1]);
+  var waypts = adresler.slice(0, -1).map(encodeURIComponent).join("|");
+  window.open("https://www.google.com/maps/dir/?api=1&destination=" + dest + "&waypoints=" + waypts + "&travelmode=driving", "_blank");
+  };
+  var d = new Date();
+  var pad = function(n) { return n < 10 ? "0" + n : n; };
+  var inp = document.getElementById("isgHaritaTarih");
+  if (inp) inp.value = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+
+})();
+</script>
+</div>
+
+</div>
+
+<!-- ============================================== -->
+<!-- 🔐 YETKİ YÖNETİM PANELİ -->
+<!-- ============================================== -->
+<div id="panelYetki" class="panel hidden-panel">
+  <div style="background:linear-gradient(135deg,#1e293b,#334155); padding:20px; border-radius:12px; color:white; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <div>
+      <h2 style="margin:0; font-size:22px;">🔐 Yetki Yönetim Merkezi</h2>
+      <p style="opacity:0.9; font-size:13px; margin-top:5px;">Personel bazlı sayfa ve fonksiyon yetkilendirmesi</p>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:0; height:80vh; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0;">
+    <div style="width:200px; background:#0f172a; overflow-y:auto; flex-shrink:0;">
+      <div style="padding:10px 14px; font-size:11px; color:#475569; font-weight:900; border-bottom:1px solid #1e293b;">PERSONELLER</div>
+      <div id="yetkiPersonelListesi"><div style="padding:20px; color:#475569; font-size:12px;">Yükleniyor...</div></div>
+    </div>
+    <div style="width:180px; background:#1e293b; overflow-y:auto; flex-shrink:0; border-left:1px solid #334155;">
+      <div style="padding:10px 14px; font-size:11px; color:#475569; font-weight:900; border-bottom:1px solid #334155;">SAYFALAR</div>
+      <div id="yetkiPanelListesi"></div>
+    </div>
+    <div style="flex:1; background:#0f172a; overflow-y:auto; padding:20px;">
+      <div id="yetkiFonksiyonlar">
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#334155;">
+          <div style="font-size:48px; margin-bottom:12px;">👈</div>
+          <div style="font-size:16px; font-weight:900; color:#475569;">Soldan personel seçin</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div> <!-- panelYetki kapanır -->
+
+<!-- ============================================== -->
+<!-- ☕ KOMUTA MERKEZİ (CEO) PANELİ -->
+<!-- ============================================== -->
+<div id="panelCEO" class="panel hidden-panel">
+  <div id="ceoDashboardIcin" style="min-height:80vh;"></div>
+  <div id="ceoOzetModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#0d1117;border:1px solid #1e2d3d;border-radius:16px;padding:28px;width:min(600px,90vw);max-height:80vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <h3 style="margin:0;color:#f1f5f9;font-size:18px;">Bu Haftanın Özeti</h3>
+        <button onclick="document.getElementById('ceoOzetModal').style.display='none'" style="background:#1e2d3d;color:#94a3b8;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:18px;">✕</button>
+      </div>
+      <div id="ceoOzetIcerik"><div style="color:#64748b;text-align:center;padding:40px;">Yükleniyor...</div></div>
+    </div>
+  </div>
+</div> <!-- 👈 DİKKAT: KOMUTA MERKEZİ BURADA KESİN OLARAK KAPANIR -->
+
+
+<!-- ============================================== -->
+<!-- 🚨 ŞİRKET UYARI MERKEZİ (PATRON) PANELİ -->
+<!-- ============================================== -->
+<div id="panelPatronUyari" class="panel hidden-panel">
+  <div style="background: linear-gradient(135deg, #7f1d1d, #450a0a); padding: 20px; border-radius: 12px; color: white; margin-bottom: 20px; display:flex; justify-content:space-between; align-items:center;">
+    <div>
+      <h2 style="margin:0; font-size:22px;">👁️Yönetim &amp; İç Denetim Kokpiti</h2>
+      <p style="opacity: 0.9; font-size: 13px; margin-top:5px;">Sistemdeki suistimalleri, şikayetleri ve kritik talepleri buradan görürsünüz.</p>
+    </div>
+    <button type="button" onclick="loadPatronUyarilari()" style="background:#fee2e2; color:#991b1b; border:none; padding:10px 20px; border-radius:8px; font-weight:900; cursor:pointer;">🔄 Alarmları Tazele</button>
+  </div>
+
+  <div style="display:flex; gap:10px; margin-bottom:15px; flex-wrap:wrap;">
+    <button class="b1" onclick="filtreUyarilar('TÜMÜ')" style="background:#1e293b; flex:1;">📋 Tüm Akış</button>
+    <button class="b2" onclick="filtreUyarilar('MÜJDE')" style="background:#10b981; flex:1; font-weight:900;">🐋 Müjdeler &amp; Satışlar</button>
+    <button class="b2" onclick="filtreUyarilar('FİNANS')" style="background:#f59e0b; flex:1;">💰 Finans (AI)</button>
+    <button class="b3" onclick="filtreUyarilar('PERSONEL')" style="background:#9333ea; flex:1;">👥 İK Talepleri</button>
+  </div>
+
+  <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; overflow-x:auto; box-shadow:0 10px 20px rgba(0,0,0,0.05);">
+    <table style="width:100%; border-collapse:collapse;">
+      <thead style="background:#f8fafc; border-bottom:2px solid #e2e8f0;">
+        <tr>
+          <th class="td-pad15">Tarih</th>
+          <th class="td-pad15">Kategori</th>
+          <th class="td-pad15">Personel</th>
+          <th class="td-pad15">Konu / Tespit</th>
+          <th style="width:140px; padding:15px; text-align:center;">İşlem / Durum</th>
+        </tr>
+      </thead>
+      <tbody id="patronUyariBody">
+        <tr><td colspan='5' style='text-align:center; padding:30px; color:#64748b;'>Veriler aranıyor...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div> <!-- 👈 DİKKAT: UYARI MERKEZİ BURADA KESİN OLARAK KAPANIR -->
+
+<div id="panelTakip" class="panel hidden-panel" style="padding:20px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <h2 style="margin:0;font-size:18px;color:#1e293b">Takip Listesi</h2>
+    <button onclick="takipPanelYukle()" style="background:#1e293b;color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-weight:700">Yenile</button>
+  </div>
+  <div id="takipMailBilgi" style="margin-bottom:10px;font-size:13px;color:#3b82f6;font-weight:600;min-height:20px"></div>
+  <input id="takipArama" type="text" placeholder="Firma ara..." oninput="takipAramaYap(this.value)" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:12px;font-size:14px">
+  <div id="takipListesiContainer"></div>
+</div>
+
+<!-- ============================================== -->
+<!-- 🙋‍♂️ PERSONEL / İK PANELİ -->
+<!-- ============================================== -->
+<div id="panelPersonel" class="panel hidden-panel">
+
+  <!-- BAŞLIK -->
+  <div style="background:linear-gradient(135deg,#1e3a8a,#312e81); padding:20px; border-radius:12px; color:white; margin-bottom:20px;">
+    <h2 style="margin:0; font-size:22px;">🙋‍♂️ PERSONEL/İK</h2>
+    <p style="opacity:0.9; font-size:13px; margin-top:5px;">İzin, Avans ve Personel Yönetim İşlemleri.</p>
+  </div>
+  
+  <!-- 📨 PERSONEL: YÖNETİCİYE MESAJ -->
+  <div id="patronaMesajKutusu" style="display:none; margin-bottom:20px;">
+    <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+      <div>
+        <div style="font-weight:bold; color:#1e40af; font-size:14px;">📨 Yöneticiye Mesaj Gönder</div>
+        <div style="font-size:12px; color:#64748b; margin-top:3px;">Ulaş Bey'e doğrudan bildirim, şikayet veya talep iletebilirsiniz.</div>
+      </div>
+      <button onclick="patronaMesajModalAc()" style="background:#1e3a8a; color:white; border:none; padding:12px 24px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:13px; white-space:nowrap; box-shadow:0 4px 6px rgba(30,58,138,0.3);">📨 Mesaj Gönder</button>
+    </div>
+  </div> 
+
+  <!-- 👑 ADMİN: PERSONEL YÖNETİMİ -->
+  <div id="adminPersonelYonetimi" style="display:none; background:#fff; border:2px solid #3b82f6; border-radius:12px; padding:20px; margin-bottom:20px;">
+    <h3 style="margin-top:0; color:#1e3a8a; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">👑 İşe Alım ve Personel Yönetimi</h3>
+    <!-- İşe Alım Formu -->
+    <div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px; background:#eff6ff; padding:15px; border-radius:8px; border:1px dashed #93c5fd;">
+      <div style="flex:1; min-width:150px;"><input type="text" id="ypAd" placeholder="Ad Soyad" class="small-input"></div>
+      <div style="flex:1; min-width:150px;"><input type="email" id="ypMail" placeholder="E-Posta (Giriş ID)" class="small-input"></div>
+      <div style="flex:1; min-width:150px;"><input type="text" id="ypUnvan" placeholder="Unvan (Örn: Uzman)" class="small-input"></div>
+      <div style="flex:1; min-width:100px;"><input type="number" id="ypMaas" placeholder="Net Maaş (₺)" class="small-input"></div>
+      <div style="flex:1; min-width:80px;"><input type="number" id="ypIzin" placeholder="İzin Hakkı" value="14" class="small-input"></div>
+      <div style="flex:1; min-width:150px;"><input type="text" id="ypTel" placeholder="Telefon" class="small-input"></div>
+      <div style="flex:1; min-width:150px;"><input type="text" id="ypIban" placeholder="IBAN" class="small-input"></div>
+      <div style="flex:1; min-width:150px;"><input type="text" id="ypReferans" placeholder="Referans Kişi" class="small-input"></div>
+      <div style="flex:1; min-width:150px;"><input type="text" id="ypAdres" placeholder="Adres" class="small-input"></div>
+      <button type="button" onclick="personelEkleUI()" style="background:#2563eb; color:white; border:none; padding:8px 15px; border-radius:6px; font-weight:bold; cursor:pointer;">➕ Personeli İşe Al</button>
+    </div>
+
+    
+
+    <!-- Arama -->
+    <div style="margin-bottom:15px; display:flex; gap:10px; align-items:center;">
+      <input type="text" id="personelAraInput" placeholder="🔍 Ad, e-posta veya unvana göre ara..." style="flex:1; padding:10px; border:2px solid #3b82f6; border-radius:8px; font-size:14px;" oninput="personelListeFiltrele()">
+      <select id="personelDurumFiltre" onchange="personelListeFiltrele()" style="padding:10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
+        <option value="">Tüm Durumlar</option>
+        <option value="AKTİF">AKTİF</option>
+        <option value="PASİF">PASİF</option>
+      </select>
+    </div>
+
+    <!-- Personel Listesi -->
+    <div class="overflow-x">
+      <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
+        <thead style="background:#f8fafc; border-bottom:2px solid #cbd5e1;">
+          <tr>
+            <th class="td-pad">Ad Soyad</th>
+            <th class="td-pad">E-Posta</th>
+            <th class="td-pad" style="text-align:center;">Yapılan İşlem</th>
+            <th class="td-pad">Unvan</th>
+            <th class="td-pad">Maaş</th>
+            <th class="td-pad">Kalan İzin</th>
+            <th class="td-pad">Durum</th>
+            <th style="padding:10px; text-align:center;">İşlem</th>
+          </tr>
+        </thead>
+        <tbody id="personelListesiBody">
+          <tr><td colspan="7" style="text-align:center; padding:20px; color:#64748b;">Yükleniyor...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 📝 PERSONEL: İK VE FİNANS TALEP MERKEZİ -->
+  <div id="personelTalepAlani" style="display:none; background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; margin-bottom:20px;">
+    <h3 style="margin-top:0; color:#1e293b; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">📝 İK ve Finans Talep Merkezi</h3>
+
+    <div style="background:#eff6ff; border-radius:10px; padding:15px; margin-bottom:20px; display:flex; align-items:center; gap:15px;">
+      <div style="font-size:36px;">🏖️</div>
+      <div>
+        <div style="font-size:13px; color:#64748b;">Kalan İzin Hakkınız</div>
+        <div id="personelKalanIzin" style="font-size:28px; font-weight:900; color:#2563eb;">Hesaplanıyor..</div>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
+      <div>
+        <label class="field-label">Talep Türü</label>
+        <select id="ikTalepTuru" class="field-input" onchange="ikFormDuzenle()" style="font-weight:bold; color:#2563eb; padding:10px;">
+          <option value="İZİN">🏖️ İzin Talebi</option>
+          <option value="AVANS">💸 Avans Talebi</option>
+          <option value="HARCAMA">🧾 Masraf / Harcama Fişi</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label" id="lblIkMiktar">Kaç Gün?</label>
+        <input type="number" id="ikMiktar" class="field-input" placeholder="Örn: 2" min="1" style="padding:10px;">
+      </div>
+    </div>
+
+    <div id="ikTarihKutulari" style="display:flex; gap:15px; margin-bottom:15px;">
+      <div style="flex:1;">
+        <label class="field-label">Başlangıç Tarihi</label>
+        <input type="date" id="ikBaslangic" class="field-input">
+      </div>
+      <div style="flex:1;">
+        <label class="field-label">Bitiş Tarihi</label>
+        <input type="date" id="ikBitis" class="field-input">
+      </div>
+    </div>
+
+    <div id="ikPersonelSecimKutusu" style="display:none; margin-bottom:15px;">
+      <label class="field-label">İlgili Personel (Sadece Yöneticiler İçin)</label>
+      <input type="text" id="ikIlgiliPersonel" class="field-input" placeholder="Kendi talebiniz ise boş bırakın">
+    </div>
+
+    <div class="mb-10">
+      <label class="field-label">Açıklama / Gerekçe (Kime/Nereye/Neden?)</label>
+      <input type="text" id="ikAciklama" placeholder="Detaylı açıklama yazınız..." class="field-input" style="padding:10px;">
+    </div>
+    
+    <div style="text-align:right; margin-top:15px;">
+      <button type="button" id="btnIkKaydet" onclick="ikTalepGonderUI()" style="background:#2563eb; color:white; border:none; padding:12px 25px; border-radius:8px; font-weight:900; cursor:pointer;">🚀 TALEBİ GÖNDER</button>
+    </div>
+
+    <div class="mt-20">
+      <h4 style="color:#475569; margin-bottom:10px; border-top:1px dashed #cbd5e1; padding-top:15px;">📋 Gönderdiğim Taleplerin Durumu</h4>
+      <div id="personelTalepListesi" style="font-size:13px; color:#64748b;">Yükleniyor...</div>
+    </div>
+  </div>
+
+  <!-- 🧮 BORDRO -->
+  <div id="bordroAlani" style="display:none; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px; margin-bottom:20px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+      <h3 style="margin:0; color:#1e293b;">🧮 Aylık Maaş ve Bordro</h3>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <input type="text" id="bordroDonemi" placeholder="03/2026" style="padding:8px; border-radius:6px; border:1px solid #cbd5e1; width:100px; font-weight:bold; text-align:center;">
+        <button type="button" onclick="bordroListesiniCek(document.getElementById('bordroDonemi').value)" style="background:#2563eb; color:white; border:none; padding:8px 15px; border-radius:6px; cursor:pointer; font-weight:bold;">Listele</button>
+        <button type="button" onclick="bordroHesaplaUI()" style="background:#10b981; color:white; border:none; padding:8px 15px; border-radius:6px; cursor:pointer; font-weight:bold;">Hesapla</button>
+      </div>
+    </div>
+    <div class="overflow-x">
+      <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
+        <thead style="background:#f8fafc; border-bottom:2px solid #cbd5e1;">
+          <tr>
+            <th class="td-pad">Dönem</th>
+            <th class="td-pad">Personel</th>
+            <th class="td-pad">Net Maaş</th>
+            <th style="padding:10px; color:#ef4444;">Avans (-)</th>
+            <th style="padding:10px; color:#2563eb;">Prim (+)</th>
+            <th style="padding:10px; color:#f59e0b;">Mesai (+)</th>
+            <th style="padding:10px; color:#ef4444;">Harcama (-)</th>
+            <th style="padding:10px; color:#10b981; font-weight:900;">Yatacak Tutar</th>
+            <th class="td-pad">Durum</th>
+          </tr>
+        </thead>
+        <tbody id="bordroBody">
+          <tr><td colspan="9" style="text-align:center; padding:20px; color:#64748b;">Dönem seçip listeleyin</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <!-- PERSONEL KART MODAL -->
+  <div id="personelKartModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.8); z-index:1000000; align-items:center; justify-content:center; backdrop-filter:blur(3px);">
+    <div id="personelKartIcerik"></div>
+  </div>
+
+</div>
+<!-- 🙋‍♂️ PERSONEL PANELİ BURADA BİTİYOR -->
+
+
+<script>
+
+window.doLoginSonrasi = function(res) {
+  var msgEl = document.getElementById("pinMsg");
+  if (res && res.basarili) {
+    var loginArea = document.getElementById("loginArea");
+    var appMain   = document.getElementById("appMain");
+    var lbl       = document.getElementById("currentUserLabel");
+    if (loginArea) loginArea.style.display = "none";
+    if (appMain)   appMain.style.display = "block";
+    if (lbl)       lbl.textContent = res.ad || res.email;
+    document.body.classList.add("logged-in");
+    window.currentUserEmail   = res.email;
+    window.currentUserAdSoyad = res.ad || "";
+    window.currentUserTel = res.tel || "";
+    window.aktifKullanici     = res.email;
+    window.aktifIzinler       = res.izinler || {};
+    window.isLoggedIn         = true;
+    window._crm_email         = res.email;
+    var ROL_HARITASI_UI = {
+      "ulas.ozbas@avrupabir.com.tr":           "ADMIN",
+      "neslihan.karatas@avrupabir.com.tr":      "PAZARLAMA",
+      "kurumsal@avrupabir.com.tr":             "PAZARLAMA",
+      "dilara.bayrakdar@avrupabir.com.tr":      "MUDUR",
+      "gulbahar.gultekin@avrupabir.com.tr":     "MUDUR",
+      "yasemin.orbay@avrupabir.com.tr":         "MUDUR",
+      "kurumsal_isg_partneri@avrupabir.com.tr": "MUDUR",
+      "banko@avrupabir.com.tr":                "MUHASEBE"
+    };
+    window.userRole = ROL_HARITASI_UI[String(res.email||"").toLowerCase()] || "PERSONEL";
+    if (typeof menuFiltrele === "function") menuFiltrele(res.izinler);
+    if (typeof initTabs === "function") initTabs();
+    var iz = res.izinler || {};
+    var btnPS = document.getElementById("btnParasutSenkron");
+    var btnMH = document.getElementById("btnMahsuplasma");
+    if (btnPS) btnPS.style.display = (iz["parasut_senkron"] || window.userRole === "ADMIN") ? "" : "none";
+    if (btnMH) btnMH.style.display = (iz["mahsuplasma"] || window.userRole === "ADMIN") ? "" : "none";
+    if (window.userRole === "MUHASEBE") {
+      var tabBar = document.querySelector(".tabBar");
+      if (tabBar) tabBar.style.display = "none";
+      if (typeof showPanel === "function") showPanel("panelBanko");
+      if (typeof bankoPanelYukle === "function") bankoPanelYukle();
+    } else if (window.userRole === "PERSONEL") {
+      if (typeof showPanel === "function") showPanel("panelPersonel");
+    } else if (iz.panelFirmalar) {
+      if (typeof showPanel === "function") showPanel("panelFirmalar");
+      if (typeof loadFirmalar === "function") loadFirmalar();
+    } else if (iz.panelAktivite) { if (typeof showPanel === "function") showPanel("panelAktivite"); }
+    else if (iz.panelFinans)     { if (typeof showPanel === "function") showPanel("panelFinans"); }
+    else if (iz.panelTeklif)     { if (typeof showPanel === "function") showPanel("panelTeklif"); }
+    else if (iz.panelPersonel)   { if (typeof showPanel === "function") showPanel("panelPersonel"); }
+    else if (iz.panelRapor)      { if (typeof showPanel === "function") showPanel("panelRapor"); }
+    var pmKutu = document.getElementById("patronaMesajKutusu");
+    if (pmKutu) pmKutu.style.display = (window.userRole === "PERSONEL") ? "block" : "none";
+    if (typeof kutlamaKontrolBaslat === 'function') kutlamaKontrolBaslat();
+  } else {
+    if (msgEl) msgEl.textContent = (res && res.msg) ? res.msg : "Hatalı Giriş";
+  }
+};
+window.doLogin = function(e) {
+  if (e) e.preventDefault();
+  var email = (document.getElementById("pinEmail") || {}).value || "";
+  var pin   = (document.getElementById("pinCode") || {}).value || "";
+  window.currentUserEmail = email;  // ← EKLE
+  window.aktifKullanici = email;    // ← EKLE
+  var msgEl = document.getElementById("pinMsg");
+  email = String(email).trim();
+  pin   = String(pin).trim();
+  if (!email || !pin) {
+    if (msgEl) msgEl.textContent = "E-posta ve PIN zorunlu.";
+    return;
+  }
+  if (msgEl) msgEl.textContent = "Doğrulanıyor...";
+  google.script.run
+    .withSuccessHandler(function(res) {
+  if (res && res.basarili && res.email) {
+    window.currentUserEmail = res.email;
+    window.aktifKullanici = res.email;
+    console.log("EMAIL SET:", res.email); // test için
+  }
+      if (res && res.basarili && res.pinDegistir) {
+        if (msgEl) msgEl.textContent = "";
+        var m = document.createElement("div");
+        m.id = "pinDegistirModal";
+        m.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:2147483647;display:flex;align-items:center;justify-content:center";
+        m.innerHTML = '<div style="background:#fff;padding:28px;border-radius:14px;width:320px"><h3 style="margin:0 0 6px;color:#1e293b">İlk Giriş — PIN Değiştir<\/h3><p style="font-size:13px;color:#64748b;margin-bottom:16px">Güvenliğin için yeni bir PIN belirle.<\/p><input id="yeniPin1" type="password" placeholder="Yeni PIN" maxlength="6" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:8px;font-size:14px"><input id="yeniPin2" type="password" placeholder="Yeni PIN (tekrar)" maxlength="6" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:12px;font-size:14px"><div id="pinDegMsg" style="color:#ef4444;font-size:12px;min-height:16px;margin-bottom:8px"><\/div><button onclick="pinDegistirKaydet(\'' + res.email + '\')" style="width:100%;background:#1e293b;color:#fff;border:none;padding:11px;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px">Kaydet ve Giriş Yap<\/button><\/div>';
+        document.body.appendChild(m);
+        window._pinDegRes = res;
+        return;
+      }
+      window.doLoginSonrasi(res);
+    })
+    .withFailureHandler(function(err) {
+      if (msgEl) msgEl.textContent = "Sunucu Hatası: " + err.message;
+    })
+    .api_loginPin(email, pin);
+};
+</script>
