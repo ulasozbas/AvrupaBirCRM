@@ -1,0 +1,1787 @@
+<script>
+function isgPanelYukle() {
+  isgSekmeGoster('isgFirmalar');
+  isgFirmalariYukle();
+  
+  var btnPlan = document.getElementById("btnIsgPlanEkle");
+  var btnAraGorev = document.getElementById("btnIsgAraGorev");
+  if (btnPlan) {
+      var email = String(window.currentUserEmail||"").toLowerCase();
+      var yetkiliMi = (email === "dilara.bayrakdar@avrupabir.com.tr" || window.userRole === "ADMIN");
+      btnPlan.style.display = yetkiliMi ? "block" : "none";
+      if(btnAraGorev) btnAraGorev.style.display = yetkiliMi ? "block" : "none";
+  }
+
+  var tarihEl = document.getElementById("isgPlanTarih");
+  if (tarihEl) {
+    var bugun = new Date();
+    tarihEl.value = bugun.toISOString().split("T")[0];
+  }
+}
+
+function isgSekmeGoster(sekme) {
+  ["isgFirmalar","isgPlanlar","isgZiyaretler","isgRapor","isgPlanOneri","isgHarita","isgGorevHavuzu","isgAtamalar","isgTakvim","isgKapasiteDash"].forEach(function(s) {
+  var el = document.getElementById(s);
+  if (el) el.style.display = s === sekme ? "block" : "none";
+  });
+  var tabMap = {
+  "isgFirmalar":  "Firmalar",
+  "isgPlanlar":  "Planlar",
+  "isgZiyaretler": "Ziyaretler",
+  "isgRapor":  "Rapor",
+  "isgHarita":  "Harita",
+  "isgGorevHavuzu": "GorevHavuzu",
+  "isgAtamalar": "Atamalar",
+  "isgPlanOneri": "PlanOneri",
+  "isgTakvim": "Takvim",
+"isgKapasiteDash": "KapasiteDash"
+  };
+  Object.keys(tabMap).forEach(function(k) {
+  var btn = document.getElementById("isgTab_" + tabMap[k]);
+  if (btn) {
+  btn.style.background = k === sekme ? "#065f46" : "#e2e8f0";
+  btn.style.color  = k === sekme ? "white"  : "#475569";
+  }
+  });
+  if (sekme === "isgZiyaretler") { isgZiyaretleriYukle(); isgGunlukGorevleriYukle(); }
+if (sekme === "isgPlanlar") { isgGunlukGorevleriYukle(); }
+  if (sekme === "isgRapor")  isgRaporYukle();
+  if (sekme === "isgGorevHavuzu") gorevHavuzuYukle();
+  if (sekme === "isgAtamalar") isgAtamaListeYukle();
+  if (sekme === "isgTakvim") isgTakvimYukle();
+  if(sekme === 'isgFirmalar') isgSinifMapYukle();
+}
+
+function isgFirmalariYukle() {
+  var kutu = document.getElementById("isgFirmaListesi");
+  if (!kutu) return;
+  kutu.innerHTML = "<div style='text-align:center; padding:40px; color:#64748b; grid-column:1/-1;'>Yükleniyor... ⏳<\/div>";
+
+  google.script.run
+  .withSuccessHandler(function(list) {
+  _isgFirmaCache = Array.isArray(list) ? list : (list && list.liste ? list.liste : []);
+  isgFirmaFiltrele();
+  })
+  .withFailureHandler(function(err) {
+  kutu.innerHTML = "<div style='color:red; grid-column:1/-1;'>Hata: " + err.message + "<\/div>";
+  })
+  .api_isgAktifFirmalariGetir();
+}
+
+function isgFirmaFiltrele() {
+  var ara = String((document.getElementById("isgFirmaAra")||{}).value||"").toLowerCase();
+  var tehlike = String((document.getElementById("isgTehlikeFiltre")||{}).value||"");
+  var hizmet = String((document.getElementById("isgHizmetFiltre")||{}).value||"");
+  var kutu = document.getElementById("isgFirmaListesi");
+  if (!kutu) return;
+
+  var liste = _isgFirmaCache.filter(function(f) {
+  if (ara && String(f.firmaAdi||"").toLowerCase().indexOf(ara) === -1) return false;
+  if (tehlike && f.tehlikeSinifi !== tehlike) return false;
+  if (hizmet && String(f.hizmetler||"").indexOf(hizmet) === -1) return false;
+  return true;
+  });
+
+  if (!liste.length) {
+  kutu.innerHTML = "<div style='text-align:center; padding:40px; color:#64748b; grid-column:1/-1;'>Kayıt bulunamadı.<\/div>";
+  return;
+  }
+
+  kutu.innerHTML = liste.map(function(f) {
+  var tehlikeRenk = f.tehlikeSinifi === "Çok Tehlikeli" ? "#ef4444" : (f.tehlikeSinifi === "Tehlikeli" ? "#f59e0b" : "#10b981");
+  var hizmetler = String(f.hizmetler||"").split(",").filter(Boolean).map(function(h) {
+  return '<span style="background:#e0f2fe; color:#0369a1; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:bold;">' + h.trim() + '<\/span>';
+  }).join(" ");
+
+  return '<div style="background:white; border:1px solid #e2e8f0; border-radius:10px; padding:16px; box-shadow:0 2px 4px rgba(0,0,0,0.05);">' +
+  '<div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:8px;">' +
+  '<div style="font-weight:900; color:#1e293b; font-size:14px;">' + String(f.firmaAdi||"") + '<\/div>' +
+  '<span style="background:' + tehlikeRenk + '20; color:' + tehlikeRenk + '; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:bold;">' + String(f.tehlikeSinifi||"") + '<\/span>' +
+  '<\/div>' +
+  '<div style="font-size:12px; color:#64748b; margin-bottom:6px;">👥 ' + f.calisanSayisi + ' çalışan' +
+  (f.subeAdedi > 1 ? ' &nbsp;|&nbsp; 🏢 <b style="color:#7c3aed;">' + f.subeAdedi + ' şube<\/b>' : '') +
+  ' &nbsp;|&nbsp; 🦺 IGU: <b>' + (f.aylikIguDk||0) + ' dk<\/b>' +
+' &nbsp;|&nbsp; 🩺 Hekim: <b>' + (f.aylikHekimDk||0) + ' dk<\/b>' +
+' &nbsp;|&nbsp; 🧬 DSP: <b>' + (f.aylikDspDk||0) + ' dk<\/b><\/div>' +
+(f.sgkSicilNo ? '<div style="font-size:11px; color:#475569; margin-bottom:4px;">🏛️ SGK Sicil: <b>' + f.sgkSicilNo + '<\/b><\/div>' : '') +
+  (f.atamaliPersonel ? '<div style="font-size:11px; color:#059669; margin-bottom:4px;">🦺 IGU: <b>' + f.atamaliPersonel + '<\/b><\/div>' : '') +
+(f.atamaliHekim    ? '<div style="font-size:11px; color:#0369a1; margin-bottom:4px;">🩺 Hekim: <b>' + f.atamaliHekim + '<\/b><\/div>' : '') +
+(f.atamaliDsp      ? '<div style="font-size:11px; color:#7c3aed; margin-bottom:6px;">🧬 DSP: <b>' + f.atamaliDsp + '<\/b><\/div>' : '') +
+  '<div style="display:flex; gap:4px; flex-wrap:wrap; margin-bottom:10px;">' + hizmetler + '<\/div>' +
+  (f.subeAdedi > 1 ?
+  '<div id="subeler_' + f.firmaId + '" style="display:none; background:#f8fafc; border-radius:8px; padding:10px; margin-bottom:8px; border:1px solid #e2e8f0;">' +
+  f.subeler.map(function(s) {
+  return '<div style="padding:6px 0; border-bottom:1px solid #e2e8f0; font-size:12px;">' +
+  '<div style="font-weight:bold; color:#1e293b;">' + String(s.subeAdi||"") + '<\/div>' +
+  '<div class="text-muted">SGK: ' + String(s.sgkSicilNo||"") + ' | ' + s.calisanSayisi + ' çalışan<\/div>' +
+  '<button onclick="isgPlanModalAc(\'' + s.subeId + '\',\'' + s.subeAdi.replace(/'/g,"") + '\',\'' + s.atamaliPersonel.replace(/'/g,"") + '\')" ' +
+  'style="margin-top:4px; background:#2563eb; color:white; border:none; padding:4px 10px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;">📅 Plan Ekle<\/button>' +
+  '<\/div>';
+  }).join("") +
+  '<\/div>' : '') +
+  '<div style="display:flex; gap:6px;">' +
+  (f.subeAdedi > 1 ?
+  '<button onclick="var el=document.getElementById(\'subeler_' + f.firmaId + '\'); el.style.display=el.style.display===\'none\'?\'block\':\'none\';" ' +
+  'style="flex:1; background:#7c3aed; color:white; border:none; padding:6px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:bold;">🏢 ' + f.subeAdedi + ' Şube<\/button>' :
+  '<button onclick="isgPlanModalAc(\'' + f.firmaId + '\',\'' + f.firmaAdi.replace(/\'/g,"") + '\',\'' + (f.atamaliPersonel||"").replace(/\'/g,"") + '\')" ' +
+'style="flex:1; background:#2563eb; color:white; border:none; padding:6px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:bold;">📅 Plan Ekle<\/button>' +
+'<button onclick="isgAtamaModalAc(\'' + f.firmaId + '\',\'' + f.firmaAdi.replace(/\'/g,"") + '\',\'' + (f.tehlikeSinifi || '').replace(/\'/g,"") + '\')" ' +
+'style="flex:1; background:#065f46; color:white; border:none; padding:6px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:bold;">&#x1F9CD; Atama &amp; D&uuml;zenle<\/button>' +
+'<button onclick="isgSozlesmeBitirOnay(\'' + f.firmaId + '\',\'' + f.firmaAdi.replace(/\'/g,"") + '\')" ' +
+'style="background:#ef4444; color:white; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:bold;">🔴 Bitir<\/button>' +
+'<button onclick="isgFirmaKonumKaydet(\'' + f.firmaId + '\',\'' + f.firmaAdi.replace(/\'/g,"") + '\')" ' +
+'style="background:' + (f.enlem ? '#10b981' : '#f59e0b') + '; color:white; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:12px;">' + (f.enlem ? 'GPS OK' : 'GPS YOK') + '<\/button>' +
+'<button onclick="isgWhatsappModalAc(\'' + f.firmaId + '\',\'' + f.firmaAdi.replace(/\'/g,"") + '\',\'' + (f.telefon||"").replace(/\'/g,"") + '\',\'' + (f.sozlesmeBit||"") + '\')" style="background:#25d366; color:white; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:bold;">WA<\/button>') +
+'<\/div>' +
+  '<\/div>';
+  }).join("");
+}
+
+function isgGunlukGorevleriYukle() {
+  var email = String(window.currentUserEmail || window.aktifKullanici || "").toLowerCase();
+  var bugun = new Date().toISOString().split("T")[0];
+  if (!email) return;
+
+  var mudurler = [
+    "dilara.bayrakdar@avrupabir.com.tr",
+    "ulas.ozbas@avrupabir.com.tr",
+    "yasemin.orbay@avrupabir.com.tr",
+    "gulbahar.gultekin@avrupabir.com.tr"
+  ];
+  var isMudur = mudurler.indexOf(email) > -1;
+  console.log("EMAIL:", email, "MUDUR MU:", isMudur);
+
+  var mudurKutu = document.getElementById("isgTumGunlukPlanlarKutu");
+  if (mudurKutu) mudurKutu.style.display = isMudur ? "block" : "none";
+
+  // 1 — Kendi görevleri
+  google.script.run
+  .withSuccessHandler(function(res) {
+    var list = Array.isArray(res) ? res : (res && res.liste ? res.liste : []);
+    console.log("KENDİ PLANLAR:", list.length, list);
+    var kutu = document.getElementById("isgGunlukGorevlerim");
+    if (!kutu) return;
+    var benimPlanlar = list.filter(function(p) {
+      return String(p.personelEmail||"").toLowerCase() === email;
+    });
+    if (!benimPlanlar.length) {
+      kutu.innerHTML = "<div style='background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:20px; text-align:center; color:#64748b; margin-bottom:16px;'>Bugün için atanmış göreviniz yok.<\/div>";
+    } else {
+      kutu.innerHTML = renderGorevler(benimPlanlar);
+    }
+  })
+  .api_isgGunlukPlanGetir(email, bugun);
+
+  // 2 — Müdürse tüm planlar
+  if (isMudur) {
+    console.log("TUM ÇAĞRISI YAPILIYOR");
+    google.script.run
+    .withFailureHandler(function(err) {
+      console.log("TUM HATA:", err.message);
+    })
+    .withSuccessHandler(function(tumListe) {
+      console.log("TUM LISTE:", tumListe ? tumListe.length : 0, tumListe);
+      var tumKutu = document.getElementById("isgTumGunlukPlanlar");
+      if (!tumKutu) { console.log("isgTumGunlukPlanlar DIV BULUNAMADI!"); return; }
+      if (!tumListe || !tumListe.length) {
+        tumKutu.innerHTML = "<div style='text-align:center; padding:20px; color:#64748b;'>Bugün için plan yok.<\/div>";
+      } else {
+        tumKutu.innerHTML = renderGorevler(tumListe, true);
+      }
+    })
+    .api_isgGunlukPlanGetir("TUM", bugun);
+  }
+}
+
+function isgAtamaListeYukle() {
+  var div = document.getElementById('isgAtamaListesi');
+  if (div) div.innerHTML = '<div style="text-align:center;padding:20px;color:#64748b;">Yükleniyor...<\/div>';
+  google.script.run
+    .withSuccessHandler(function(d) {
+      var div = document.getElementById('isgAtamaListesi');
+      var badge = document.getElementById('isgAtamaBadge');
+      if (!d || !d.ok || !d.liste || !d.liste.length) {
+        if (div) div.innerHTML = '<div style="text-align:center;padding:20px;color:#10b981;font-weight:700;">✅ Bekleyen atama yok.<\/div>';
+        if (badge) { badge.textContent = '0'; badge.style.background = '#10b981'; }
+        return;
+      }
+      var bekleyen = d.liste.filter(function(a) { return a.durum === 'BEKLEMEDE'; });
+      if (badge) { badge.textContent = bekleyen.length; badge.style.background = bekleyen.length > 0 ? '#ef4444' : '#10b981'; }
+      var html = '';
+      d.liste.forEach(function(a) {
+        var durumRenk = a.durum === 'BEKLEMEDE' ? '#fef2f2' : '#f0fdf4';
+        var durumTxt = a.durum === 'BEKLEMEDE' ? '🔴 Beklemede' : '✅ Atandı';
+        html += '<div style="background:' + durumRenk + ';border:1px solid #e2e8f0;border-radius:12px;padding:16px;">'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+          + '<div style="font-weight:900;font-size:14px;color:#0f172a;">' + (a.firmaAdi || '-') + '<\/div>'
+          + '<span style="font-size:11px;font-weight:700;">' + durumTxt + '<\/span></div>'
+          + '<div style="font-size:12px;color:#64748b;margin-bottom:4px;">Teklif: ' + (a.teklifNo || '-') + ' | Tarih: ' + (a.tarih || '-') + '<\/div>';
+        if (a.durum !== 'BEKLEMEDE') {
+          html += '<div style="font-size:12px;color:#065f46;margin-top:6px;">👤 ' + (a.atananPersonel || '-') + ' | 🕐 ' + (a.atananDakika || '-') + ' dk | 📋 ' + (a.hizmetler || '-') + '<\/div>';
+        } else {
+          html += '<button onclick="atamaModalAc(\'' + a.id + '\',' + a.satir + ',\'' + (a.firmaAdi || '').replace(/'/g, "\\'") + '\',\'' + (a.firmaId || '') + '\')" style="margin-top:8px;background:#065f46;color:#fff;border:none;padding:8px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;">🦺 Atama Yap</button>';
+        }
+        html += '<\/div>';
+      });
+      if (div) div.innerHTML = html;
+    })
+    .withFailureHandler(function() { var d = document.getElementById('isgAtamaListesi'); if (d) d.innerHTML = 'Hata.'; })
+    .api_bekleyenAtamalar(window.currentUserEmail || "");
+}
+
+function atamaModalAc(id, satir, firmaAdi, firmaId) {
+  document.getElementById('atamaSatir').value = satir;
+  document.getElementById('atamaFirmaId').value = firmaId;
+  document.getElementById('atamaFirmaGoster').textContent = '🏢 ' + firmaAdi;
+  document.getElementById('atamaCalisan').value = '';
+  document.getElementById('atamaHizIGU').checked = false;
+  document.getElementById('atamaHizHekim').checked = false;
+  document.getElementById('atamaHizDSP').checked = false;
+  document.getElementById('atamaNotlar').value = '';
+  document.getElementById('atamaPersonelAlanlari').innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:8px;">⏳ Mevcut atamalar yükleniyor...<\/div>';
+  atamaPersonelVerisiYukle();
+  document.getElementById('atamaModal').style.display = 'flex';
+
+  // Mevcut atamaları yükle
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.ok || !r.atama) return;
+      var a = r.atama;
+      if (a.calisan) document.getElementById('atamaCalisan').value = a.calisan;
+      if (a.notlar) document.getElementById('atamaNotlar').value = a.notlar;
+      if (a.sozlesmeTarihi) {
+        var stEl = document.getElementById('atamaSozlesmeTarihi');
+        if (stEl) { stEl.value = a.sozlesmeTarihi; stEl.disabled = true; }
+      }
+      // Hizmetleri işaretle
+      var hiz = String(a.hizmetler || '').split(',');
+      var per = String(a.personel || '').split(',');
+      var dk = String(a.dakika || '').split(',');
+      hiz.forEach(function(h, i) {
+        h = h.trim();
+        if (h === 'IGU') document.getElementById('atamaHizIGU').checked = true;
+        if (h === 'Hekim') document.getElementById('atamaHizHekim').checked = true;
+        if (h === 'DSP') document.getElementById('atamaHizDSP').checked = true;
+      });
+      atamaHizmetDegisti();
+      // Personel ve dakikaları doldur (dropdown'lar oluştuktan sonra)
+      setTimeout(function() {
+        hiz.forEach(function(h, i) {
+          h = h.trim();
+          var pEl = document.getElementById('atamaPer' + h);
+          var dEl = document.getElementById('atamaDk' + h);
+          if (pEl && per[i]) pEl.value = per[i].trim();
+          if (dEl && dk[i]) dEl.value = dk[i].trim();
+        });
+      }, 500);
+    })
+    .withFailureHandler(function() {})
+    .api_mevcutAtamaGetir(firmaId);
+}
+
+function atamaKaydetGonder() {
+  var btn = document.getElementById('btnAtamaKaydet');
+  btn.disabled = true; btn.textContent = '⏳ Kaydediliyor...';
+  var hizmetler = [];
+  var personeller = [];
+  var dakikalar = [];
+  if (document.getElementById('atamaHizIGU').checked) {
+    hizmetler.push('IGU');
+    personeller.push((document.getElementById('atamaPerIGU') || {}).value || '');
+    dakikalar.push((document.getElementById('atamaDkIGU') || {}).value || '0');
+  }
+  if (document.getElementById('atamaHizHekim').checked) {
+    hizmetler.push('Hekim');
+    personeller.push((document.getElementById('atamaPerHekim') || {}).value || '');
+    dakikalar.push((document.getElementById('atamaDkHekim') || {}).value || '0');
+  }
+  if (document.getElementById('atamaHizDSP').checked) {
+    hizmetler.push('DSP');
+    personeller.push((document.getElementById('atamaPerDSP') || {}).value || '');
+    dakikalar.push((document.getElementById('atamaDkDSP') || {}).value || '0');
+  }
+
+  var payload = {
+    satir: document.getElementById('atamaSatir').value,
+    firmaId: document.getElementById('atamaFirmaId').value,
+    firmaAdi: document.getElementById('atamaFirmaGoster').textContent.replace('🏢 ', ''),
+    calisan: document.getElementById('atamaCalisan').value,
+    hizmetler: hizmetler.join(','),
+    personel: personeller.join(', '),
+    dakika: dakikalar.join(','),
+    notlar: document.getElementById('atamaNotlar').value,
+    atayanEmail: window.currentUserEmail || ''
+  };
+
+  google.script.run
+    .withSuccessHandler(function(d) {
+      btn.disabled = false; btn.textContent = '✅ ATAMAYI KAYDET';
+      if (d && d.ok) {
+        document.getElementById('atamaModal').style.display = 'none';
+        if (typeof notify === 'function') notify('✅ Atama kaydedildi!', 'success');
+        isgAtamaListeYukle();
+      } else {
+        alert('❌ Hata: ' + (d ? d.msg : 'Bilinmiyor'));
+      }
+    })
+    .withFailureHandler(function(e) {
+      btn.disabled = false; btn.textContent = '✅ ATAMAYI KAYDET';
+      alert('❌ Bağlantı hatası: ' + e.message);
+    })
+    .api_atamaKaydet(payload);
+}
+
+function renderGorevler(list, tumPersonel) {
+  var html = '<div style="display:flex; flex-direction:column; gap:8px;">';
+  list.forEach(function(p) {
+    if (p.durum === "TAMAMLANDI") return;
+    var isIptal = String(p.durum||"").indexOf("IPTAL") > -1 || String(p.durum||"").indexOf("\u0130PTAL") > -1;
+    var isAraGorev = String(p.firmaId||"").indexOf("GOREV_") > -1 || String(p.hizmetTipi||"").indexOf("Ara G") > -1;
+    var pid = String(p.planId||"").replace(/['"]/g,"");
+    var firmaAdi = String(p.firmaAdi||"").replace(/['"<>]/g,"");
+    var ustCizgi = isIptal ? "text-decoration:line-through;" : "";
+    html += '<div style="background:white; border-radius:8px; padding:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; border-left:4px solid ' + (isIptal ? '#ef4444' : (isAraGorev ? '#8b5cf6' : '#3b82f6')) + ';">' +
+      '<div style="' + ustCizgi + '">' +
+      '<div style="font-weight:bold; color:#1e293b; font-size:14px;">' + firmaAdi + '<\/div>' +
+      (tumPersonel ? '<div style="font-size:11px; color:#7c3aed; font-weight:bold;">👤 ' + String(p.personelEmail||"").split("@")[0].toUpperCase() + '<\/div>' : '') +
+      '<div style="font-size:12px; color:#64748b; margin-top:4px;">' + String(p.hizmetTipi||"") + ' | <b>' + String(p.planlananDk||0) + ' dk<\/b>' + (p.planlananSaat ? ' | ' + p.planlananSaat : '') + '<\/div>' +
+      '<\/div><div style="display:flex; gap:6px;">';
+    if (isIptal) {
+      html += '<span style="color:#ef4444; font-weight:bold; font-size:12px;">IPTAL<\/span>';
+    } else if (p.durum === "PLANLANDI" || p.durum === "BEKLIYOR") {
+      html += '<button onclick="isgGirisYap(\'' + pid + '\')" style="background:#059669; color:white; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; font-weight:bold; font-size:12px;">' + (isAraGorev ? 'BASLA' : 'TESISE GIR') + '<\/button>';
+    } else if (p.durum === "DEVAM_EDIYOR") {
+      html += '<button onclick="isgCikisYap(\'' + pid + '\',' + isAraGorev + ')" style="background:#ef4444; color:white; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; font-weight:bold; font-size:12px;">' + (isAraGorev ? 'BITIR' : 'CIKIS') + '<\/button>';
+      html += '<button onclick="isgGoreviTamamla(\'' + pid + '\')" style="background:#10b981; color:white; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; font-weight:bold; font-size:12px;">TAMAM<\/button>';
+    }
+    html += '<\/div><\/div>';
+  });
+  html += '<\/div>';
+  return html;
+}
+
+
+// UZMANIN KENDİ ROTASINI ÇİZMESİNİ SAĞLAYAN YENİ FONKSİYON
+window.isgKendiRotamiCiz = function() {
+    var email = window.currentUserEmail || window.aktifKullanici || "";
+    var bugun = new Date().toISOString().split("T")[0];
+    
+    notify("Google Haritalar açılıyor...", "info");
+
+    google.script.run
+    .withSuccessHandler(function(res) {
+        var list = Array.isArray(res) ? res : (res && res.liste ? res.liste : []);
+        if (!list.length) {
+            alert("Bugün için rotası çizilecek görev bulunamadı."); return;
+        }
+        
+        // İptal edilen veya tamamlanan görevleri rotaya dahil etme
+        var aktifGorevler = list.filter(function(x) { return x.durum.indexOf("İPTAL") === -1 && x.durum !== "TAMAMLANDI"; });
+        
+        if(aktifGorevler.length === 0) {
+            alert("Gidilecek tüm yerler tamamlanmış veya iptal edilmiş!"); return;
+        }
+
+        var adresler = aktifGorevler.map(function(p) {
+            return encodeURIComponent(String(p.firmaAdi||"") + " İstanbul");
+        });
+
+        if (adresler.length === 1) {
+            window.open("https://www.google.com/maps/search/?api=1&query=" + adresler[0], "_blank");
+            return;
+        }
+
+        var destination = adresler[adresler.length - 1];
+        var waypoints = adresler.slice(0, -1).join("|");
+        var url = "https://www.google.com/maps/dir/?api=1&destination=" + destination + "&waypoints=" + waypoints + "&travelmode=driving";
+        window.open(url, "_blank");
+    })
+    .api_isgGunlukPlanGetir(email, bugun);
+};
+
+function isgGirisYap(planId) {
+  if (!navigator.geolocation) { 
+    alert("Tarayıcınız konum özelliğini desteklemiyor!"); 
+    return; 
+  }
+
+  var input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.capture = "environment";
+  input.style.display = "none";
+  document.body.appendChild(input);
+
+  input.onchange = function() {
+    if (input.files && input.files[0]) {
+      var reader = new FileReader();
+      reader.onload = function(e) { devamEt(e.target.result); };
+      reader.readAsDataURL(input.files[0]);
+    } else {
+      devamEt("");
+    }
+    document.body.removeChild(input);
+  };
+
+  setTimeout(function() {
+    if (document.body.contains(input)) {
+      document.body.removeChild(input);
+      devamEt("");
+    }
+  }, 60000);
+
+  input.click();
+
+  function devamEt(fotoBase64) {
+    notify("📍 Konum aranıyor...", "info");
+    navigator.geolocation.getCurrentPosition(
+      function(pos) {
+        var userLat = pos.coords.latitude;
+        var userLng = pos.coords.longitude;
+        var konum = userLat + "," + userLng;
+        var saat = new Date().toLocaleTimeString("tr-TR");
+        google.script.run
+          .withSuccessHandler(function(firmaKonum) {
+            var gpsUzak = false;
+            var mesafe = 0;
+            if (firmaKonum && firmaKonum.enlem && firmaKonum.boylam) {
+              var R = 6371000;
+              var dLat = (firmaKonum.enlem - userLat) * Math.PI / 180;
+              var dLng = (firmaKonum.boylam - userLng) * Math.PI / 180;
+              var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(userLat * Math.PI/180) * Math.cos(firmaKonum.enlem * Math.PI/180) *
+                      Math.sin(dLng/2) * Math.sin(dLng/2);
+              mesafe = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+              gpsUzak = mesafe > 150;
+              if (gpsUzak) notify("⚠️ Firmaya " + mesafe + " metre uzaktasınız! Giriş yine de kaydedilecek.", "warning");
+            }
+            google.script.run
+              .withSuccessHandler(function(res) {
+                if (res && res.ok) {
+                  notify("✅ Tesis girişi kaydedildi! Saat: " + saat, "success");
+                  isgGunlukGorevleriYukle();
+                } else {
+                  alert("❌ Hata: " + (res ? res.msg : "Bilinmiyor"));
+                }
+              })
+              .withFailureHandler(function(err) { alert("❌ Bağlantı Hatası: " + err.message); })
+              .api_isgGirisKaydet({ planId: planId, konum: konum, saat: saat, email: window.currentUserEmail, foto: fotoBase64, gpsUzak: gpsUzak, mesafe: mesafe });
+          })
+          .withFailureHandler(function() {
+            google.script.run
+              .withSuccessHandler(function(res) {
+                if (res && res.ok) {
+                  notify("✅ Tesis girişi kaydedildi! Saat: " + saat, "success");
+                  isgGunlukGorevleriYukle();
+                } else {
+                  alert("❌ Hata: " + (res ? res.msg : "Bilinmiyor"));
+                }
+              })
+              .api_isgGirisKaydet({ planId: planId, konum: konum, saat: saat, email: window.currentUserEmail, foto: fotoBase64 });
+          })
+          .api_firmaKonumGetir(planId);
+      },
+      function(error) {
+        var msg = "Konum alınamadı!";
+        if (error.code === 1) msg = "Konum izni reddedildi!";
+        else if (error.code === 2) msg = "GPS sinyali bulunamadı.";
+        else if (error.code === 3) msg = "Konum bulma süresi doldu.";
+        alert("❌ " + msg);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  }
+}
+function isgCikisYap(planId, isAraGorev) {
+  if (!confirm(isAraGorev ? "Görevi bitiriyor musunuz?" : "Tesisten çıkış yapıyor musunuz?")) return;
+  
+  var saat = new Date().toLocaleTimeString("tr-TR");
+  notify("Çıkış kaydediliyor...", "info");
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res && res.ok) {
+        notify("✅ Çıkış kaydedildi! Toplam: " + res.toplamDk + " dk", "success");
+        if (!isAraGorev && res.eksikDk > 0) {
+          notify("⚠️ " + res.eksikDk + " dk eksik! Tamamlama seçeneği açılıyor...", "warning");
+          setTimeout(function() { isgEksikSureTamamlaModal(planId, res.eksikDk); }, 1500);
+        }
+        isgGunlukGorevleriYukle();
+      } else {
+        alert("❌ Hata: " + (res ? res.msg : "Sistem yanıt vermedi. Lütfen tekrar deneyin."));
+      }
+    })
+    .withFailureHandler(function(err) {
+      alert("❌ Bağlantı Hatası: " + err.message);
+    })
+    .api_isgCikisKaydet({ 
+      planId: planId, 
+      saat: saat, 
+      email: window.currentUserEmail, 
+      isAraGorev: isAraGorev 
+    });
+}
+function isgEksikSureTamamlaModal(planId, eksikDk) {
+  var modal = document.createElement("div");
+  modal.style.cssText = "position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:999999; display:flex; align-items:center; justify-content:center;";
+  modal.innerHTML = '<div style="background:white; width:min(420px,92vw); border-radius:14px; padding:24px;">' +
+  '<h3 style="margin:0 0 12px; color:#dc2626;">⚠️ Eksik Süre: ' + eksikDk + ' dk<\/h3>' +
+  '<p style="color:#475569; font-size:13px; margin-bottom:16px;">Planlanan süreyi ' + eksikDk + ' dk tamamlayamadınız. Tamamlama notu girin:<\/p>' +
+  '<textarea id="eksikTamamlamaAciklama" rows="3" placeholder="Neden erken ayrıldınız?" style="width:100%; padding:10px; border-radius:8px; border:1px solid #cbd5e1; box-sizing:border-box; margin-bottom:12px;"><\/textarea>' +
+  '<div style="display:flex; gap:8px;">' +
+  '<button onclick="isgEksikTamamla(\'' + planId + '\',' + eksikDk + ')" style="flex:1; background:#059669; color:white; border:none; padding:10px; border-radius:8px; font-weight:900; cursor:pointer;">✅ Tamamla<\/button>' +
+  '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="flex:1; background:#e2e8f0; color:#475569; border:none; padding:10px; border-radius:8px; font-weight:bold; cursor:pointer;">İptal<\/button>' +
+  '<\/div>' +
+  '<\/div>';
+  document.body.appendChild(modal);
+}
+
+function isgEksikTamamla(planId, eksikDk) {
+  var aciklama = (document.getElementById("eksikTamamlamaAciklama")||{}).value || "";
+  if (!aciklama.trim()) { alert("Açıklama zorunlu!"); return; }
+
+  google.script.run
+  .withSuccessHandler(function(res) {
+  var modal = document.querySelector("div[style*='position:fixed'][style*='999999']");
+  if (modal) modal.remove();
+  if (res && res.ok) {
+  notify("✅ Tamamlama kaydedildi, yönetici bildirildi.", "success");
+  isgGunlukGorevleriYukle();
+  } else {
+  alert("❌ " + (res ? res.msg : "Hata"));
+  }
+  })
+  .api_isgEksikTamamla({ planId: planId, eksikDk: eksikDk, aciklama: aciklama, email: window.currentUserEmail });
+}
+
+function isgZiyaretleriYukle() {
+  var tbody = document.getElementById("isgZiyaretBody");
+  if (!tbody) return;
+  tbody.innerHTML = "<tr><td colspan='7' style='text-align:center; padding:20px;'>Yükleniyor...<\/td><\/tr>";
+
+  google.script.run
+  .withSuccessHandler(function(list) {
+  if (!list || !list.length) {
+  tbody.innerHTML = "<tr><td colspan='7' style='text-align:center; padding:20px; color:#64748b;'>Ziyaret kaydı bulunamadı.<\/td><\/tr>";
+  return;
+  }
+  tbody.innerHTML = list.map(function(z) {
+  var durumRenk = z.durum === "TAMAMLANDI" ? "#dcfce7; color:#166534" : (z.durum === "DEVAM_EDIYOR" ? "#fef9c3; color:#854d0e" : "#fee2e2; color:#991b1b");
+  return '<tr style="border-bottom:1px solid #f1f5f9;">' +
+  '<td style="padding:12px; font-size:12px; color:#64748b;">' + String(z.girisTarihi||"") + '<\/td>' +
+  '<td style="padding:12px; font-weight:bold;">' + String(z.firmaAdi||"") + '<\/td>' +
+  '<td style="padding:12px; font-size:12px;">' + String(z.personelEmail||"").split("@")[0] + '<\/td>' +
+  '<td style="padding:12px; font-size:12px;">' + String(z.hizmetTipi||"") + '<\/td>' +
+  '<td style="padding:12px; text-align:right; font-weight:bold;">' + String(z.planlananDk||0) + ' dk<\/td>' +
+  '<td style="padding:12px; text-align:right; font-weight:bold; color:#059669;">' + String(z.toplamDk||0) + ' dk<\/td>' +
+  '<td style="padding:12px; text-align:center;"><span style="background:' + durumRenk + '; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:bold;">' + String(z.durum||"") + '<\/span><\/td>' +
+  '<\/tr>';
+  }).join("");
+  })
+  .api_isgZiyaretleriGetir(window.currentUserEmail, window.userRole);
+}
+
+function isgRaporYukle() {
+  var kutu = document.getElementById("isgRaporIcerik");
+  if (!kutu) return;
+  kutu.innerHTML = "<div style='text-align:center; padding:40px; color:#64748b;'>Rapor hazırlanıyor... ⏳<\/div>";
+
+  google.script.run
+  .withSuccessHandler(function(res) {
+  if (!res) { kutu.innerHTML = "<div style='color:red;'>Rapor yüklenemedi.<\/div>"; return; }
+  kutu.innerHTML = '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px;">' +
+  '<div class="card-center">' +
+  '<div style="font-size:32px; font-weight:900; color:#065f46;">' + (res.toplamFirma||0) + '<\/div>' +
+  '<div style="font-size:12px; color:#64748b; font-weight:bold; margin-top:4px;">AKTİF ISG FİRMASI<\/div><\/div>' +
+  '<div class="card-center">' +
+  '<div style="font-size:32px; font-weight:900; color:#2563eb;">' + (res.buAyZiyaret||0) + '<\/div>' +
+  '<div style="font-size:12px; color:#64748b; font-weight:bold; margin-top:4px;">BU AY ZİYARET<\/div><\/div>' +
+  '<div class="card-center">' +
+  '<div style="font-size:32px; font-weight:900; color:#10b981;">' + (res.tamamlanan||0) + '<\/div>' +
+  '<div style="font-size:12px; color:#64748b; font-weight:bold; margin-top:4px;">TAMAMLANAN<\/div><\/div>' +
+  '<div class="card-center">' +
+  '<div style="font-size:32px; font-weight:900; color:#ef4444;">' + (res.eksikKalan||0) + '<\/div>' +
+  '<div style="font-size:12px; color:#64748b; font-weight:bold; margin-top:4px;">EKSİK/BEKLEYEN<\/div><\/div>' +
+  '<\/div>';
+  })
+  .api_isgRaporGetir();
+}
+
+window.isgPlanModalAc = function(firmaId, firmaAdi, atamaliPersonel) {
+  var email = String(window.currentUserEmail||"").toLowerCase();
+  if (email !== "dilara.bayrakdar@avrupabir.com.tr" && window.userRole !== "ADMIN" && window.userRole !== "ISG") {
+  alert("Plan ekleme yetkisi bulunmuyor!"); return;
+  }
+
+  var existing = document.getElementById("isgPlanModal");
+  if (existing) existing.remove();
+
+  var modal = document.createElement("div");
+  modal.id = "isgPlanModal";
+  modal.style.cssText = "position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:999999; display:flex; flex-direction:column;";
+
+  modal.innerHTML =
+  "<div style='background:#065f46; color:white; padding:12px 20px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0;'>" +
+  "<div style='font-weight:900; font-size:16px;'>Istanbul ISG Ziyaret Haritasi — " + firmaAdi + "<\/div>" +
+  "<div style='display:flex; gap:10px; align-items:center;'>" +
+  "<span id='pinSayaci' style='background:#10b981; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:bold;'>Firmalar yukleniyor...<\/span>" +
+  "<button onclick=\"document.getElementById('isgPlanModal').remove()\" style='background:#ef4444; color:white; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:bold; font-size:14px;'>KAPAT<\/button>" +
+  "<\/div>" +
+  "<\/div>" +
+
+  "<div style='display:flex; flex:1; overflow:hidden;'>" +
+
+  "<div style='flex:1; position:relative;'>" +
+  "<div id='buyukIstanbulHaritasi' style='width:100%; height:100%;'><\/div>" +
+  "<div id='haritaYukleniyor' style='position:absolute; inset:0; background:#1e293b; display:flex; flex-direction:column; align-items:center; justify-content:center; color:white;'>" +
+  "<div style='font-size:48px; margin-bottom:16px;'>🗺️<\/div>" +
+  "<div style='font-size:18px; font-weight:bold; margin-bottom:8px;'>Istanbul Haritasi Yukleniyor...<\/div>" +
+  "<div style='font-size:13px; color:#94a3b8;'>Firma konumlari isleniyor, lutfen bekleyin<\/div>" +
+  "<div style='margin-top:20px; width:200px; height:4px; background:#334155; border-radius:2px; overflow:hidden;'>" +
+  "<div id='yuklemeBar' style='height:100%; background:#10b981; width:0%; transition:width 0.3s; border-radius:2px;'><\/div>" +
+  "<\/div>" +
+  "<div id='yuklemeYazi' style='margin-top:8px; font-size:12px; color:#64748b;'>0 / 0<\/div>" +
+  "<\/div>" +
+  "<\/div>" +
+
+  "<div style='width:300px; background:#f8fafc; border-left:1px solid #e2e8f0; display:flex; flex-direction:column; flex-shrink:0;'>" +
+  "<div style='padding:16px; border-bottom:1px solid #e2e8f0; background:white;'>" +
+  "<div style='font-weight:900; color:#065f46; font-size:14px; margin-bottom:12px;'>Ziyaret Plani<\/div>" +
+  "<div style='display:flex; flex-direction:column; gap:8px;'>" +
+  "<div><label style='font-size:11px; font-weight:bold; color:#475569;'>Tarih<\/label>" +
+  "<input type='date' id='isgPlanTarihModal' style='width:100%; padding:8px; border-radius:6px; border:1px solid #cbd5e1; box-sizing:border-box; font-size:13px;'><\/div>" +
+
+  "<div><label style='font-size:11px; font-weight:bold; color:#475569;'>Gidecek Personel<\/label>" +
+  "<select id='isgPlanPersonel' style='width:100%; padding:8px; border-radius:6px; border:2px solid #2563eb; font-size:12px; font-weight:bold;'>" +
+  "<option value=''>Yukleniyor...<\/option>" +
+  "<\/select><\/div>" +
+
+  "<div><label style='font-size:11px; font-weight:bold; color:#475569;'>Hizmet<\/label>" +
+  "<select id='isgPlanHizmet' style='width:100%; padding:8px; border-radius:6px; border:1px solid #cbd5e1; font-size:12px;'>" +
+  "<option value='IGU'>Is Guvenligi Uzmani<\/option>" +
+  "<option value='Hekim'>Isyeri Hekimi<\/option>" +
+  "<option value='DSP'>DSP<\/option>" +
+  "<\/select><\/div>" +
+
+"<div id='anaFirmaDetay' style='background:#f0fdf4; border:1px solid #10b981; border-radius:8px; padding:10px;'>" +
+"<div style='font-size:11px; font-weight:900; color:#065f46; margin-bottom:6px;'>ANA FIRMA: " + (firmaAdi||"") + "<\/div>" +
+"<input type='hidden' id='isgPlanFirmaId' value='" + (firmaId||"") + "'>" +
+"<input type='hidden' id='isgPlanFirmaAdi' value='" + (firmaAdi||"") + "'>" +
+"<div style='display:flex; gap:6px;'>" +
+"<div style='flex:1'><label style='font-size:10px; font-weight:bold; color:#475569;'>Ziyaret Saati<\/label>" +
+"<input type='time' id='isgPlanSaat' style='width:100%; padding:6px; border-radius:4px; border:2px solid #065f46; font-weight:bold; font-size:13px; box-sizing:border-box;'><\/div>" +
+"<div style='flex:1'><label style='font-size:10px; font-weight:bold; color:#475569;'>Sure (dk)<\/label>" +
+"<input type='number' id='isgPlanSure' placeholder='60' style='width:100%; padding:6px; border-radius:4px; border:2px solid #065f46; font-weight:bold; font-size:13px; box-sizing:border-box;'><\/div>" +
+"<\/div>" +
+"<textarea id='isgPlanNot' rows='2' placeholder='Notlar...' style='width:100%; margin-top:6px; padding:6px; border-radius:4px; border:1px solid #cbd5e1; box-sizing:border-box; resize:none; font-size:11px;'><\/textarea>" +
+"<\/div>" +
+
+  "<div id='secilenFirmalarForm'><\/div>" +
+
+  "<button onclick='window.isgPlanKaydet()' style='width:100%; background:#065f46; color:white; border:none; padding:12px; border-radius:8px; font-weight:900; cursor:pointer; font-size:13px; margin-top:4px;'>KAYDET<\/button>" +
+  "<div id='isgPlanMesaj' style='text-align:center; font-weight:bold; font-size:12px; min-height:16px;'><\/div>" +
+  "<\/div>" +
+
+  "<div style='padding:12px; border-bottom:1px solid #e2e8f0; background:white;'>" +
+  "<div style='font-size:11px; font-weight:900; color:#475569; margin-bottom:6px;'>HARITADAN SECILEN FIRMALAR<\/div>" +
+  "<div id='secilenFirmalarListesi' style='font-size:12px; color:#94a3b8; font-style:italic;'>Haritada firma pinlerine tiklayin...<\/div>" +
+  "<\/div>" +
+
+  "<div style='flex:1; overflow-y:auto; padding:8px;'>" +
+  "<div style='font-size:11px; font-weight:900; color:#475569; padding:4px 4px 8px;'>TUM FIRMALAR<\/div>" +
+  "<div id='yakinFirmalarListesi'>" +
+  "<div style='text-align:center; padding:20px; color:#94a3b8; font-size:12px;'>Yukleniyor...<\/div>" +
+  "<\/div>" +
+  "<\/div>" +
+  "<\/div>" +
+  "<\/div>";
+
+  document.body.appendChild(modal);
+
+  google.script.run
+  .withSuccessHandler(function(list) {
+    var sel = document.getElementById("isgPlanPersonel");
+    if (!sel) return;
+    var _list = Array.isArray(list) ? list : (list && list.liste ? list.liste : []);
+    sel.innerHTML = "<option value=''>-- Seçin --<\/option>" + _list.map(function(p) {
+      return "<option value='" + (p.mail||p.email||"") + "'>" + (p.ad||p.adSoyad||p.mail||p.email) + "<\/option>";
+    }).join("");
+  })
+  .api_personelListesiGetir(window.currentUserEmail || "");
+
+  var tarihEl = document.getElementById("isgPlanTarihModal");
+  if (tarihEl) {
+    var bugun = new Date();
+    tarihEl.value = bugun.toISOString().split("T")[0];
+  }
+
+  function haritayiBaslat() {
+    var mapEl = document.getElementById("buyukIstanbulHaritasi");
+    if (!mapEl) return;
+
+    var modalMap = L.map("buyukIstanbulHaritasi").setView([41.0082, 28.9784], 11);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "OpenStreetMap",
+        maxZoom: 18
+    }).addTo(modalMap);
+
+    var redIcon = new L.Icon({
+        iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+        shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
+        iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+    });
+
+    var greenIcon = new L.Icon({
+        iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
+        shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
+        iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+    });
+
+    var yukleniyor = document.getElementById("haritaYukleniyor");
+    var pinSayaci = document.getElementById("pinSayaci");
+    var listeKutu = document.getElementById("yakinFirmalarListesi");
+    
+    var markers = {};
+
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (yukleniyor) yukleniyor.style.display = "none";
+        
+        if (!res || !res.ok || !res.firmalar) {
+          if (listeKutu) listeKutu.innerHTML = "<div style='color:red; padding:10px;'>Firmalar yüklenemedi.<\/div>";
+          return;
+        }
+
+        var firmalar = res.firmalar;
+        var tamamlanan = 0;
+        var htmlList = "";
+        var bounds = [];
+        
+        var hedefFirmaId = document.getElementById("isgPlanFirmaId") ? document.getElementById("isgPlanFirmaId").value : "";
+
+        firmalar.forEach(function(f) {
+          if (!f.lat || !f.lng) return; 
+          
+          var isTarget = (String(f.firmaId) === String(hedefFirmaId));
+          var mIcon = isTarget ? redIcon : greenIcon;
+          
+          var marker = L.marker([f.lat, f.lng], {icon: mIcon}).addTo(modalMap);
+          
+          if (isTarget) {
+             marker.bindPopup("<div style='text-align:center;'><b style='color:#dc2626; font-size:14px;'>📍 HEDEF FİRMA<\/b><br><b>" + window.esc(f.firmaAdi) + "<\/b><\/div>").openPopup();
+             modalMap.setView([f.lat, f.lng], 13);
+          } else {
+             marker.bindPopup(
+                "<div style='min-width:180px;'>" +
+                "<b style='color:#065f46; font-size:13px;'>" + window.esc(f.firmaAdi) + "<\/b><br>" +
+                "<span style='font-size:11px; color:#64748b;'>" + window.esc(f.adres) + "<\/span><br><br>" +
+                "<button onclick=\"window.isgEkstraFirmaEkle('" + f.firmaId + "','" + window.esc(f.firmaAdi).replace(/'/g,"") + "')\" " +
+                "style='width:100%; background:#2563eb; color:white; border:none; padding:6px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;'>➕ Rotaya Ekle<\/button>" +
+                "<\/div>"
+             );
+          }
+          
+          markers[f.firmaId] = marker;
+          bounds.push([f.lat, f.lng]);
+          tamamlanan++;
+
+          if(!isTarget) {
+              htmlList += "<div onclick=\"var m=modalMap_markers['" + f.firmaId + "']; if(m){modalMap_instance.setView(m.getLatLng(),15); m.openPopup();}\" " +
+              "style='padding:8px; border:1px solid #cbd5e1; border-radius:6px; margin-bottom:4px; cursor:pointer; background:white;' " +
+              "onmouseover=\"this.style.borderColor='#065f46'\" onmouseout=\"this.style.borderColor='#cbd5e1'\">" +
+              "<div style='font-size:11px; font-weight:bold; color:#1e293b;'>" + window.esc(f.firmaAdi) + "<\/div>" +
+              "<div style='font-size:10px; color:#64748b;'>" + window.esc(f.adres) + "<\/div>" +
+              "<\/div>";
+          }
+        });
+
+        window.modalMap_instance = modalMap;
+        window.modalMap_markers = markers;
+
+        if (listeKutu) listeKutu.innerHTML = htmlList;
+        if (pinSayaci) pinSayaci.textContent = tamamlanan + " firma haritada";
+
+        if(bounds.length > 0 && !markers[hedefFirmaId]) {
+            modalMap.fitBounds(bounds, {padding: [30,30]});
+        }
+
+        setTimeout(function() { modalMap.invalidateSize(); }, 300);
+
+      })
+      .withFailureHandler(function(err) {
+        if (yukleniyor) yukleniyor.style.display = "none";
+        if (pinSayaci) pinSayaci.textContent = "Hata oluştu";
+      })
+      .api_isgHaritaVerisiGetir(); 
+  }
+
+  if (typeof L === "undefined") {
+    var css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+    document.head.appendChild(css);
+
+    var js = document.createElement("script");
+    js.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+    js.onload = function() { haritayiBaslat(); };
+    js.onerror = function() { alert("Harita yuklenemedi!"); };
+    document.head.appendChild(js);
+  } else {
+    haritayiBaslat();
+  }
+};
+
+function isgSubeSecildi() {
+  var sel = document.getElementById("isgPlanSubeSecim");
+  if (!sel || !sel.value) return;
+  var opt = sel.options[sel.selectedIndex];
+  var subeId = sel.value;
+  var atamali = opt.getAttribute("data-atamali") || "";
+  var fidEl = document.getElementById("isgPlanFirmaId");
+  if (fidEl) fidEl.value = subeId;
+  var atamaliEl = document.getElementById("isgPlanAtamali");
+  if (atamaliEl) atamaliEl.value = atamali;
+  var atamaliDiv = document.getElementById("isgAtamaliGoster");
+  if (atamaliDiv) atamaliDiv.innerHTML = atamali ? '👤 Atamalı: <b>' + atamali + '<\/b>' : '';
+  isgKalanSureGoster();
+}
+
+window.isgPlanKaydet = function() {
+  var tarih  = (document.getElementById("isgPlanTarihModal")||{}).value || "";
+  var firmaId  = (document.getElementById("isgPlanFirmaId")||{}).value || "";
+  var firmaAdi = (document.getElementById("isgPlanFirmaAdi")||{}).value || "";
+  var personel = (document.getElementById("isgPlanPersonel")||{}).value || "";
+  var hizmet  = (document.getElementById("isgPlanHizmet")||{}).value || "";
+  var sure  = parseInt((document.getElementById("isgPlanSure")||{}).value) || 0;
+  var saat  = (document.getElementById("isgPlanSaat")||{}).value || "";
+  var not_  = (document.getElementById("isgPlanNot")||{}).value || "";
+
+  var planlar = [];
+
+  // 1. Ana firma kutusu doluysa onu plana dahil et
+  if (firmaId && sure > 0) {
+      planlar.push({
+          tarih: tarih, firmaId: firmaId, firmaAdi: firmaAdi,
+          personelEmail: personel, hizmetTipi: hizmet,
+          planlananDk: sure, notlar: not_,
+          planlananSaat: saat,
+      });
+  }
+
+  // 2. Haritadan eklenen ekstra firmaları al
+  var ekstraRows = document.querySelectorAll(".ekstraFirmaRow");
+  for (var i = 0; i < ekstraRows.length; i++) {
+      var row = ekstraRows[i];
+      var eFirmaId  = row.getAttribute("data-id");
+      var eFirmaAdi = row.getAttribute("data-ad");
+      var eSure  = parseInt(row.querySelector(".ekstraSure").value) || 0;
+      var eNot  = row.querySelector(".ekstraNot").value || "";
+      
+      if (!eFirmaId || eSure <= 0) continue;
+      
+      planlar.push({
+          tarih: tarih, firmaId: eFirmaId, firmaAdi: eFirmaAdi,
+          personelEmail: personel, hizmetTipi: hizmet,
+          planlananDk: eSure, notlar: eNot,
+          olusturanEmail: window.currentUserEmail || ""
+      });
+  }
+
+  // Temel doğrulamalar (FirmaID kontrolünü kaldırdık, çünkü planlar dizisini kontrol ediyoruz)
+  if (!tarih || !personel || !hizmet) {
+      alert("Tarih, gidecek personel ve hizmet tipi zorunludur!"); return;
+  }
+
+  if (planlar.length === 0) {
+      alert("Lütfen en az bir firma için geçerli bir süre (dk) girin!"); return;
+  }
+
+  var mesaj = document.getElementById("isgPlanMesaj");
+  if (mesaj) mesaj.textContent = "Sisteme İşleniyor... (" + planlar.length + " plan)";
+
+  google.script.run
+  .withSuccessHandler(function(res) {
+      if (res && res.ok) {
+          if (mesaj) mesaj.textContent = "✅ " + planlar.length + " plan başarıyla kaydedildi!";
+          // WhatsApp — her firma için ayrı link
+          planlar.forEach(function(plan) {
+            if (!plan.firmaId || plan.firmaId.indexOf("GOREV_") > -1) return;
+            var waMesaj = "Sayın " + plan.firmaAdi + ",\n\n" +
+              plan.tarih + " tarihinde " + plan.hizmetTipi + " hizmetiniz için ziyaret planlanmıştır.\n" +
+              "Süre: " + plan.planlananDk + " dk\n\n" +
+              "Bilginize sunarız.\nAvrupaİSG OSGB\n0549 483 83 82";
+            google.script.run.withSuccessHandler(function(wa) {
+              if (wa && wa.ok && wa.url) {
+                if (confirm("📱 " + plan.firmaAdi + " firmasına WhatsApp mesajı gönderilsin mi?")) {
+                  window.open(wa.url, "_blank");
+                }
+              }
+            }).api_waLink({ firmaId: plan.firmaId, mesaj: waMesaj });
+          });
+          setTimeout(function() {
+              var m = document.getElementById("isgPlanModal");
+              if (m) m.remove();
+              if(typeof isgPlanlariYukle === "function") isgPlanlariYukle();
+          }, 1500);
+      } else {
+          if (mesaj) mesaj.textContent = "❌ Hata: " + (res ? res.msg : "?");
+      }
+  })
+  .withFailureHandler(function(err) {
+      if (mesaj) mesaj.textContent = "❌ Bağlantı Hatası: " + err.message;
+  })
+  .api_isgCokluPlanKaydet(planlar);
+};
+
+window.isgEkstraFirmaEkle = function(firmaId, firmaAdi) {
+  var kutu = document.getElementById("secilenFirmalarForm");
+  if (!kutu) return;
+
+  if (document.querySelector(".ekstraFirmaRow[data-id='" + firmaId + "']")) {
+  notify(firmaAdi + " zaten eklendi.", "info"); return;
+  }
+
+  var div = document.createElement("div");
+  div.className = "ekstraFirmaRow";
+  div.setAttribute("data-id", firmaId);
+  div.setAttribute("data-ad", firmaAdi);
+  div.style.cssText = "background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:8px; margin-bottom:6px;";
+  div.innerHTML =
+  "<div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;'>" +
+  "<span style='font-size:11px; font-weight:bold; color:#1e3a8a;'>" + firmaAdi + "<\/span>" +
+  "<button onclick=\"this.closest('.ekstraFirmaRow').remove()\" style='background:#fee2e2; color:#ef4444; border:none; padding:2px 8px; border-radius:4px; cursor:pointer; font-size:11px;'>Kaldir<\/button>" +
+  "<\/div>" +
+  "<div style='display:flex; gap:6px;'>" +
+  "<div style='flex:1'><label style='font-size:10px; color:#475569;'>Sure (dk)<\/label>" +
+  "<input type='number' class='ekstraSure' placeholder='60' style='width:100%; padding:5px; border-radius:4px; border:2px solid #2563eb; font-weight:bold; box-sizing:border-box;'><\/div>" +
+  "<\/div>" +
+  "<textarea class='ekstraNot' rows='1' placeholder='Not...' style='width:100%; margin-top:4px; padding:5px; border-radius:4px; border:1px solid #cbd5e1; box-sizing:border-box; resize:none; font-size:11px;'><\/textarea>";
+
+  kutu.appendChild(div);
+
+  var m = document.getElementById("isgPlanModal");
+  if (m && m._map) m._map.closePopup();
+};
+
+function isgPlanlariYukle() {
+  var tarihEl = document.getElementById("isgPlanTarih");
+  var tarih = tarihEl ? tarihEl.value : new Date().toISOString().split("T")[0];
+  var kutu = document.getElementById("isgPlanListesi");
+  if (!kutu) return;
+  kutu.innerHTML = "<div style='text-align:center; padding:20px; color:#64748b;'>Yükleniyor...<\/div>";
+
+  google.script.run
+  .withSuccessHandler(function(list) {
+      if (!list || !list.length) {
+          kutu.innerHTML = "<div style='text-align:center; padding:20px; color:#64748b;'>Bu tarih için plan bulunamadı.<\/div>";
+          return;
+      }
+      
+      kutu.innerHTML = '<div style="display:flex; flex-direction:column; gap:8px;">' +
+      list.map(function(p) {
+          var isIptal = p.durum.indexOf("İPTAL") > -1;
+          var durumRenk = isIptal ? "#ef4444" : (p.durum === "TAMAMLANDI" ? "#10b981" : (p.durum === "DEVAM_EDIYOR" ? "#f59e0b" : "#64748b"));
+          var isAraGorev = String(p.firmaId || "").indexOf("GOREV_") > -1 || String(p.hizmetTipi || "").indexOf("Ara Görev") > -1;
+          var solCizgi = isIptal ? "border-left:5px solid #ef4444;" : (isAraGorev ? "border-left:5px solid #8b5cf6;" : "border-left:5px solid #3b82f6;");
+          var opacity = isIptal ? "0.6" : "1";
+          var ustCizgi = isIptal ? "text-decoration: line-through;" : "";
+
+          // İptal butonu (Sadece bitmemiş ve iptal olmamış işlerde çıkar)
+          var iptalBtn = (!isIptal && p.durum !== "TAMAMLANDI") ? 
+             '<button onclick="isgPlaniIptalEt(\'' + p.planId + '\')" style="background:#fee2e2; color:#ef4444; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:bold; font-size:11px; margin-left:10px;">🗑️ İptal<\/button>' : '';
+
+          return '<div style="background:white; border:1px solid #e2e8f0; ' + solCizgi + ' opacity:' + opacity + '; border-radius:8px; padding:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">' +
+          '<div style="' + ustCizgi + '">' +
+          '<div style="font-weight:bold; color:#1e293b; font-size:14px;">' + String(p.firmaAdi||"") + '<\/div>' +
+          '<div style="font-size:12px; color:#64748b; margin-top:4px;">' + 
+(p.personelAd || String(p.personelEmail||"").split("@")[0].replace("."," ").replace(/\b\w/g, function(l){ return l.toUpperCase(); })) + 
+' &nbsp;|&nbsp; ' + String(p.hizmetTipi||"") + ' &nbsp;|&nbsp; <b>' + String(p.planlananDk||0) + ' dk<\/b>' +
+(p.planlananSaat ? ' &nbsp;|&nbsp; 🕐 <b>' + p.planlananSaat + '<\/b>' : '') +
+'<\/div>' +
+          (p.notlar ? '<div style="font-size:11px; color:#94a3b8; margin-top:4px; font-style:italic;">Not: ' + String(p.notlar) + '<\/div>' : '') +
+          '<\/div>' +
+          '<div style="display:flex; align-items:center;">' +
+          '<span style="color:' + durumRenk + '; font-weight:bold; font-size:12px; background:#f8fafc; padding:4px 8px; border-radius:6px; border:1px solid #e2e8f0;">' + String(p.durum||"PLANLANDI") + '<\/span>' +
+          iptalBtn +
+          '<\/div>' +
+          '<\/div>';
+      }).join("") + '<\/div>';
+  })
+  .withFailureHandler(function(err) {
+      kutu.innerHTML = "<div style='color:red;'>Hata: " + err.message + "<\/div>";
+  })
+  .api_isgPlanListeGetir(tarih, window.currentUserEmail, window.userRole);
+}
+// YENİ: İSG İPTAL FONKSİYONU
+window.isgPlaniIptalEt = function(planId) {
+    if(!confirm("Bu planı iptal etmek istediğinize emin misiniz?")) return;
+    notify("İptal ediliyor...", "info");
+    google.script.run
+        .withSuccessHandler(function(res) {
+            if(res && res.ok) { notify("✅ Plan iptal edildi", "success"); isgPlanlariYukle(); isgGunlukGorevleriYukle(); }
+            else { alert("Hata: " + res.msg); }
+        })
+        .api_isgPlanIptal(planId, window.currentUserEmail);
+};
+
+function isgGunlukRotaAc() {
+  var tarihEl = document.getElementById("isgPlanTarih");
+  var tarih = tarihEl ? tarihEl.value : new Date().toISOString().split("T")[0];
+  if (!tarih) { alert("Önce tarih seçin!"); return; }
+
+  google.script.run
+  .withSuccessHandler(function(list) {
+  if (!list || !list.length) {
+  notify("Bu tarih için plan bulunamadı.", "info");
+  return;
+  }
+
+  var adresler = list.map(function(p) {
+  return encodeURIComponent(String(p.firmaAdi||"") + " İstanbul");
+  });
+
+  if (adresler.length === 1) {
+  window.open("https://www.google.com/maps/search/?api=1&query=" + adresler[0], "_blank");
+  return;
+  }
+
+  var destination = adresler[adresler.length - 1];
+  var waypoints = adresler.slice(0, -1).join("|");
+  var url = "https://www.google.com/maps/dir/?api=1&destination=" + destination + "&waypoints=" + waypoints + "&travelmode=driving";
+  window.open(url, "_blank");
+  })
+  .api_isgPlanListeGetir(tarih, window.currentUserEmail, window.userRole);
+}
+
+function isgGunlukOzetGoster() {
+  var tarihEl = document.getElementById("isgPlanTarih");
+  var tarih = tarihEl ? tarihEl.value : new Date().toISOString().split("T")[0];
+  if (!tarih) { alert("Önce tarih seçin!"); return; }
+
+  google.script.run
+  .withSuccessHandler(function(res) {
+  var list = Array.isArray(res) ? res : (res && res.liste ? res.liste : []);
+  if (!list.length) {
+  notify("Bu tarih için plan bulunamadı.", "info");
+  return;
+  }
+
+  var toplam = list.length;
+  var tamamlanan = list.filter(function(p) { return p.durum === "TAMAMLANDI"; }).length;
+  var devamEden = list.filter(function(p) { return p.durum === "DEVAM_EDIYOR"; }).length;
+  var bekleyen = list.filter(function(p) { return p.durum === "PLANLANDI"; }).length;
+  var eksik = list.filter(function(p) { return p.durum === "EKSİK"; }).length;
+
+  var personelMap = {};
+  list.forEach(function(p) {
+  var per = String(p.personelEmail||"").split("@")[0];
+  if (!personelMap[per]) personelMap[per] = { toplam:0, tamamlanan:0, bekleyen:0 };
+  personelMap[per].toplam++;
+  if (p.durum === "TAMAMLANDI") personelMap[per].tamamlanan++;
+  else personelMap[per].bekleyen++;
+  });
+
+  var modal = document.createElement("div");
+  modal.style.cssText = "position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:999999; display:flex; align-items:center; justify-content:center;";
+  
+  var personelHtml = Object.keys(personelMap).map(function(per) {
+  var p = personelMap[per];
+  var tamRenk = p.tamamlanan === p.toplam ? "#059669" : "#dc2626";
+  return '<div style="display:flex; justify-content:space-between; align-items:center; padding:10px; background:white; border-radius:8px; margin-bottom:6px;">' +
+  '<div style="font-weight:bold; color:#1e293b;">👤 ' + per.toUpperCase() + '<\/div>' +
+  '<div style="font-size:13px;">' +
+  '<span style="color:#059669; font-weight:bold;">' + p.tamamlanan + ' ✅<\/span> / ' +
+  '<span style="color:#dc2626; font-weight:bold;">' + p.bekleyen + ' ❌<\/span> / ' +
+  '<span class="text-muted">Toplam: ' + p.toplam + '<\/span>' +
+  '<\/div>' +
+  '<\/div>';
+  }).join("");
+
+  modal.innerHTML = '<div style="background:white; width:min(500px,92vw); border-radius:14px; padding:24px; max-height:90vh; overflow-y:auto;">' +
+  '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">' +
+  '<h3 style="margin:0; color:#1e293b;">📊 ' + tarih + ' Günlük Özet<\/h3>' +
+  '<button onclick="this.closest(\'div[style*=fixed]\').remove()" class="btn-danger">✖<\/button>' +
+  '<\/div>' +
+  '<div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px;">' +
+  '<div style="background:#f0fdf4; border-radius:8px; padding:12px; text-align:center;"><div style="font-size:28px; font-weight:900; color:#059669;">' + tamamlanan + '<\/div><div style="font-size:11px; color:#64748b; font-weight:bold;">TAMAMLANDI<\/div><\/div>' +
+  '<div style="background:#fef9c3; border-radius:8px; padding:12px; text-align:center;"><div style="font-size:28px; font-weight:900; color:#f59e0b;">' + devamEden + '<\/div><div style="font-size:11px; color:#64748b; font-weight:bold;">DEVAM EDİYOR<\/div><\/div>' +
+  '<div style="background:#fee2e2; border-radius:8px; padding:12px; text-align:center;"><div style="font-size:28px; font-weight:900; color:#dc2626;">' + bekleyen + '<\/div><div style="font-size:11px; color:#64748b; font-weight:bold;">YAPILMADI<\/div><\/div>' +
+  '<div style="background:#f8fafc; border-radius:8px; padding:12px; text-align:center;"><div style="font-size:28px; font-weight:900; color:#1e293b;">' + toplam + '<\/div><div style="font-size:11px; color:#64748b; font-weight:bold;">TOPLAM PLAN<\/div><\/div>' +
+  '<\/div>' +
+  '<div style="font-weight:bold; color:#475569; font-size:13px; margin-bottom:8px;">👥 Personel Bazlı Durum:<\/div>' +
+  personelHtml +
+  '<\/div>';
+  document.body.appendChild(modal);
+  })
+  .api_isgPlanListeGetir(tarih, window.currentUserEmail, window.userRole);
+}
+
+
+var _yetkiPaneller = [
+  { id:"panelFirmalar", ad:"Firmalar", emoji:"🏢", fonksiyonlar:[
+  {id:"firma_goruntule",ad:"Firma listesi"},{id:"firma_ekle",ad:"Firma ekle"},{id:"firma_duzenle",ad:"Firma düzenle"},{id:"firma_sil",ad:"Firma sil",hassas:true},{id:"firma_evrak",ad:"Evrak yükleme"},{id:"firma_portal",ad:"Müşteri portal linki"}]},
+  { id:"panelTeklif", ad:"Teklif", emoji:"📋", fonksiyonlar:[
+  {id:"teklif_olustur",ad:"Teklif oluştur"},{id:"teklif_fiyat",ad:"Fiyat görüntüle",hassas:true},{id:"teklif_pdf",ad:"PDF oluştur"},{id:"teklif_liste",ad:"Teklif geçmişi"}]},
+  { id:"panelAktivite", ad:"Aktiviteler", emoji:"📞", fonksiyonlar:[
+  {id:"akt_goruntule",ad:"Aktivite görüntüle"},{id:"akt_ekle",ad:"Aktivite ekle"},{id:"akt_herkesi_gor",ad:"Tüm personel aktiviteleri",hassas:true}]},
+  { id:"panelRapor", ad:"Raporlar", emoji:"📊", fonksiyonlar:[
+  {id:"rapor_satis",ad:"Satış raporları"},{id:"rapor_aktivite",ad:"Aktivite raporları"},{id:"rapor_herkesi_gor",ad:"Tüm ekip raporları",hassas:true}]},
+  { id:"panelPerformans", ad:"Performans", emoji:"🏆", fonksiyonlar:[
+  {id:"perf_kendi",ad:"Kendi performansı"},{id:"perf_takim",ad:"Takım performansı",hassas:true},{id:"perf_hedef_belirle",ad:"Hedef belirleme"}]},
+  { id:"panelISG", ad:"ISG Yönetim", emoji:"🦺", fonksiyonlar:[
+  {id:"isg_firmalar",ad:"ISG firma listesi"},{id:"isg_plan_ekle",ad:"Plan ekle"},{id:"isg_plan_gor",ad:"Planları gör"},{id:"isg_ziyaret",ad:"Tesis giriş/çıkış"},{id:"isg_rapor",ad:"ISG raporları"},{id:"isg_meditek",ad:"Meditek import"}]},
+  { id:"panelHarita", ad:"Rota Haritası", emoji:"🗺️", fonksiyonlar:[
+  {id:"harita_gor",ad:"Haritayı görüntüle"},{id:"harita_rota",ad:"Rota planla"}]},
+  { id:"panelFinans", ad:"Finans", emoji:"💳", fonksiyonlar:[
+  {id:"fin_islem_ekle",ad:"İşlem ekle"},{id:"fin_liste",ad:"İşlem listesi"},{id:"fin_kasa",ad:"Kasa bakiyesi",hassas:true},{id:"fin_muhasebe",ad:"Muhasebe detayı",hassas:true},{id:"fin_kdv",ad:"KDV hesaplama",hassas:true},{id:"fin_radar",ad:"Kaçak radar",hassas:true}]},
+  { id:"panelPersonel", ad:"Personel/İK", emoji:"👥", fonksiyonlar:[
+  {id:"ik_liste",ad:"Personel listesi"},{id:"ik_ekle",ad:"Personel ekle/çıkar"},{id:"ik_maas_gor",ad:"Maaş görüntüle",hassas:true},{id:"ik_iban",ad:"IBAN görüntüle",hassas:true},{id:"ik_bordro",ad:"Bordro görüntüle",hassas:true},{id:"ik_bordro_hesapla",ad:"Bordro hesapla",hassas:true},{id:"ik_izin",ad:"İzin yönetimi"},{id:"ik_mesai",ad:"Mesai girişi"}]},
+  { id:"tabPatronUyari", ad:"Uyarı Merkezi", emoji:"🚨", fonksiyonlar:[
+  {id:"uyari_gor",ad:"Uyarıları görüntüle"},{id:"uyari_onayla",ad:"Talep onayla/reddet"}]},
+  { id:"panelTopluMail", ad:"Toplu Mail", emoji:"📧", fonksiyonlar:[
+  {id:"mail_gonder",ad:"Toplu mail gönder"}]},
+  { id:"panelDenetim", ad:"Denetim", emoji:"🔍", fonksiyonlar:[
+  {id:"denetim_gor",ad:"Log kayıtları",hassas:true}]},
+  { id:"panelSosyalMedya", ad:"Sosyal Medya", emoji:"📱", fonksiyonlar:[
+  {id:"sm_icerik",ad:"İçerik takvimi"},{id:"sm_ai",ad:"AI Asistan"},{id:"sm_perf",ad:"Performans"}]},
+  { id:"panelParasut", ad:"Paraşüt & Muhasebe", emoji:"🪂", fonksiyonlar:[
+  {id:"parasut_senkron",ad:"Paraşüt Senkron",hassas:true},{id:"parasut_fatura_gor",ad:"Faturaları Gör",hassas:false},{id:"parasut_tahsilat_gor",ad:"Tahsilatları Gör",hassas:false},{id:"parasut_cari_gor",ad:"Carileri Gör",hassas:false},{id:"mahsuplasma",ad:"Mahsuplaşma Yönetimi",hassas:true},{id:"kasa_goruntule",ad:"Kasa Görüntüle",hassas:true},{id:"kasa_hareket",ad:"Kasa Hareketi Ekle",hassas:true}]}
+];
+
+var _yetkiSeciliPersonel = null;
+var _yetkiSeciliPanel = null;
+var _yetkiIzinler = {};
+var _yetkiPersonelCache = [];
+
+var HAZIR_ROLLER_YP = {
+  "🦺 ISG Uzmanı":  {panelISG:true,isg_firmalar:true,isg_plan_gor:true,isg_ziyaret:true,panelHarita:true,harita_gor:true,harita_rota:true},
+  "👔 ISG Müdürü":  {panelISG:true,isg_firmalar:true,isg_plan_ekle:true,isg_plan_gor:true,isg_ziyaret:true,isg_rapor:true,isg_meditek:true,panelHarita:true,harita_gor:true,harita_rota:true,panelRapor:true},
+  "📢 Satış":  {panelFirmalar:true,firma_goruntule:true,firma_ekle:true,firma_duzenle:true,firma_evrak:true,panelTeklif:true,teklif_olustur:true,teklif_pdf:true,teklif_liste:true,panelAktivite:true,akt_goruntule:true,akt_ekle:true,panelRapor:true,rapor_satis:true,perf_kendi:true,panelHarita:true,harita_gor:true},
+  "💰 Muhasebe":  {panelFinans:true,fin_islem_ekle:true,fin_liste:true,fin_kasa:true,fin_muhasebe:true,fin_kdv:true,panelPersonel:true,ik_liste:true,ik_bordro:true,ik_bordro_hesapla:true,panelRapor:true,panelParasut:true,panelROI:true,parasut_senkron:true,parasut_fatura_gor:true,parasut_tahsilat_gor:true,parasut_cari_gor:true,mahsuplasma:true,kasa_goruntule:true,kasa_hareket:true},
+  "🏦 İK/Banko":  {panelPersonel:true,ik_liste:true,ik_ekle:true,ik_maas_gor:true,ik_iban:true,ik_bordro:true,ik_bordro_hesapla:true,ik_izin:true,ik_mesai:true,panelFinans:true,fin_islem_ekle:true,fin_liste:true,fin_kasa:true},
+  "🚐 Mobil Sağlık": {panelISG:true,isg_firmalar:true,isg_plan_gor:true,isg_ziyaret:true,panelHarita:true,harita_gor:true},
+  "👤 Personel": {panelPersonel:true,ik_izin:true,ik_avans:true,ik_harcama:true,ik_talepgor:true,panelSosyalMedya:true,sm_icerik:true,sm_ai:true},
+  "🎯 Müdür":  {panelFirmalar:true,firma_goruntule:true,firma_ekle:true,firma_duzenle:true,firma_sil:true,firma_evrak:true,panelTeklif:true,teklif_olustur:true,teklif_fiyat:true,teklif_pdf:true,teklif_liste:true,panelAktivite:true,akt_goruntule:true,akt_ekle:true,akt_herkesi_gor:true,panelRapor:true,rapor_satis:true,rapor_aktivite:true,rapor_herkesi_gor:true,panelPerformans:true,perf_kendi:true,perf_takim:true,perf_hedef_belirle:true,panelFinans:true,fin_islem_ekle:true,fin_liste:true,fin_kasa:true,fin_muhasebe:true,fin_kdv:true,fin_radar:true,panelPersonel:true,ik_liste:true,ik_ekle:true,ik_maas_gor:true,ik_bordro:true,ik_bordro_hesapla:true,ik_izin:true,ik_mesai:true,tabPatronUyari:true,uyari_gor:true,uyari_onayla:true,panelTopluMail:true,mail_gonder:true,panelParasut:true,panelROI:true,parasut_senkron:true,parasut_fatura_gor:true,parasut_tahsilat_gor:true,parasut_cari_gor:true,mahsuplasma:true,kasa_goruntule:true,kasa_hareket:true}
+};
+
+
+function yetkiPaneliYukle() {
+  var kutu = document.getElementById("yetkiPersonelListesi");
+  if (!kutu) { alert("yetkiPersonelListesi elementi bulunamadı!"); return; }
+  kutu.innerHTML = "<div style='padding:20px; color:white;'>Yükleniyor...<\/div>";
+  
+  google.script.run
+  .withSuccessHandler(function(list) {
+  if (!list || !list.length) {
+  kutu.innerHTML = "<div style='padding:20px; color:#ef4444;'>Liste boş! Dönen: " + JSON.stringify(list) + "<\/div>";
+  return;
+  }
+  kutu.innerHTML = list.map(function(p) {
+  return '<div onclick="yetkiPersonelSec_(' + JSON.stringify(p).replace(/"/g,"&quot;") + ')" style="padding:10px 14px; cursor:pointer; border-bottom:1px solid #1e293b; color:white;">' +
+  '<div style="font-size:11px; font-weight:700;">' + String(p.ad||"?") + '<\/div>' +
+  '<div style="font-size:10px; color:#475569;">' + String(p.unvan||"") + '<\/div>' +
+  '<\/div>';
+  }).join("");
+  })
+  .withFailureHandler(function(err) {
+  kutu.innerHTML = "<div style='padding:20px; color:#ef4444;'>HATA: " + err.message + "<\/div>";
+  })
+  .api_personelListesiGetir(window.currentUserEmail || "admin");
+}
+ 
+window.yetkiToggle = function(id) {
+  _yetkiIzinler[id] = !_yetkiIzinler[id];
+  yetkiFonksiyonlarRender();
+  yetkiPanelListesiRender();
+};
+
+window.yetkiTumunuAc = function(panelId) {
+  var panel = null;
+  for (var i = 0; i < _yetkiPaneller.length; i++) { if (_yetkiPaneller[i].id === panelId) { panel = _yetkiPaneller[i]; break; } }
+  if (!panel) return;
+  var hepsiAcik = true;
+  for (var j = 0; j < panel.fonksiyonlar.length; j++) { if (!_yetkiIzinler[panel.fonksiyonlar[j].id]) { hepsiAcik = false; break; } }
+  _yetkiIzinler[panelId] = !hepsiAcik;
+  panel.fonksiyonlar.forEach(function(f) { _yetkiIzinler[f.id] = !hepsiAcik; });
+  yetkiFonksiyonlarRender();
+  yetkiPanelListesiRender();
+};
+
+window.yetkiPanelSec = function(panelId) {
+  _yetkiSeciliPanel = panelId;
+  yetkiPanelListesiRender();
+  yetkiFonksiyonlarRender();
+};
+
+window.yetkiPanelToggle = function(panelId) {
+  var panel = null;
+  for (var i = 0; i < _yetkiPaneller.length; i++) { if (_yetkiPaneller[i].id === panelId) { panel = _yetkiPaneller[i]; break; } }
+  if (!panel) return;
+  var yeni = !_yetkiIzinler[panelId];
+  _yetkiIzinler[panelId] = yeni;
+  panel.fonksiyonlar.forEach(function(f) { _yetkiIzinler[f.id] = yeni; });
+  yetkiPanelListesiRender();
+  if (_yetkiSeciliPanel === panelId) yetkiFonksiyonlarRender();
+};
+
+function yetkiPersonelSec_(p) {
+  _yetkiSeciliPersonel = p;
+  google.script.run
+  .withSuccessHandler(function(izinler) {
+  _yetkiIzinler = izinler || {};
+  _yetkiSeciliPanel = _yetkiPaneller[0].id;
+  yetkiPanelListesiRender();
+  yetkiFonksiyonlarRender();
+  })
+  .api_personelIzinGetir(p.mail);
+}
+
+function yetkiPersonelListesiRender() {
+  var kutu = document.getElementById("yetkiPersonelListesi");
+  if (!kutu) return;
+  kutu.innerHTML = _yetkiPersonelCache.map(function(p, i) {
+  return '<div onclick="yetkiPersonelSec(' + i + ')" style="padding:10px 14px; cursor:pointer; border-bottom:1px solid #1e293b20; background:' + (_yetkiSeciliPersonel && _yetkiSeciliPersonel.mail === p.mail ? "#1e3a8a" : "transparent") + '; border-left:3px solid ' + (_yetkiSeciliPersonel && _yetkiSeciliPersonel.mail === p.mail ? "#3b82f6" : "transparent") + ';">' +
+  '<div style="width:28px; height:28px; border-radius:50%; background:#334155; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:11px; color:white; margin-bottom:4px;">' + (p.ad||"?")[0] + '<\/div>' +
+  '<div style="font-size:11px; font-weight:700; color:#94a3b8; line-height:1.3;">' + String(p.ad||"") + '<\/div>' +
+  '<div style="font-size:10px; color:#475569;">' + String(p.unvan||"") + '<\/div>' +
+  '<\/div>';
+  }).join("");
+}
+
+function yetkiPersonelSec(idx) {
+  var p = _yetkiPersonelCache[idx];
+  if (!p) return;
+  _yetkiSeciliPersonel = p;
+  yetkiPersonelListesiRender();
+
+  google.script.run
+  .withSuccessHandler(function(izinler) {
+  _yetkiIzinler = izinler || {};
+  _yetkiSeciliPanel = _yetkiPaneller[0].id;
+  yetkiPanelListesiRender();
+  yetkiFonksiyonlarRender();
+  })
+  .api_personelIzinGetir(p.mail);
+}
+
+
+function yetkiPanelListesiRender() {
+  var kutu = document.getElementById("yetkiPanelListesi");
+  if (!kutu) return;
+
+  var sablon = '<div style="padding:8px; border-bottom:1px solid #334155;">' +
+  '<div style="font-size:10px; color:#475569; font-weight:900; margin-bottom:6px;">HAZIR SABLONLAR<\/div>' +
+  Object.keys(HAZIR_ROLLER_YP).map(function(rol) {
+  return '<button onclick="yetkiHazirUygula(\'' + rol + '\')" style="width:100%; background:#334155; color:white; border:none; padding:5px 8px; border-radius:4px; cursor:pointer; font-size:10px; font-weight:700; margin-bottom:3px; text-align:left;">' + rol + '<\/button>';
+  }).join("") + '<\/div>';
+
+  var paneller = _yetkiPaneller.map(function(panel) {
+  var acik = !!_yetkiIzinler[panel.id];
+  var aktif = _yetkiSeciliPanel === panel.id;
+  var acikFonk = 0;
+  panel.fonksiyonlar.forEach(function(f) { if (_yetkiIzinler[f.id]) acikFonk++; });
+  return '<div onclick="yetkiPanelSec(\'' + panel.id + '\')" style="padding:8px 12px; cursor:pointer; background:' + (aktif ? "#0f172a" : "transparent") + '; border-left:3px solid ' + (aktif ? "#2563eb" : "transparent") + '; border-bottom:1px solid #334155; display:flex; justify-content:space-between; align-items:center;">' +
+  '<div>' +
+  '<div style="font-size:11px; font-weight:700; color:' + (aktif ? "white" : acik ? "#93c5fd" : "#64748b") + ';">' + panel.emoji + ' ' + panel.ad + '<\/div>' +
+  '<div style="font-size:10px; color:' + (acikFonk > 0 ? "#059669" : "#475569") + ';">' + acikFonk + '/' + panel.fonksiyonlar.length + '<\/div>' +
+  '<\/div>' +
+  '<div onclick="event.stopPropagation(); yetkiPanelToggle(\'' + panel.id + '\')" style="width:26px; height:14px; border-radius:7px; background:' + (acik ? "#10b981" : "#334155") + '; position:relative; cursor:pointer; flex-shrink:0;">' +
+  '<div style="position:absolute; top:2px; left:' + (acik ? "14px" : "2px") + '; width:10px; height:10px; border-radius:50%; background:white;"><\/div>' +
+  '<\/div><\/div>';
+  }).join("");
+
+  kutu.innerHTML = sablon + paneller;
+}
+
+function yetkiFonksiyonlarRender() {
+  var kutu = document.getElementById("yetkiFonksiyonlar");
+  if (!kutu || !_yetkiSeciliPanel) return;
+
+  var panel = null;
+  for (var i = 0; i < _yetkiPaneller.length; i++) { if (_yetkiPaneller[i].id === _yetkiSeciliPanel) { panel = _yetkiPaneller[i]; break; } }
+  if (!panel) return;
+
+  var acikSayi = 0;
+  var keys = Object.keys(_yetkiIzinler);
+  for (var k = 0; k < keys.length; k++) { if (_yetkiIzinler[keys[k]]) acikSayi++; }
+
+  var hepsiAcikMi = true;
+  for (var j = 0; j < panel.fonksiyonlar.length; j++) { if (!_yetkiIzinler[panel.fonksiyonlar[j].id]) { hepsiAcikMi = false; break; } }
+
+  var html = '<div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">' +
+  '<span style="font-size:28px;">' + panel.emoji + '<\/span>' +
+  '<div><h3 style="margin:0; color:white; font-size:16px;">' + panel.ad + '<\/h3>' +
+  '<p style="margin:2px 0 0; color:#64748b; font-size:11px;">Fonksiyon yetkileri<\/p><\/div>' +
+  '<button onclick="yetkiTumunuAc(\'' + panel.id + '\')" style="margin-left:auto; background:#1e293b; color:white; border:1px solid #334155; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:700;">' +
+  (hepsiAcikMi ? "Tumunu Kapat" : "Tumunu Ac") + '<\/button>' +
+  '<span style="background:#065f46; color:#d1fae5; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700;">' + acikSayi + ' yetki aktif<\/span>' +
+  '<\/div>';
+
+  var erisimAcik = !!_yetkiIzinler[panel.id];
+  html += '<div onclick="yetkiToggle(\'' + panel.id + '\')" style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-radius:8px; cursor:pointer; background:' + (erisimAcik ? "#1e3a8a33" : "#1e293b") + '; border:2px solid ' + (erisimAcik ? "#3b82f6" : "#334155") + '; margin-bottom:12px;">' +
+  '<div><div style="font-weight:900; font-size:13px; color:white;">Sayfaya Erisim<\/div>' +
+  '<div style="font-size:11px; color:#94a3b8;">Bu sayfa menude gorsunsun mu?<\/div><\/div>' +
+  '<div style="display:flex; align-items:center; gap:8px;">' +
+  '<span style="font-size:11px; font-weight:700; color:' + (erisimAcik ? "#10b981" : "#ef4444") + ';">' + (erisimAcik ? "ACIK" : "KAPALI") + '<\/span>' +
+  '<div style="width:40px; height:22px; border-radius:11px; background:' + (erisimAcik ? "#3b82f6" : "#334155") + '; position:relative;">' +
+  '<div style="position:absolute; top:3px; left:' + (erisimAcik ? "20px" : "3px") + '; width:16px; height:16px; border-radius:50%; background:white;"><\/div>' +
+  '<\/div><\/div><\/div>';
+
+  html += '<div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:8px;">';
+  panel.fonksiyonlar.forEach(function(fonk) {
+  var acik = !!_yetkiIzinler[fonk.id];
+  html += '<div onclick="yetkiToggle(\'' + fonk.id + '\')" style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-radius:8px; cursor:pointer; background:' + (acik ? "#052e16" : "#1e293b") + '; border:1px solid ' + (acik ? "#10b981" : "#334155") + ';">' +
+  '<div style="display:flex; align-items:center; gap:7px;">' +
+  '<span style="font-size:14px;">' + (acik ? "OK" : "-") + '<\/span>' +
+  '<div><div style="font-size:12px; font-weight:600; color:' + (acik ? "#d1fae5" : "#64748b") + ';">' + fonk.ad + '<\/div>' +
+  (fonk.hassas ? '<span style="background:#7f1d1d; color:#fca5a5; font-size:9px; padding:1px 5px; border-radius:3px; font-weight:700;">HASSAS<\/span>' : '') +
+  '<\/div><\/div>' +
+  '<div style="width:32px; height:17px; border-radius:8px; background:' + (acik ? "#10b981" : "#334155") + '; position:relative; flex-shrink:0;">' +
+  '<div style="position:absolute; top:2px; left:' + (acik ? "16px" : "2px") + '; width:13px; height:13px; border-radius:50%; background:white;"><\/div>' +
+  '<\/div><\/div>';
+  });
+  html += '<\/div>';
+
+  html += '<div style="margin-top:20px; display:flex; gap:10px;">' +
+  '<button onclick="yetkiKaydet()" style="flex:1; background:#2563eb; color:white; border:none; padding:14px; border-radius:10px; font-weight:900; cursor:pointer; font-size:14px;">Kaydet: ' + (_yetkiSeciliPersonel ? _yetkiSeciliPersonel.ad : "") + '<\/button>' +
+  '<\/div>';
+
+  kutu.innerHTML = html;
+}
+
+function yetkiHazirUygula(rolAdi) {
+  var kaynak = HAZIR_ROLLER_YP[rolAdi] || {};
+  _yetkiIzinler = {};
+  var anahtarlar = Object.keys(kaynak);
+  for (var i = 0; i < anahtarlar.length; i++) { _yetkiIzinler[anahtarlar[i]] = kaynak[anahtarlar[i]]; }
+  yetkiPanelListesiRender();
+  yetkiFonksiyonlarRender();
+}
+
+function yetkiKaydet() {
+  if (!_yetkiSeciliPersonel) { alert("Personel seçin!"); return; }
+  var btn = document.querySelector("#yetkiFonksiyonlar button[onclick='yetkiKaydet()']");
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ Kaydediliyor..."; }
+
+  google.script.run
+  .withSuccessHandler(function(res) {
+  if (res && res.ok) {
+  notify("✅ " + _yetkiSeciliPersonel.ad + " yetkileri kaydedildi!", "success");
+  } else {
+  notify("❌ " + (res ? res.msg : "Hata"), "error");
+  }
+  yetkiFonksiyonlarRender();
+  })
+  .withFailureHandler(function(err) {
+  notify("❌ " + err.message, "error");
+  yetkiFonksiyonlarRender();
+  })
+  .api_personelIzinKaydet(_yetkiSeciliPersonel.mail, _yetkiIzinler);
+}
+
+function isgFirmaHizmetDuzenle(firmaId) {
+  notify("Firma hizmet düzenleme için firma kartına gidin.", "info");
+}
+
+function meditekImportEt() {
+  var file = document.getElementById("meditekImportFile").files[0];
+  if (!file) return;
+
+  notify("📥 İSG-KATİP Exceli okunuyor...", "info");
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+  try {
+  var data = new Uint8Array(e.target.result);
+  var workbook = XLSX.read(data, { type: "array" });
+  var sheet = workbook.Sheets[workbook.SheetNames[0]];
+  var rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+  if (rows.length < 2) { notify("❌ Excel boş veya hatalı!", "error"); return; }
+
+  var basliklar = rows[0];
+
+  var bul = function(arananKelimeler) {
+  for (var x = 0; x < basliklar.length; x++) {
+  var baslikTemiz = String(basliklar[x]).toLowerCase()
+  .replace(/i̇/g,"i").replace(/ı/g,"i").replace(/İ/g,"i")
+  .replace(/ş/g,"s").replace(/ç/g,"c").replace(/ö/g,"o")
+  .replace(/ü/g,"u").replace(/ğ/g,"g").replace(/\s/g,"");
+  for (var y = 0; y < arananKelimeler.length; y++) {
+  if (baslikTemiz.indexOf(arananKelimeler[y]) > -1) return x;
+  }
+  }
+  return -1;
+  };
+
+  var cxFirma  = bul(["hizmetalanisyeriunvani"]);
+  var cxSgk  = bul(["hizmetalanisyerisgk"]);
+  var cxCalisan= bul(["calisansayisi"]);
+  var cxTehlike= bul(["tehlikesinifi"]);
+  var cxBas  = bul(["baslangictarihi"]);
+  var cxBit  = bul(["bitistarihi"]);
+  var cxDurum  = bul(["sozlesmestatusu"]);
+  var cxPerAd  = bul(["gorevlendirilenkisiad"]);
+  var cxSertif = bul(["sertifikatipi"]);
+  var cxSure  = bul(["calismasuresi"]);
+  var cxSozId  = bul(["sozlesmeid"]);
+  var cxAdres  = bul(["firmaadresi","adres"]);
+
+  if (cxFirma === -1) { 
+  notify("❌ Excelde 'Hizmet Alan İşyeri Unvanı' sütunu bulunamadı!", "error"); 
+  return; 
+  }
+
+  var hamKayitlar = [];
+  for (var i = 1; i < rows.length; i++) {
+  var r = rows[i];
+  if (!r[cxFirma]) continue; 
+  var durum = cxDurum > -1 ? String(r[cxDurum]||"").toLowerCase() : "";
+  if (durum.indexOf("devam") === -1 && durum.indexOf("onaylandi") === -1 && durum.indexOf("onaylandı") === -1) continue;
+
+  var adresHam = cxAdres > -1 ? String(r[cxAdres]||"").trim() : "";
+  hamKayitlar.push({
+  sgkSicilNo:  cxSgk > -1 ? String(r[cxSgk]||"") : "",
+  firmaAdi:  String(r[cxFirma]||""),
+  calisanSayisi:  cxCalisan > -1 ? parseInt(r[cxCalisan])||0 : 0,
+  tehlikeSinifi:  cxTehlike > -1 ? String(r[cxTehlike]||"") : "",
+  sozlesmeBas:  (cxBas > -1 && r[cxBas]) ? new Date(r[cxBas]).toISOString().split("T")[0] : "",
+  sozlesmeBit:  (cxBit > -1 && r[cxBit]) ? new Date(r[cxBit]).toISOString().split("T")[0] : "",
+  atamaliPersonel: cxPerAd > -1 ? String(r[cxPerAd]||"") : "",
+  sertifikaTipi:  cxSertif > -1 ? String(r[cxSertif]||"") : "",
+  calismaSuresi:  cxSure > -1 ? parseInt(r[cxSure])||0 : 0,
+  sozlesmeId:  cxSozId > -1 ? String(r[cxSozId]||"") : "",
+  adres:  adresHam
+  });
+  }
+
+  var sgkMap = {};
+  hamKayitlar.forEach(function(k) {
+  var key = k.sgkSicilNo && k.sgkSicilNo !== "" ? k.sgkSicilNo : k.firmaAdi;
+  if (!sgkMap[key]) {
+  sgkMap[key] = k;
+  } else {
+  var m = sgkMap[key];
+  if (!m.adres && k.adres) m.adres = k.adres;
+  if (k.calisanSayisi > m.calisanSayisi) m.calisanSayisi = k.calisanSayisi;
+  if (k.sozlesmeBit > m.sozlesmeBit) m.sozlesmeBit = k.sozlesmeBit;
+  }
+  });
+  var kayitlar = Object.keys(sgkMap).map(function(k){ return sgkMap[k]; });
+
+  if (!kayitlar.length) { notify("❌ Devam eden veya onaylanmış sözleşme bulunamadı!", "error"); return; }
+
+  var adresliSayi = kayitlar.filter(function(k){ return k.adres; }).length;
+  notify("⏳ " + kayitlar.length + " firma (" + adresliSayi + " adresli) sisteme işleniyor...", "info");
+  
+  var progressDiv = document.createElement("div");
+  progressDiv.id = "meditekProgress";
+  progressDiv.style.cssText = "position:fixed; top:0; left:0; width:100%; z-index:999999;";
+  progressDiv.innerHTML = '<div style="background:#7c3aed; height:5px; animation:progressAnim 3s ease-in-out infinite;"><\/div>' +
+  '<div style="background:rgba(124,58,237,0.9); color:white; padding:12px 20px; font-weight:bold; font-size:13px; text-align:center;">📥 ' + kayitlar.length + ' kayıt İSG-KATİP listesinden güncelleniyor... Lütfen bekleyin ⏳<\/div>';
+  document.body.appendChild(progressDiv);
+
+  google.script.run
+  .withSuccessHandler(function(res) {
+  var pg = document.getElementById("meditekProgress");
+  if (pg) pg.remove();
+  if (res && res.ok) {
+  notify("✅ " + res.eklenen + " yeni, " + res.guncellenen + " güncellendi!", "success");
+  document.getElementById("meditekImportFile").value = "";
+  if(typeof isgFirmalariYukle === "function") isgFirmalariYukle();
+  } else {
+  notify("❌ " + (res ? res.msg : "Hata"), "error");
+  }
+  })
+  .withFailureHandler(function(err) {
+  var pg = document.getElementById("meditekProgress");
+  if (pg) pg.remove();
+  notify("❌ " + err.message, "error");
+  })
+  .api_meditekImport(kayitlar);
+
+} catch(err) {
+  notify("Excel okuma hatasi: " + err.message, "error");
+  }
+  };
+  reader.readAsArrayBuffer(file);
+}
+// eskiMobilImportFileMobil için kısa wrapper
+function eskiMobilImportEtMobil() {
+  var fileInput = document.getElementById("eskiMobilImportFileMobil");
+  if (!fileInput || !fileInput.files[0]) return;
+  // Geçici olarak ana input'a aktar
+  var dt = new DataTransfer();
+  dt.items.add(fileInput.files[0]);
+  document.getElementById("eskiMobilImportFile").files = dt.files;
+  eskiMobilImportEt();
+}
+// ==========================================================
+// 🛡️ ANA SAYFA (PANEL GÖSTERİM) MOTORU VE BUTON KONTROLLERİ
+// ==========================================================
+function showPanel(panelId) {
+  var allPanels = [
+  "panelFirmalar", "panelTeklif", "panelGecmis", "panelRapor", "panelPerf",
+  "panelPolice", "panelHarita", "panelFinans", "panelPatronUyari", "panelPersonel",
+  "panelISG", "panelYetki", "panelTeklifGecmis", "panelTopluMail",
+  "panelDenetim", "panelPerformans", "panelCEO", "panelMobil", "panelBanko", "panelSosyalMedya", "panelROI"
+];
+  // Tüm panelleri gizle
+  allPanels.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) {
+      el.style.display = "none";
+      el.classList.add("hidden-panel");
+    }
+  });
+
+  // İsim uyuşmazlıklarını otomatik çözen akıllı yönlendirici
+  var target = document.getElementById(panelId);
+  if (!target && panelId === "panelGecmis") target = document.getElementById("panelTeklifGecmis");
+  if (!target && panelId === "panelTeklifGecmis") target = document.getElementById("panelGecmis");
+  if (!target && panelId === "panelPerf") target = document.getElementById("panelPerformans");
+  if (!target && panelId === "panelPerformans") target = document.getElementById("panelPerf");
+  if (!target && panelId === "panelPolice") target = document.getElementById("panelDenetim");
+  if (!target && panelId === "panelDenetim") target = document.getElementById("panelPolice");
+
+// Hedef paneli göster
+  if (target) {
+    target.style.display = "block";
+    target.classList.remove("hidden-panel");
+  }
+
+  // panelBanko özel kontrol
+  if (panelId === "panelBanko") {
+    var bankoEl = document.getElementById("panelBanko");
+    if (bankoEl) {
+      bankoEl.style.display = "block";
+      bankoEl.classList.remove("hidden-panel");
+    }
+  }
+
+ if (panelId === "panelFinans") {
+  muh2Yukle();
+}
+
+  window.scrollTo(0, 0);
+}
+
+function initTabs() {
+  // Tüm menü butonlarını bul
+  var menuBtns = document.querySelectorAll(".menuBtn");
+
+  menuBtns.forEach(function(btn) {
+    btn.onclick = function(e) {
+      e.preventDefault();
+
+      var btnId = btn.id;
+      var panelId = btn.getAttribute("data-panel");
+
+      // 📢 TOPLU MAİL İSTİSNASI (Sayfa değil, Modal açar)
+      if (btnId === "btnAcTopluMail") {
+         var modal = document.getElementById("modalTopluMail");
+         if(modal) modal.style.display = "flex";
+         
+         var listeAlani = document.getElementById("tmAliciListe");
+         if(listeAlani) listeAlani.innerHTML = "<div style='text-align:center; padding:40px; color:#f59e0b; font-weight:bold;'>Veritabanından E-Posta Listesi İndiriliyor... Bekleyiniz!<\/div>";
+         
+         if(typeof api_topluMailListesiKaziyici !== "undefined") {
+             google.script.run.withSuccessHandler(function(res){
+                 window._tazeTopluMailHavuzu = res || [];
+                 if(typeof filtreTopluMail === "function") filtreTopluMail();
+             }).api_topluMailListesiKaziyici();
+         }
+         return; // Panelleri gizleme işlemini durdur, sadece modalı aç
+      }
+      // 📋 TALEPLER İSTİSNASI (Panel değil, Modal açar)
+      if (btnId === "btnOnayTalep") {
+        if (typeof openBekleyenTalepList === "function") openBekleyenTalepList();
+        return;
+      }
+
+      if (!panelId) return;
+
+      // İsim uyuşmazlıklarını çözen akıllı yönlendirici
+      if (panelId === "panelDenetim") panelId = "panelPolice";
+      if (panelId === "panelTeklifGecmis") panelId = "panelGecmis";
+      if (panelId === "panelPerformans") panelId = "panelPerf";
+
+      // 1. Paneli Göster
+      showPanel(panelId);
+
+      // 2. Hangi panel açıldıysa onun verilerini otomatik yükle
+      if (panelId === "panelGecmis" && typeof loadTeklifGecmisi === "function") loadTeklifGecmisi();
+      if (panelId === "panelFirmalar" && typeof loadFirmalar === "function") loadFirmalar();
+      if (panelId === "panelPatronUyari" && typeof loadPatronUyarilari === "function") loadPatronUyarilari();
+      if (panelId === "panelMobil" && typeof loadMobilList === "function") loadMobilList();
+      if (panelId === "panelFinans") {
+        if (typeof loadFinansList === "function") loadFinansList();
+        if (typeof finPaneliHazirla === "function") finPaneliHazirla();
+      }
+      if (panelId === "panelPolice" && typeof loadPoliceList === "function") loadPoliceList();
+      if (panelId === "panelPerf" && typeof loadPerformanceDashboard === "function") loadPerformanceDashboard();
+      if (panelId === "panelHarita" && typeof rotaListesiniGetir === "function") rotaListesiniGetir();
+      if (panelId === "panelISG" && typeof isgPanelYukle === "function") { isgPanelYukle(); if (typeof gemFirmaListesiniDoldur === "function") gemFirmaListesiniDoldur(); if (typeof ziyFirmaListesiniDoldur === "function") ziyFirmaListesiniDoldur(); if (typeof gorevHavuzuYukle === "function") gorevHavuzuYukle(); }
+      if (panelId === "panelYetki" && typeof yetkiPaneliYukle === "function") yetkiPaneliYukle();
+      if (panelId === "panelROI" && typeof roiYukle === "function") roiYukle();
+      
+      // Rapor sayfası için veri yükleme
+      // Rapor sayfası için veri yükleme
+      if (panelId === "panelRapor") {
+        if (typeof rapor4KisiGetir === "function") rapor4KisiGetir();
+        if (typeof gunlukHedefleriYukle === "function") gunlukHedefleriYukle();
+        
+        // Personel dropdown dinamik doldur
+        google.script.run
+          .withSuccessHandler(function(response) {
+            var sel = document.getElementById('rapUser');
+            if (!sel) return;
+            sel.innerHTML = '<option value="">Tümü<\/option>';
+            
+            var asilListe = [];
+            if (Array.isArray(response)) {
+              asilListe = response;
+            } else if (response && response.liste && Array.isArray(response.liste)) {
+              asilListe = response.liste;
+            } else if (window._personelCache && Array.isArray(window._personelCache)) {
+              asilListe = window._personelCache;
+            }
+
+            for (var i = 0; i < asilListe.length; i++) {
+              var p = asilListe[i];
+              if (!p || (!p.mail && !p.ad)) continue;
+              var opt = document.createElement('option');
+              opt.value = p.mail || p.email || "";
+              opt.textContent = p.ad || p.adSoyad || "İsimsiz Personel";
+              sel.appendChild(opt);
+            }
+          })
+          .api_personelListesiGetir(window.currentUserEmail || '');
+      } // <--- panelRapor bloğu burada BİTMELİYDİ, ekledim.
+
+      if (panelId === "panelPersonel") {
+        var tbody = document.getElementById("personelListesiBody");
+        if (tbody) tbody.innerHTML = "<tr><td colspan='7' style='text-align:center; padding:20px; color:#2563eb;'>Yükleniyor...<\/td><\/tr>";
+        
+        var adminDiv = document.getElementById("adminPersonelYonetimi");
+        var personelDiv = document.getElementById("personelTalepAlani");
+        var personelYonetimYetkisi = [
+          "ulas.ozbas@avrupabir.com.tr",
+          "yasemin.orbay@avrupabir.com.tr",
+          "dilara.bayrakdar@avrupabir.com.tr",
+          "gulbahar.gultekin@avrupabir.com.tr"
+        ];
+        var isAdmin = personelYonetimYetkisi.indexOf(window.currentUserEmail) > -1;
+        
+        if (adminDiv) adminDiv.style.display = isAdmin ? "block" : "none";
+        if (personelDiv) personelDiv.style.display = "block";
+        
+        if (isAdmin && typeof aktifPersonelListesiniCek === "function") aktifPersonelListesiniCek();
+        if (typeof bordroListesiniCek === "function") bordroListesiniCek();
+        if (typeof personelTalepleriniYukle === "function") personelTalepleriniYukle();
+        
+        google.script.run
+          .withSuccessHandler(function(res) {
+            if (res && res.ok && res.liste) {
+              var tbody = document.getElementById("personelListesiBody");
+              if (tbody) {
+                tbody.innerHTML = res.liste.map(function(p) {
+                  return "<tr><td>" + (p.ad || "") + "<\/td><td>" + (p.email || "") + "<\/td></tr>";
+                }).join("");
+              }
+            }
+          })
+          .api_personelListesiGetir();
+      }
+
+      if (panelId === "panelCEO") {
+        var personelYonetimYetkisi = [
+          "ulas.ozbas@avrupabir.com.tr",
+          "yasemin.orbay@avrupabir.com.tr",
+          "dilara.bayrakdar@avrupabir.com.tr",
+          "gulbahar.gultekin@avrupabir.com.tr"
+        ];
+        var isAdmin = personelYonetimYetkisi.indexOf(window.currentUserEmail) > -1;
+        
+        if (!isAdmin) {
+          alert("Bu alan sadece yönetici içindir.");
+          showPanel("panelFirmalar");
+          return;
+        }
+        
+        if (typeof loadCEODashboard === "function") loadCEODashboard();
+      }
+      
+      // Sosyal Medya kontrolünü CEO dışına veya uygun bir yere alalım
+      if (panelId === "panelSosyalMedya") {
+        if (typeof smTab === "function") smTab('takvim');
+        setTimeout(function() { if (typeof smLoadData === "function") smLoadData(); }, 500);
+      }
+    }; // btn.onclick kapanır
+  }); // forEach kapanır
+} // initTabs kapanır
+document.addEventListener("DOMContentLoaded", function() { initTabs(); });
+// initTabs'ı çağır
+initTabs();
+
+var perfBtn = document.getElementById("perf_btn");
+if (perfBtn) {
+  perfBtn.onclick = function(e) {
+    if (e) e.preventDefault();
+
+    var status = document.getElementById("perf_status");
+    var tbody = document.getElementById("perf_rows");
+
+    if (status) status.textContent = "Sorgulanıyor...";
+    if (tbody) {
+      tbody.innerHTML = "<tr><td colspan='7' style='text-align:center; padding:20px;'>Veriler yukleniyor...<\/td><\/tr>";
+    }
+
+    var elFrom = document.getElementById("perf_from");
+    var elTo = document.getElementById("perf_to");
+    var elKanal = document.getElementById("perf_kanal");
+    var elAsama = document.getElementById("perf_asama");
+
+    var params = {
+      from: elFrom ? (elFrom.value || "") : "",
+      to: elTo ? (elTo.value || "") : "",
+      kanal: elKanal ? (elKanal.value || "") : "",
+      asama: elAsama ? (elAsama.value || "") : ""
+    };
+
+    google.script.run
+      .withSuccessHandler(function(data) {
+        if (status) status.textContent = "Tamamlandi";
+        if (!tbody) return;
+
+        if (!data || data.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='7' style='text-align:center; padding:20px;'>Kayit bulunamadi.<\/td><\/tr>";
+          return;
+        }
+
+        tbody.innerHTML = data.map(function(row) {
+          return "<tr style='border-bottom:1px solid #eee;'>" +
+            "<td style='padding:10px;'>" + (row.tarih || "") + "<\/td>" +
+            "<td style='padding:10px;'>" + (row.kullanici || "") + "<\/td>" +
+            "<td style='padding:10px; font-weight:bold; color:#1e40af;'>" + (row.firma || "") + "<\/td>" +
+            "<td style='padding:10px;'>" + (row.kanal || "") + "<\/td>" +
+            "<td style='padding:10px;'><span style='background:#f1f5f9; padding:2px 6px; border-radius:4px;'>" + (row.islem || "") + "<\/span><\/td>" +
+            "<td style='padding:10px;'><b>" + (row.asama || "") + "<\/b><\/td>" +
+            "<td style='padding:10px; color:#64748b;'><small>" + (row.not || "") + "<\/small><\/td>" +
+            "<\/tr>";
+        }).join("");
+      })
+      .withFailureHandler(function() {
+        if (status) status.textContent = "Hata olustu!";
+      })
+      .api_getPerformanceData(params);
+  };
+}
+
+window.isgKalanSureGoster = function() {
+  var bilgiDiv = document.getElementById("isgAylikKalanBilgi");
+  if (bilgiDiv) bilgiDiv.style.display = "none";
+};
+
+setTimeout(function() { if (typeof kasaDurumunuGuncelle === "function") kasaDurumunuGuncelle(); }, 2000);
+</script>
