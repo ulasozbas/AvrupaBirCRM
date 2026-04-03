@@ -1461,3 +1461,4 @@ function api_teklifDurumGuncelle(id, yeniDurum, hizmetTipleri) {
     return { ok: false, msg: e.toString() };
   }
 }
+
