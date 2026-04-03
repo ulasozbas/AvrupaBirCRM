@@ -1,0 +1,1269 @@
+<div id="panelFinans" class="panel hidden-panel">
+<style>
+.muh2 { font-family:'Segoe UI',Arial,sans-serif; background:#f1f5f9; padding:16px; }
+.muh2-baslik { background:linear-gradient(135deg,#0f172a,#1e3a8a); color:#fff; padding:16px 20px; border-radius:12px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; }
+.muh2-baslik h2 { margin:0; font-size:18px; }
+.muh2-baslik button { background:rgba(255,255,255,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3); padding:7px 16px; border-radius:8px; cursor:pointer; font-weight:700; font-size:12px; }
+
+/* KASA KARTLARI */
+.muh2-kasa-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; margin-bottom:16px; }
+.muh2-kasa-kart { background:#fff; border-radius:10px; padding:14px 16px; box-shadow:0 1px 6px rgba(0,0,0,.08); border-top:4px solid #3b82f6; cursor:pointer; transition:transform .1s; }
+.muh2-kasa-kart:hover { transform:translateY(-2px); }
+.muh2-kasa-kart.nakit { border-color:#10b981; }
+.muh2-kasa-kart.kart  { border-color:#8b5cf6; }
+.muh2-kasa-kart.havale{ border-color:#f59e0b; }
+.muh2-kasa-kart.cek   { border-color:#ef4444; }
+.muh2-kasa-kart.toplam{ border-color:#0f172a; background:#0f172a; color:#fff; }
+.muh2-kk-adi { font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase; margin-bottom:4px; }
+.muh2-kasa-kart.toplam .muh2-kk-adi { color:#94a3b8; }
+.muh2-kk-bakiye { font-size:20px; font-weight:900; color:#0f172a; }
+.muh2-kasa-kart.toplam .muh2-kk-bakiye { color:#fff; }
+.muh2-kk-alt { font-size:10px; color:#94a3b8; margin-top:2px; }
+.muh2-kk-giris { color:#10b981; font-size:11px; font-weight:700; }
+.muh2-kk-cikis { color:#ef4444; font-size:11px; font-weight:700; }
+
+/* UYARILAR */
+.muh2-uyari-bar { display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+.muh2-uyari { padding:10px 16px; border-radius:8px; font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px; flex:1; min-width:200px; }
+.muh2-uyari.kirmizi { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+.muh2-uyari.sari { background:#fefce8; border:1px solid #fde68a; color:#92400e; }
+.muh2-uyari.yesil { background:#f0fdf4; border:1px solid #bbf7d0; color:#065f46; }
+
+/* İKİ KOLON */
+.muh2-iki-kolon { display:grid; grid-template-columns:380px 1fr; gap:14px; margin-bottom:16px; }
+@media(max-width:900px){ .muh2-iki-kolon { grid-template-columns:1fr; } }
+
+/* İŞLEM FORMU */
+.muh2-form { background:#fff; border-radius:12px; padding:18px; box-shadow:0 1px 6px rgba(0,0,0,.08); }
+.muh2-form h3 { margin:0 0 14px; font-size:14px; color:#0f172a; font-weight:900; }
+.muh2-tip-sec { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:14px; }
+.muh2-tip-btn { padding:10px; border:2px solid #e2e8f0; border-radius:8px; background:#f8fafc; cursor:pointer; font-size:12px; font-weight:700; text-align:center; color:#475569; }
+.muh2-tip-btn.aktif-gelir { border-color:#10b981; background:#ecfdf5; color:#065f46; }
+.muh2-tip-btn.aktif-gider { border-color:#ef4444; background:#fef2f2; color:#991b1b; }
+.muh2-alan { margin-bottom:10px; }
+.muh2-alan label { display:block; font-size:11px; font-weight:700; color:#475569; margin-bottom:3px; }
+.muh2-alan input, .muh2-alan select, .muh2-alan textarea { width:100%; padding:9px 10px; border:1.5px solid #e2e8f0; border-radius:8px; font-size:13px; box-sizing:border-box; }
+.muh2-alan input:focus, .muh2-alan select:focus { outline:none; border-color:#3b82f6; }
+.muh2-kasa-sec { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; margin-bottom:10px; }
+.muh2-ks-btn { padding:8px 4px; border:2px solid #e2e8f0; border-radius:8px; background:#f8fafc; cursor:pointer; font-size:11px; font-weight:700; text-align:center; color:#475569; }
+.muh2-ks-btn.aktif { border-color:#3b82f6; background:#eff6ff; color:#1d4ed8; }
+.muh2-kaydet { width:100%; padding:12px; border:none; border-radius:10px; font-size:14px; font-weight:900; cursor:pointer; margin-top:4px; }
+.muh2-kaydet.g { background:#10b981; color:#fff; }
+.muh2-kaydet.c { background:#ef4444; color:#fff; }
+.muh2-kaydet:disabled { opacity:.6; cursor:not-allowed; }
+
+/* CARİ TABLO */
+.muh2-cari { background:#fff; border-radius:12px; padding:16px; box-shadow:0 1px 6px rgba(0,0,0,.08); }
+.muh2-cari h3 { margin:0 0 10px; font-size:14px; color:#0f172a; font-weight:900; display:flex; justify-content:space-between; align-items:center; }
+.muh2-cari-filtre { display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; }
+.muh2-cf-btn { padding:5px 12px; border:1.5px solid #e2e8f0; border-radius:6px; background:#f8fafc; cursor:pointer; font-size:11px; font-weight:700; color:#475569; }
+.muh2-cf-btn.aktif { border-color:#ef4444; background:#fef2f2; color:#991b1b; }
+.muh2-tablo { width:100%; border-collapse:collapse; font-size:12px; }
+.muh2-tablo th { background:#f8fafc; padding:7px 10px; text-align:left; font-size:10px; color:#64748b; font-weight:700; text-transform:uppercase; border-bottom:2px solid #e2e8f0; }
+.muh2-tablo td { padding:8px 10px; border-bottom:1px solid #f1f5f9; color:#334155; }
+.muh2-tablo tr:hover td { background:#f8fafc; }
+.muh2-gecmis { color:#fff; background:#ef4444; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; }
+.muh2-yaklasan { color:#92400e; background:#fef9c3; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; }
+.muh2-normal { color:#065f46; background:#dcfce7; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; }
+
+/* SON HAREKETLER */
+.muh2-hareketler { background:#fff; border-radius:12px; padding:16px; box-shadow:0 1px 6px rgba(0,0,0,.08); margin-bottom:16px; }
+.muh2-hareketler h3 { margin:0 0 10px; font-size:14px; color:#0f172a; font-weight:900; }
+.muh2-h-satirlar { max-height:300px; overflow-y:auto; }
+
+/* BİLDİRİM */
+.muh2-notif { position:fixed; bottom:20px; right:20px; z-index:99999; }
+.muh2-notif-item { padding:12px 16px; border-radius:10px; color:#fff; font-size:13px; font-weight:700; margin-top:8px; box-shadow:0 4px 16px rgba(0,0,0,.2); }
+.muh2-notif-item.ok  { background:#10b981; }
+.muh2-notif-item.err { background:#ef4444; }
+
+.muh2-loading { text-align:center; padding:20px; color:#94a3b8; font-size:13px; }
+</style>
+
+<div class="muh2">
+
+  <!-- BAŞLIK -->
+  <div class="muh2-baslik">
+    <h2>💰 Mali Durum & Muhasebe</h2>
+    <button onclick="muh2Yukle()">🔄 Yenile</button>
+  </div>
+
+  <!-- UYARILAR -->
+  <div id="muh2UyariBar" class="muh2-uyari-bar"></div>
+
+  <!-- KASA KARTLARI -->
+  <div id="muh2KasaGrid" class="muh2-kasa-grid">
+    <div class="muh2-loading">Kasalar yükleniyor...</div>
+  </div>
+
+  <!-- İKİ KOLON: FORM + CARİ -->
+  <div class="muh2-iki-kolon">
+
+    <!-- İŞLEM FORMU -->
+    <div class="muh2-form">
+      <h3>➕ İşlem Kaydet</h3>
+      <div class="muh2-tip-sec">
+        <div class="muh2-tip-btn aktif-gelir" id="muh2TipGelir" onclick="muh2TipSec('GELIR')">⬆️ GELİR / TAHSİLAT</div>
+        <div class="muh2-tip-btn" id="muh2TipGider" onclick="muh2TipSec('GIDER')">⬇️ GİDER / ÖDEME</div>
+      </div>
+
+      <div class="muh2-alan">
+        <label id="muh2KasaLabel">💳 Tahsilat Hangi Kasaya Geldi?</label>
+        <div class="muh2-kasa-sec" id="muh2KasaSec">
+          <div class="muh2-ks-btn aktif" id="muh2ks_NAKIT" onclick="muh2KasaSec('NAKİT','NAKIT')">💵 Nakit</div>
+          <div class="muh2-ks-btn" id="muh2ks_KART" onclick="muh2KasaSec('KREDİ KARTI','KART')">💳 K.Kartı</div>
+          <div class="muh2-ks-btn" id="muh2ks_HAVALE" onclick="muh2KasaSec('HAVALE/EFT','HAVALE')">🏦 Havale/EFT</div>
+          <div class="muh2-ks-btn" id="muh2ks_CEK" onclick="muh2KasaSec('ÇEK','CEK')">📄 Çek/Senet</div>
+        </div>
+      </div>
+
+      <div class="muh2-alan">
+        <label>💰 Tutar (TL)</label>
+        <input type="number" id="muh2Tutar" placeholder="0.00" min="0" step="0.01">
+      </div>
+
+      <div class="muh2-alan" id="muh2FirmaAlan">
+        <label>🏢 Firma (opsiyonel)</label>
+        <input type="text" id="muh2Firma" placeholder="Firma adı...">
+      </div>
+
+      <div class="muh2-alan" id="muh2KategoriAlan" style="display:none">
+        <label>🏷️ Gider Kategorisi</label>
+        <select id="muh2Kategori">
+          <option value="Maaş / Avans">Maaş / Avans</option>
+          <option value="SGK / Vergi">SGK / Vergi</option>
+          <option value="Kira">Kira</option>
+          <option value="Araç Yakıt">Araç Yakıt</option>
+          <option value="Medikal Malzeme">Medikal Malzeme</option>
+          <option value="Ofis Gideri">Ofis Gideri</option>
+          <option value="Banka Masrafı">Banka Masrafı</option>
+          <option value="Diğer">Diğer</option>
+        </select>
+      </div>
+
+      <div class="muh2-alan">
+        <label>📄 Açıklama</label>
+        <textarea id="muh2Aciklama" rows="2" placeholder="İşlem açıklaması..."></textarea>
+      </div>
+
+      <button class="muh2-kaydet g" id="muh2KaydetBtn" onclick="muh2Kaydet()">✅ GELİR KAYDET</button>
+    </div>
+
+    <!-- CARİ TAKİP -->
+    <div class="muh2-cari">
+      <h3>
+        📋 Cari Takip
+        <span style="font-size:11px;color:#94a3b8;font-weight:400" id="muh2CariSayac"></span>
+      </h3>
+      <div class="muh2-cari-filtre">
+        <input type="text" placeholder="Firma ara..." id="muh2CariAra" oninput="muh2CariFiltrele()" style="padding:5px 10px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:12px;width:160px;">
+        <div class="muh2-cf-btn aktif" id="muh2CfGecmis" onclick="muh2CariSec('gecmis')">🔴 Vadesi Geçen</div>
+        <div class="muh2-cf-btn" id="muh2CfTum" onclick="muh2CariSec('tum')">Tümü</div>
+      </div>
+      <div id="muh2CariDiv" style="max-height:380px;overflow-y:auto;">
+        <div class="muh2-loading">Cari veriler yükleniyor...</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- SON HAREKETLER -->
+  <div class="muh2-hareketler">
+    <h3>🕐 Bu Ay Hareketler</h3>
+    <div class="muh2-h-satirlar" id="muh2HareketlerDiv">
+      <div class="muh2-loading">Yükleniyor...</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- KAR/ZARAR -->
+<div class="muh2-kart" style="margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">📈 Kar/Zarar Analizi</h3>
+    <div style="display:flex;gap:6px;">
+      <button onclick="muh2KarZararYukle('aylik')"  id="muh2BtnAy"  class="muh2-donem-btn aktif">Aylık</button>
+      <button onclick="muh2KarZararYukle('yillik')" id="muh2BtnYil" class="muh2-donem-btn">Yıllık</button>
+    </div>
+  </div>
+  <div id="muh2KarZararDiv" class="muh2-loading">Yükleniyor...</div>
+</div>
+
+<!-- AYLIK TREND GRAFİK -->
+<div class="muh2-kart" style="margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">📈 Aylık Gelir/Gider Trendi</h3>
+    <button onclick="muh2TrendYukle()" style="background:#1e3a8a;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">📊 Yükle</button>
+  </div>
+  <div id="muh2TrendDiv" class="muh2-loading">Yüklemek için butona tıklayın.</div>
+</div>
+
+<!-- GÜNLÜK KASA MUTABAKATI -->
+<div class="muh2-kart" style="margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">🔒 Günlük Kasa Mutabakatı</h3>
+    <button onclick="muh2MutabakatYukle()" style="background:#0f172a;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">📊 Kontrol Et</button>
+  </div>
+  <div id="muh2MutabakatDiv" class="muh2-loading">Kontrol için butona tıklayın.</div>
+</div>
+
+<!-- AYLIK ÖDEME SKOR -->
+<div class="muh2-kart" style="margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">📊 Aylık Ödeme Skoru</h3>
+    <button onclick="muh2SkorYukle()" style="background:#1e293b;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">🔄 Güncelle</button>
+  </div>
+  <div id="muh2SkorDiv" class="muh2-loading">Yükleniyor...</div>
+</div>
+
+<!-- KAÇAK RADAR -->
+<div class="muh2-kart" style="margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">🚨 Kaçak Radar <span id="muh2RadarBadge" style="background:#ef4444;color:#fff;border-radius:99px;padding:2px 10px;font-size:11px;font-weight:700;margin-left:6px;">0 alarm</span></h3>
+    <button onclick="muh2RadarYukle()" style="background:#f59e0b;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">🔄 Tara</button>
+  </div>
+  <div id="muh2RadarDiv" class="muh2-loading">Taramak için butona tıklayın.</div>
+</div>
+
+<!-- YAPAY ZEKA -->
+<div class="muh2-kart" style="margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">🤖 YZ Mali Analiz</h3>
+    <button onclick="muh2YZYukle()" style="background:#8b5cf6;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">✨ Analiz Et</button>
+  </div>
+  <div id="muh2YZDiv" class="muh2-loading">Analiz için butona tıklayın.</div>
+</div>
+
+<!-- SÖZLEŞME YENİLEME -->
+<div class="muh2-kart" style="margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">📋 Sözleşme Yenileme Takibi</h3>
+    <button onclick="muh2SozlesmeYukle()" style="background:#f59e0b;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">🔄 Kontrol Et</button>
+  </div>
+  <div id="muh2SozlesmeDiv" class="muh2-loading">Kontrol için butona tıklayın.</div>
+</div>
+
+<!-- NAKİT AKIŞ TAHMİNİ -->
+<div class="muh2-kart" style="margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">🔮 Nakit Akış Tahmini</h3>
+    <button onclick="muh2NakitTahminYukle()" style="background:#7c3aed;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">📈 Hesapla</button>
+  </div>
+  <div id="muh2NakitTahminDiv" class="muh2-loading">Hesaplamak için butona tıklayın.</div>
+</div>
+
+<!-- FİRMA KÂRLILIK -->
+<div class="muh2-kart" style="margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">💹 Firma Bazlı Kârlılık</h3>
+    <button onclick="muh2KarlilikYukle()" style="background:#0f172a;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">📊 Hesapla</button>
+  </div>
+  <div id="muh2KarlilikDiv" class="muh2-loading">Hesaplamak için butona tıklayın.</div>
+</div>
+
+<!-- GELİR KAÇAĞI -->
+<div class="muh2-kart" style="margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">🔍 Gelir Kaçağı Tespiti</h3>
+    <button onclick="muh2KacakYukle()" style="background:#ef4444;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">🔎 Tara</button>
+  </div>
+  <div id="muh2KacakDiv" class="muh2-loading">Taramak için butona tıklayın.</div>
+</div>
+
+
+<!-- AUDIT LOG -->
+<div class="muh2-kart" style="margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">📝 İşlem Geçmişi (Audit Log)</h3>
+    <button onclick="muh2LogYukle()" style="background:#1e293b;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">🔄 Yükle</button>
+  </div>
+  <div id="muh2LogDiv" class="muh2-loading">Yüklemek için butona tıklayın.</div>
+</div>
+
+<!-- FİŞ OCR -->
+<div class="muh2-kart" style="margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">📷 Fiş/Fatura Oku</h3>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <input type="file" id="muh2FisInput" accept="image/*" onchange="muh2FisOku()" style="font-size:12px;">
+    <span style="font-size:11px;color:#64748b;">Fotoğraf çek veya galeriden seç</span>
+  </div>
+  <div id="muh2FisDiv" style="margin-top:10px;"></div>
+</div>
+
+<!-- MAHSUPLAŞMA -->
+<div class="muh2-kart" style="margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">⚖️ Mahsuplaşma</h3>
+    <div style="display:flex;gap:6px;">
+      <select id="muh2MahsupTip" onchange="muh2MahsupYukle()" style="padding:4px 8px;border:2px solid #7c3aed;border-radius:6px;font-size:11px;font-weight:700;">
+        <option value="giden">📤 Kesilen Faturalar</option>
+        <option value="gelen">📥 Gelen Faturalar</option>
+      </select>
+      <select id="muh2MahsupDurum" onchange="muh2MahsupFiltrele()" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;">
+        <option value="">Tüm Durumlar</option>
+        <option value="overdue">Gecikmiş</option>
+        <option value="unpaid">Ödenmemiş</option>
+        <option value="paid">Ödenmiş</option>
+      </select>
+      <input type="text" id="muh2MahsupAra" placeholder="Firma ara..." oninput="muh2MahsupFiltrele()" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;width:120px;">
+    </div>
+  </div>
+  <div id="muh2MahsupListesi" class="muh2-loading">Yükleniyor...</div>
+</div>
+
+<!-- MAHSUPLAŞMA FORMU -->
+<div id="muh2MahsupForm" style="display:none;background:#f5f3ff;border:2px solid #7c3aed;border-radius:12px;padding:16px;margin-bottom:14px;">
+  <h4 style="margin:0 0 12px;color:#5b21b6;">⚖️ Mahsuplaşma Kaydı</h4>
+  <input type="hidden" id="muh2MahsupFaturaId">
+  <input type="hidden" id="muh2MahsupFaturaNo">
+  <div style="display:flex;gap:10px;margin-bottom:12px;">
+    <div style="flex:1;background:#fef3c7;border-radius:8px;padding:10px;">
+      <div style="font-size:11px;color:#92400e;">Firma</div>
+      <div id="muh2MahsupFirmaAdi" style="font-weight:700;color:#92400e;font-size:13px;"></div>
+    </div>
+    <div style="flex:1;background:#ede9fe;border-radius:8px;padding:10px;">
+      <div style="font-size:11px;color:#5b21b6;">Fatura Tutarı</div>
+      <div id="muh2MahsupFaturaTutar" style="font-weight:900;color:#5b21b6;font-size:16px;"></div>
+    </div>
+    <div style="flex:1;background:#f0fdf4;border-radius:8px;padding:10px;">
+      <div style="font-size:11px;color:#065f46;">Kasa Bakiyesi</div>
+      <div id="muh2MahsupKasaBakiye" style="font-weight:900;color:#065f46;font-size:16px;"></div>
+    </div>
+  </div>
+  <div style="margin-bottom:12px;">
+    <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:4px;">Mahsuplaşma Tutarı (₺)</label>
+    <input type="number" id="muh2MahsupTutarInput" placeholder="0.00" oninput="muh2MahsupHesapla()" style="width:100%;padding:10px;border:2px solid #7c3aed;border-radius:8px;font-size:16px;font-weight:700;box-sizing:border-box;">
+  </div>
+  <div id="muh2MahsupHesap" style="display:none;background:#ede9fe;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#5b21b6;">
+    Kasa Etkisi: <strong id="muh2MahsupKasaEtki"></strong>
+  </div>
+  <div style="margin-bottom:12px;">
+    <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:4px;">Açıklama</label>
+    <textarea id="muh2MahsupAciklama" rows="2" placeholder="Mahsuplaşma açıklaması..." style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;resize:none;"></textarea>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <button onclick="muh2MahsupKaydet()" style="flex:1;background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:12px;font-weight:700;cursor:pointer;">✅ Kaydet</button>
+    <button onclick="document.getElementById('muh2MahsupForm').style.display='none'" style="flex:1;background:#64748b;color:#fff;border:none;border-radius:8px;padding:12px;font-weight:700;cursor:pointer;">İptal</button>
+  </div>
+</div>
+
+<!-- PARAŞÜT SENKRON -->
+<div class="muh2-kart" style="margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">🪂 Paraşüt Senkronizasyon</h3>
+    <button id="muh2ParasutBtn" onclick="muh2ParasutSenkron()" style="background:#0284c7;color:#fff;border:none;padding:8px 18px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🔄 Senkron Yap</button>
+  </div>
+  <div id="muh2ParasutSonuc" style="font-size:13px;color:#64748b;">Son senkronizasyon bilgisi için butona tıklayın.</div>
+  <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:200px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;">
+      <div style="font-size:11px;color:#0369a1;font-weight:700;margin-bottom:6px;">📤 SON KESİLEN FATURALAR</div>
+      <div id="muh2ParasutSatisList" style="font-size:12px;color:#475569;">Yükleniyor...</div>
+    </div>
+    <div style="flex:1;min-width:200px;background:#fdf4ff;border:1px solid #e9d5ff;border-radius:8px;padding:12px;">
+      <div style="font-size:11px;color:#7e22ce;font-weight:700;margin-bottom:6px;">📥 SON GELEN FATURALAR</div>
+      <div id="muh2ParasutAlisList" style="font-size:12px;color:#475569;">Yükleniyor...</div>
+    </div>
+  </div>
+</div>
+
+<!-- VADESİ GEÇMİŞ CARİ UYARILARI -->
+<div class="muh2-kart" style="margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <h3 style="margin:0;">📱 Vadesi Geçmiş Cari Uyarıları
+      <span id="muh2CariUyariBadge" style="background:#ef4444;color:#fff;border-radius:99px;padding:2px 10px;font-size:11px;font-weight:700;margin-left:6px;">0 firma</span>
+    </h3>
+    <button onclick="muh2CariUyariYukle()" style="background:#0f172a;color:#fff;border:none;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">🔄 Tara</button>
+  </div>
+  <div id="muh2CariUyariListesi" style="color:#64748b;font-size:13px;">Vadesi 15 gün geçmiş carileri bulmak için Tara butonuna tıklayın.</div>
+</div>
+
+<!-- BİLDİRİM -->
+<div class="muh2-notif" id="muh2NotifArea"></div>
+
+<script>
+var _m2Tip = 'GELIR';
+var _m2Kasa = 'NAKİT';
+var _m2CariTum = [];
+var _m2CariFiltre = 'gecmis';
+
+function muh2Yukle() {
+  muh2KasaYukle();
+  muh2CariYukle();
+  muh2HareketlerYukle();
+  muh2UyariYukle();
+  muh2SkorYukle();
+}
+
+// ---- Paraşüt Senkron ----
+function muh2ParasutSenkron() {
+  var btn = document.getElementById('muh2ParasutBtn');
+  var sonuc = document.getElementById('muh2ParasutSonuc');
+  if(btn) { btn.innerHTML='⏳ Senkron yapılıyor...'; btn.disabled=true; }
+  if(sonuc) sonuc.innerHTML='<span style="color:#0284c7;">⏳ Paraşüt senkronizasyonu yapılıyor, lütfen bekleyin...<\/span>';
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if(btn) { btn.innerHTML='🔄 Senkron Yap'; btn.disabled=false; }
+      if(sonuc) sonuc.innerHTML='<span style="color:'+(res.ok?'#16a34a':'#dc2626')+';font-weight:700;">'+(res.ok?'✅ ':'❌ ')+res.msg+'<\/span><span style="color:#94a3b8;font-size:11px;margin-left:8px;">'+new Date().toLocaleTimeString('tr-TR')+'<\/span>';
+      if(res.ok) {
+        muh2ParasutFaturalariYukle();
+        muh2MahsupYukle();
+      }
+    })
+    .withFailureHandler(function(e) {
+      if(btn) { btn.innerHTML='🔄 Senkron Yap'; btn.disabled=false; }
+      if(sonuc) sonuc.innerHTML='<span style="color:#dc2626;">❌ Bağlantı hatası: '+e.message+'<\/span>';
+    })
+    .api_parasutSenkron();
+}
+
+function muh2ParasutFaturalariYukle() {
+  google.script.run
+    .withSuccessHandler(function(res) {
+      var el = document.getElementById('muh2ParasutSatisList');
+      if(!el) return;
+      if(!res||!res.data||!res.data.length){ el.innerHTML='Fatura bulunamadı.'; return; }
+      var html='';
+      res.data.slice(0,5).forEach(function(f){
+        var dRenk=f.durum==='overdue'?'#ef4444':f.durum==='paid'?'#10b981':'#f59e0b';
+        html+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e2e8f0;">'
+          +'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+f.firmaAdi+'<\/span>'
+          +'<span style="font-weight:700;color:'+dRenk+';margin-left:8px;">₺'+Number(f.tutar||0).toLocaleString('tr-TR')+'<\/span>'
+          +'<\/div>';
+      });
+      el.innerHTML=html;
+    })
+    .withFailureHandler(function(){})
+    .api_mahsupFaturalariGetir();
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      var el = document.getElementById('muh2ParasutAlisList');
+      if(!el) return;
+      if(!res||!res.data||!res.data.length){ el.innerHTML='Fatura bulunamadı.'; return; }
+      var html='';
+      res.data.slice(0,5).forEach(function(f){
+        html+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e2e8f0;">'
+          +'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+f.firmaAdi+'<\/span>'
+          +'<span style="font-weight:700;color:#7e22ce;margin-left:8px;">₺'+Number(f.tutar||0).toLocaleString('tr-TR')+'<\/span>'
+          +'<\/div>';
+      });
+      el.innerHTML=html;
+    })
+    .withFailureHandler(function(){})
+    .api_parasutGelenFaturaListesi();
+}
+
+// muh2Yukle'ye ekle
+var _orig_muh2Yukle2 = muh2Yukle;
+muh2Yukle = function() {
+  _orig_muh2Yukle2();
+  muh2ParasutFaturalariYukle();
+};
+
+// ---- KASA ----
+function muh2KasaYukle() {
+  google.script.run
+    .withSuccessHandler(function(d) {
+      var html = '';
+      var toplam = 0;
+      var buAy = new Date().getMonth()+1;
+      var buYil = new Date().getFullYear();
+
+      if (!d || !d.ok || !d.kasalar || !d.kasalar.length) {
+        document.getElementById('muh2KasaGrid').innerHTML = '<div class="muh2-loading">Kasa kaydı yok.<\/div>';
+        return;
+      }
+
+      d.kasalar.forEach(function(k) {
+        toplam += k.bakiye || 0;
+        var cls = k.tip === 'NAKİT' ? 'nakit' : k.tip === 'KREDİ KARTI' ? 'kart' : k.tip === 'HAVALE/EFT' ? 'havale' : k.tip === 'ÇEK' ? 'cek' : '';
+        html += '<div class="muh2-kasa-kart ' + cls + '">'
+             + '<div class="muh2-kk-adi">' + k.kasa + '<\/div>'
+             + '<div class="muh2-kk-bakiye">₺' + (k.bakiye||0).toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}) + '<\/div>'
+             + '<div class="muh2-kk-alt">' + (k.tip||'') + '<\/div>'
+             + '<\/div>';
+      });
+
+      html += '<div class="muh2-kasa-kart toplam">'
+           + '<div class="muh2-kk-adi">TOPLAM NAKİT<\/div>'
+           + '<div class="muh2-kk-bakiye">₺' + toplam.toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}) + '<\/div>'
+           + '<div class="muh2-kk-alt">Tüm kasalar<\/div>'
+           + '<\/div>';
+
+      document.getElementById('muh2KasaGrid').innerHTML = html;
+    })
+    .withFailureHandler(function() {
+      document.getElementById('muh2KasaGrid').innerHTML = '<div class="muh2-loading">Hata.<\/div>';
+    })
+    .api_kasaListesiGetir();
+}
+
+// ---- UYARILAR (Sabit Gider) ----
+function muh2UyariYukle() {
+  google.script.run
+    .withSuccessHandler(function(d) {
+      if (!d || !d.ok) return;
+      var toplam = 0;
+      (d.kasalar||[]).forEach(function(k){ toplam += k.bakiye||0; });
+
+      var html = '';
+      var bugun = new Date();
+      var ay15 = new Date(bugun.getFullYear(), bugun.getMonth(), 15);
+      var aySonu = new Date(bugun.getFullYear(), bugun.getMonth()+1, 0);
+      var gun15 = Math.ceil((ay15 - bugun) / (1000*60*60*24));
+      var gunSonu = Math.ceil((aySonu - bugun) / (1000*60*60*24));
+
+      // Maaş uyarısı (15'i)
+      if (gun15 >= 0 && gun15 <= 10) {
+        html += '<div class="muh2-uyari ' + (toplam < 50000 ? 'kirmizi' : 'sari') + '">'
+              + '👥 Maaş Günü ' + (gun15 === 0 ? 'BUGÜN' : gun15 + ' gün sonra') + ' (15)'
+              + (toplam < 50000 ? ' — Kasa Yetersiz Olabilir!' : ' — Kasa Müsait') + '<\/div>';
+      }
+
+      // SGK uyarısı (ay sonu)
+      if (gunSonu >= 0 && gunSonu <= 10) {
+        html += '<div class="muh2-uyari ' + (toplam < 20000 ? 'kirmizi' : 'sari') + '">'
+              + '🏛️ SGK/Sigorta Ay Sonu ' + (gunSonu === 0 ? 'BUGÜN' : gunSonu + ' gün sonra')
+              + (toplam < 20000 ? ' — Dikkat!' : ' — Tamam') + '<\/div>';
+      }
+
+      if (!html) {
+        html = '<div class="muh2-uyari yesil">✅ Yaklaşan kritik ödeme yok<\/div>';
+      }
+
+      document.getElementById('muh2UyariBar').innerHTML = html;
+    })
+    .withFailureHandler(function(){})
+    .api_kasaListesiGetir();
+}
+
+// ---- CARİ ----
+function muh2CariYukle() {
+  document.getElementById('muh2CariDiv').innerHTML = '<div class="muh2-loading">Yükleniyor...<\/div>';
+  google.script.run
+    .withSuccessHandler(function(d) {
+      if (!d || !d.ok) {
+        document.getElementById('muh2CariDiv').innerHTML = '<div class="muh2-loading">Veri yok.<\/div>';
+        return;
+      }
+      _m2CariTum = d.liste || [];
+      muh2CariRender();
+    })
+    .withFailureHandler(function(){
+      document.getElementById('muh2CariDiv').innerHTML = '<div class="muh2-loading">Hata.<\/div>';
+    })
+    .api_acikCariHesaplar();
+}
+
+function muh2CariSec(tip) {
+  _m2CariFiltre = tip;
+  document.getElementById('muh2CfGecmis').className = 'muh2-cf-btn' + (tip==='gecmis'?' aktif':'');
+  document.getElementById('muh2CfTum').className = 'muh2-cf-btn' + (tip==='tum'?' aktif':'');
+  muh2CariRender();
+}
+
+function muh2CariFiltrele() {
+  muh2CariRender();
+}
+
+function muh2CariRender() {
+  var ara = (document.getElementById('muh2CariAra').value||'').toLowerCase().trim();
+  var liste = _m2CariTum;
+
+  if (ara) {
+    liste = liste.filter(function(f){ return String(f.firmaAdi||'').toLowerCase().indexOf(ara) > -1; });
+  }
+
+  var bugun = new Date(); bugun.setHours(0,0,0,0);
+
+  if (_m2CariFiltre === 'gecmis') {
+    liste = liste.filter(function(f){ return (f.bakiye||0) > 0; });
+  }
+
+  liste = liste.slice(0, 100);
+
+  document.getElementById('muh2CariSayac').textContent = liste.length + ' firma';
+
+  if (!liste.length) {
+    document.getElementById('muh2CariDiv').innerHTML = '<div class="muh2-loading">Kayıt yok.<\/div>';
+    return;
+  }
+
+  var html = '<table class="muh2-tablo">'
+           + '<thead><tr><th>Firma<\/th><th style="text-align:right">Bakiye<\/th><th>Durum<\/th><\/tr><\/thead><tbody>';
+
+  liste.forEach(function(f) {
+    var bak = parseFloat(f.bakiye||0);
+    var cls = bak > 0 ? 'muh2-gecmis' : 'muh2-normal';
+    var durum = bak > 0 ? '🔴 Alacak' : '✅ Kapalı';
+    html += '<tr>'
+          + '<td style="font-weight:700">' + (f.firmaAdi||'-') + '<\/td>'
+          + '<td style="text-align:right;font-weight:900;color:' + (bak>0?'#ef4444':'#10b981') + '">₺' + Math.abs(bak).toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}) + '<\/td>'
+          + '<td><span class="' + cls + '">' + durum + '<\/span><\/td>'
+          + '<\/tr>';
+  });
+
+  html += '<\/tbody><\/table>';
+  document.getElementById('muh2CariDiv').innerHTML = html;
+}
+
+// ---- HAREKETLER ----
+function muh2HareketlerYukle() {
+  var t = new Date();
+  google.script.run
+    .withSuccessHandler(function(d) {
+      if (!d || !d.ok || !d.hareketler || !d.hareketler.length) {
+        document.getElementById('muh2HareketlerDiv').innerHTML = '<div class="muh2-loading">Bu ay hareket yok.<\/div>';
+        return;
+      }
+      var html = '<table class="muh2-tablo"><thead><tr><th>Tarih<\/th><th>Tip<\/th><th>Ödeme Yöntemi<\/th><th>Açıklama<\/th><th style="text-align:right">Tutar<\/th><\/tr><\/thead><tbody>';
+d.hareketler.slice(0,50).forEach(function(h) {
+  var gelir = h.tip.indexOf('GEL') > -1 || h.tip.indexOf('TAH') > -1;
+  var kasaRenk = h.kasa === 'NAKİT' ? '#065f46' 
+    : h.kasa === 'KREDİ KARTI' ? '#1e40af' 
+    : h.kasa === 'HAVALE/EFT' ? '#92400e' : '#475569';
+  var kasaBg = h.kasa === 'NAKİT' ? '#d1fae5' 
+    : h.kasa === 'KREDİ KARTI' ? '#dbeafe' 
+    : h.kasa === 'HAVALE/EFT' ? '#fef3c7' : '#f1f5f9';
+  html += '<tr>'
+  + '<td style="white-space:nowrap">' + (function(t){ if(!t) return '-'; var s=String(t); if(s.match(/^\d{2}\.\d{2}\.\d{4}/)) return s.split(' ')[0]; var d=new Date(t); if(isNaN(d)) return s.split(' ')[0]; return ('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'.'+d.getFullYear(); })(h.tarih) + '<\/td>'
+  + '<td><span style="background:' + (gelir?'#dcfce7':'#fee2e2') + ';color:' + (gelir?'#166534':'#991b1b') + ';padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700">' + (gelir?'⬆️ Gelir':'⬇️ Gider') + '<\/span><\/td>'
+  + '<td><span style="background:' + kasaBg + ';color:' + kasaRenk + ';padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700">' + (h.kasa||h.kategori||'-') + '<\/span><\/td>'
+  + '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">' + (h.aciklama||'-') + '<\/td>'
+  + '<td style="text-align:right;font-weight:900;color:' + (gelir?'#10b981':'#ef4444') + ';white-space:nowrap">₺' + (h.tutar||0).toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}) + '<\/td>'
+  + '<\/tr>';
+});
+      html += '<\/tbody><\/table>';
+      document.getElementById('muh2HareketlerDiv').innerHTML = html;
+    })
+    .withFailureHandler(function(){})
+    .api_kasaHareketleri(null, t.getMonth()+1, t.getFullYear());
+}
+
+// ---- TIP SEÇ ----
+function muh2TipSec(tip) {
+  _m2Tip = tip;
+  if (tip === 'GELIR') {
+    document.getElementById('muh2TipGelir').className = 'muh2-tip-btn aktif-gelir';
+    document.getElementById('muh2TipGider').className = 'muh2-tip-btn';
+    document.getElementById('muh2KaydetBtn').textContent = '✅ GELİR KAYDET';
+    document.getElementById('muh2KaydetBtn').className = 'muh2-kaydet g';
+    document.getElementById('muh2KasaLabel').textContent = '💳 Tahsilat Hangi Kasaya Geldi?';
+    document.getElementById('muh2KategoriAlan').style.display = 'none';
+    document.getElementById('muh2FirmaAlan').style.display = 'block';
+  } else {
+    document.getElementById('muh2TipGider').className = 'muh2-tip-btn aktif-gider';
+    document.getElementById('muh2TipGelir').className = 'muh2-tip-btn';
+    document.getElementById('muh2KaydetBtn').textContent = '🔴 GİDER KAYDET';
+    document.getElementById('muh2KaydetBtn').className = 'muh2-kaydet c';
+    document.getElementById('muh2KasaLabel').textContent = '💳 Ödeme Hangi Kasadan Yapıldı?';
+    document.getElementById('muh2KategoriAlan').style.display = 'block';
+    document.getElementById('muh2FirmaAlan').style.display = 'none';
+  }
+}
+
+// ---- KASA SEÇ ----
+function muh2KasaSec(kasaAdi, btnKey) {
+  _m2Kasa = kasaAdi;
+  ['NAKIT','KART','HAVALE','CEK'].forEach(function(k) {
+    var el = document.getElementById('muh2ks_' + k);
+    if (el) el.className = 'muh2-ks-btn' + (k === btnKey ? ' aktif' : '');
+  });
+}
+
+// ---- KAYDET ----
+function muh2Kaydet() {
+  var tutar = parseFloat(document.getElementById('muh2Tutar').value || 0);
+  var aciklama = (document.getElementById('muh2Aciklama').value || '').trim();
+  var firma = (document.getElementById('muh2Firma').value || '').trim();
+  var kategori = document.getElementById('muh2Kategori').value || 'Diğer';
+
+  if (!tutar || tutar <= 0) { muh2Notif('Tutar girin.', 'err'); return; }
+
+  var btn = document.getElementById('muh2KaydetBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Kaydediliyor...';
+
+  if (_m2Tip === 'GELIR') {
+    google.script.run
+      .withSuccessHandler(function(d) { muh2Sonuc(d, btn, true); })
+      .withFailureHandler(function(e) { muh2Sonuc({ok:false,msg:e.message}, btn, true); })
+      .api_gelirKaydet({
+        kategori: 'Satış / Tahsilat',
+        kasa: _m2Kasa,
+        aciklama: (firma ? firma + ' — ' : '') + (aciklama || 'Tahsilat'),
+        tutar: tutar,
+        kdvOrani: 0,
+        odemeTipi: _m2Kasa,
+        kaydeden: window.currentUserEmail || 'BANKO'
+      });
+  } else {
+    google.script.run
+      .withSuccessHandler(function(d) { muh2Sonuc(d, btn, false); })
+      .withFailureHandler(function(e) { muh2Sonuc({ok:false,msg:e.message}, btn, false); })
+      .api_giderKaydet({
+        kategori: kategori,
+        kasa: _m2Kasa,
+        aciklama: aciklama || kategori,
+        tutar: tutar,
+        kdvOrani: 0,
+        odemeTipi: _m2Kasa,
+        kaydeden: window.currentUserEmail || 'BANKO'
+      });
+  }
+}
+
+function muh2Sonuc(d, btn, gelirMi) {
+  btn.disabled = false;
+  muh2TipSec(_m2Tip);
+  if (d && d.ok) {
+    muh2Notif((gelirMi ? '✅ Gelir kaydedildi!' : '✅ Gider kaydedildi!'), 'ok');
+    document.getElementById('muh2Tutar').value = '';
+    document.getElementById('muh2Aciklama').value = '';
+    document.getElementById('muh2Firma').value = '';
+    setTimeout(function() { muh2Yukle(); }, 2000);
+  } else {
+    muh2Notif('❌ ' + (d&&d.msg?d.msg:'Hata'), 'err');
+  }
+}
+
+// ---- BİLDİRİM ----
+function muh2Notif(msg, tip) {
+  var area = document.getElementById('muh2NotifArea');
+  var div = document.createElement('div');
+  div.className = 'muh2-notif-item ' + (tip||'ok');
+  div.textContent = msg;
+  area.appendChild(div);
+  setTimeout(function(){ if(div.parentNode) div.parentNode.removeChild(div); }, 4000);
+}
+
+// ---- Vadesi Geçmiş Cari Uyarıları ----
+function muh2CariUyariYukle() {
+  var div = document.getElementById('muh2CariUyariListesi');
+  if(div) div.innerHTML='<div class="muh2-loading">Taranıyor...<\/div>';
+  google.script.run
+    .withSuccessHandler(function(res) {
+      var div = document.getElementById('muh2CariUyariListesi');
+      if(!div) return;
+      var badge = document.getElementById('muh2CariUyariBadge');
+      if(!res||!res.ok){ div.innerHTML='<div class="muh2-loading">Hata.<\/div>'; return; }
+      if(!res.liste||!res.liste.length){
+        if(badge){ badge.textContent='0 firma'; badge.style.background='#10b981'; }
+        div.innerHTML='<div style="color:#10b981;font-weight:700;padding:8px;">✅ Vadesi 15 gün geçmiş ödenmemiş fatura bulunamadı.<\/div>';
+        return;
+      }
+      if(badge){ badge.textContent=res.liste.length+' firma'; badge.style.background='#ef4444'; }
+      var html='<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+        +'<thead><tr style="background:#fef2f2;">'
+        +'<th style="padding:8px;text-align:left;font-size:11px;color:#991b1b;border-bottom:2px solid #fecaca;">Firma<\/th>'
+        +'<th style="padding:8px;text-align:left;font-size:11px;color:#991b1b;border-bottom:2px solid #fecaca;">Max Gecikme<\/th>'
+        +'<th style="padding:8px;text-align:right;font-size:11px;color:#991b1b;border-bottom:2px solid #fecaca;">Toplam Bakiye<\/th>'
+        +'<th style="padding:8px;border-bottom:2px solid #fecaca;"><\/th>'
+        +'<\/tr><\/thead><tbody>';
+      res.liste.forEach(function(f){
+        var gecikmeRenk = f.maxGecikme>30?'#ef4444':f.maxGecikme>15?'#f59e0b':'#64748b';
+        var mesajEncoded = encodeURIComponent(f.mesaj||'');
+        html+='<tr style="border-bottom:1px solid #f1f5f9;">'
+          +'<td style="padding:9px 8px;font-weight:700;font-size:12px;">'+f.firmaAdi+'<\/td>'
+          +'<td style="padding:9px 8px;"><span style="color:'+gecikmeRenk+';font-weight:700;">'+f.maxGecikme+' gün<\/span><\/td>'
+          +'<td style="padding:9px 8px;text-align:right;font-weight:900;color:#ef4444;">₺'+Number(f.toplamKalan).toLocaleString('tr-TR',{minimumFractionDigits:2})+'<\/td>'
+          +'<td style="padding:9px 8px;text-align:right;white-space:nowrap;">';
+        if(f.waUrl){
+          html+='<a href="'+f.waUrl+'" target="_blank" style="background:#25d366;color:#fff;border:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none;margin-right:4px;display:inline-block;">💬 WA<\/a>';
+        }
+        html+='<button onclick="muh2MesajGoster(this,\''+f.firmaId+'\')" data-mesaj="'+f.mesaj.replace(/"/g,"&quot;").replace(/\n/g,"\\n")+'" style="background:#0f172a;color:#fff;border:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">📋 Mesaj</button>'
+          +'<\/td><\/tr>'
+          +'<tr id="mesajSatir_'+f.firmaId+'" style="display:none;"><td colspan="4" style="padding:10px;background:#f8fafc;"><pre style="margin:0;font-size:12px;white-space:pre-wrap;color:#334155;">'+f.mesaj+'<\/pre>'
+          +'<button onclick="muh2MesajKopyala(\''+f.firmaId+'\')" style="margin-top:6px;background:#3b82f6;color:#fff;border:none;padding:4px 12px;border-radius:5px;font-size:11px;cursor:pointer;">📋 Kopyala<\/button>'
+          +'<\/td><\/tr>';
+      });
+      html+='<\/tbody><\/table>';
+      div.innerHTML=html;
+    })
+    .withFailureHandler(function(e){ var d=document.getElementById('muh2CariUyariListesi'); if(d) d.innerHTML='<div class="muh2-loading">Hata: '+e.message+'<\/div>'; })
+    .api_vadesiGecmisCariUyarilari();
+}
+
+function muh2MesajGoster(btn, firmaId) {
+  var satir = document.getElementById('mesajSatir_'+firmaId);
+  if(!satir) return;
+  satir.style.display = satir.style.display==='none'?'':'none';
+}
+
+function muh2MesajKopyala(firmaId) {
+  var satir = document.getElementById('mesajSatir_'+firmaId);
+  if(!satir) return;
+  var text = satir.querySelector('pre').textContent;
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(function(){ muh2Notif('✅ Mesaj panoya kopyalandı!','ok'); });
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    muh2Notif('✅ Mesaj panoya kopyalandı!','ok');
+  }
+}
+
+</script>
+</div>
+<!-- ============================================== -->
+<div id="panelBanko" class="panel hidden-panel" style="padding:20px; max-width:700px; margin:0 auto;">
+
+  <!-- BAŞLIK -->
+  <div style="background:linear-gradient(135deg,#1e3a8a,#1e40af);border-radius:14px;padding:20px 24px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <div style="color:#93c5fd;font-size:12px;font-weight:700;letter-spacing:2px;margin-bottom:4px;">AVRUPA BİR OSGB</div>
+      <div style="color:white;font-size:22px;font-weight:900;">🏦 BANKO</div>
+    </div>
+    <button onclick="bankoPanelYukle()" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;">🔄 Yenile</button>
+  </div>
+  <div style="display:flex;justify-content:center;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
+    <div id="bankoHastaSayac" style="background:linear-gradient(135deg,#10b981,#059669);border-radius:14px;padding:16px 40px;text-align:center;color:white;box-shadow:0 4px 15px rgba(16,185,129,0.3);">
+      <div style="font-size:36px;font-weight:900;" id="bankoHastaSayi">0</div>
+      <div style="font-size:12px;font-weight:700;letter-spacing:2px;opacity:0.9;">BUGÜN GELEN HASTA</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);border-radius:14px;padding:16px 40px;text-align:center;color:white;box-shadow:0 4px 15px rgba(59,130,246,0.3);">
+      <div style="font-size:36px;font-weight:900;" id="bankoGelirSayi">0</div>
+      <div style="font-size:12px;font-weight:700;letter-spacing:2px;opacity:0.9;">BUGÜN GELİR SAYISI</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:14px;padding:16px 40px;text-align:center;color:white;box-shadow:0 4px 15px rgba(245,158,11,0.3);">
+      <div style="font-size:36px;font-weight:900;" id="bankoGelirToplam">₺0</div>
+      <div style="font-size:12px;font-weight:700;letter-spacing:2px;opacity:0.9;">BUGÜN TOPLAM GELİR</div>
+    </div>
+  </div>
+
+  <!-- SEKMELER -->
+  <div style="display:flex;gap:8px;margin-bottom:20px;">
+    <button id="bankoTab1" onclick="bankoSekmeAc('gelir')" style="flex:1;padding:12px;border-radius:10px;border:2px solid #10b981;background:#10b981;color:white;font-weight:900;font-size:14px;cursor:pointer;">💰 GELİR</button>
+    <button id="bankoTab2" onclick="bankoSekmeAc('gider')" style="flex:1;padding:12px;border-radius:10px;border:2px solid #e2e8f0;background:white;color:#64748b;font-weight:900;font-size:14px;cursor:pointer;">💸 GİDER</button>
+    <button id="bankoTab3" onclick="bankoSekmeAc('kargo')" style="flex:1;padding:12px;border-radius:10px;border:2px solid #e2e8f0;background:white;color:#64748b;font-weight:900;font-size:14px;cursor:pointer;">📦 KARGO</button>
+  </div>
+
+<!-- GELİR SEKMESİ -->
+<div id="bankoGelir">
+  <div style="background:white;border-radius:14px;border:1px solid #e2e8f0;padding:20px;margin-bottom:16px;">
+    <h3 style="margin:0 0 16px;color:#15803d;font-size:16px;">💰 Gelir Girişi</h3>
+    <label class="field-label">Ödeme Tipi</label>
+    <div id="gelirOdemeTipiDiv" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+      <button class="bankoOdemeBtn aktif" onclick="bankoOdemeSecGelir(this,'NAKİT')" style="flex:1;min-width:80px;padding:10px;border-radius:8px;border:2px solid #10b981;background:#dcfce7;color:#15803d;font-weight:900;cursor:pointer;">💵 Nakit</button>
+      <button class="bankoOdemeBtn" onclick="bankoOdemeSecGelir(this,'KREDİ KARTI')" style="flex:1;min-width:80px;padding:10px;border-radius:8px;border:2px solid #e2e8f0;background:white;color:#64748b;font-weight:700;cursor:pointer;">💳 K.Kartı</button>
+      <button class="bankoOdemeBtn" onclick="bankoOdemeSecGelir(this,'HAVALE/EFT')" style="flex:1;min-width:80px;padding:10px;border-radius:8px;border:2px solid #e2e8f0;background:white;color:#64748b;font-weight:700;cursor:pointer;">🏦 Havale/EFT</button>
+      <button class="bankoOdemeBtn" onclick="bankoOdemeSecGelir(this,'CARİ')" style="flex:1;min-width:80px;padding:10px;border-radius:8px;border:2px solid #e2e8f0;background:white;color:#64748b;font-weight:700;cursor:pointer;">📋 Cari</button>
+    </div>
+   <input type="hidden" id="gelirOdemeTipi" value="NAKİT">
+
+<div id="havaleEftBankaDiv" style="display:none;margin-bottom:14px;">
+  <label class="field-label">Hangi Hesaba Yatırıldı?</label>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="bankaBtnSec aktif" onclick="bankaBtnSec(this,'GARANTİ OSGB')" ...>🏦 Garanti Avrupa Bir</button>
+    <button class="bankaBtnSec" onclick="bankaBtnSec(this,'İŞBANKASI AVRUPA SAĞLIK')" ...>🏦 İş Bankası Avrupa Sağlık</button>
+  </div>
+  <input type="hidden" id="gelirBankaSecim" value="GARANTİ OSGB">
+</div>
+
+<div id="cariFirmaDiv" style="display:none;margin-bottom:14px;">
+  <label class="field-label">Firma Seç (Carisine İşle)</label>
+  <input type="text" id="gelirCariFirmaAdi" placeholder="Firma adı yazın..." class="field-input" style="margin-bottom:6px;" oninput="gelirCariFirmaAraBanko()">
+  <div id="gelirCariFirmaOneri2" style="display:none;background:white;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);max-height:180px;overflow-y:auto;margin-bottom:6px;"></div>
+  <input type="hidden" id="gelirCariFirmaId" value="">
+</div>
+
+<label class="field-label">Firma Adı (isteğe bağlı)</label>
+<input type="text" id="gelirFirmaAdi" placeholder="Firma adı..." class="field-input" style="margin-bottom:12px;">
+
+<label class="field-label">Tutar (₺)</label>
+      <input type="number" id="gelirTutar" placeholder="0.00" class="field-input" style="margin-bottom:12px;font-size:20px;font-weight:900;color:#15803d;border-color:#10b981;">
+      <label class="field-label">Açıklama</label>
+      <input type="text" id="gelirAciklama" placeholder="İşlem açıklaması..." class="field-input" style="margin-bottom:16px;">
+      <button onclick="bankoGelirKaydet()" style="width:100%;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;padding:14px;border-radius:10px;font-weight:900;font-size:15px;cursor:pointer;">💾 GELİRİ KAYDET</button>
+    </div>
+    <div style="background:white;border-radius:14px;border:1px solid #e2e8f0;padding:20px;">
+      <h3 style="margin:0 0 12px;color:#1e293b;font-size:14px;">📋 Bugünün Gelirleri</h3>
+      <div id="bankoGelirListesi"><div style="text-align:center;color:#94a3b8;padding:20px;">Yükleniyor...</div></div>
+    </div>
+  </div>
+
+  <!-- GİDER SEKMESİ -->
+  <div id="bankoGider" style="display:none;">
+    <div style="background:white;border-radius:14px;border:1px solid #e2e8f0;padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 16px;color:#dc2626;font-size:16px;">💸 Gider Girişi</h3>
+      <label class="field-label">Ödeme Tipi</label>
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button class="bankoOdemeBtnGider aktif" onclick="bankoOdemeSecGider(this,'NAKİT')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #ef4444;background:#fee2e2;color:#dc2626;font-weight:900;cursor:pointer;">💵 Nakit</button>
+        <button class="bankoOdemeBtnGider" onclick="bankoOdemeSecGider(this,'KREDİ KARTI')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #e2e8f0;background:white;color:#64748b;font-weight:700;cursor:pointer;">💳 K.Kartı</button>
+      </div>
+      <input type="hidden" id="giderOdemeTipi" value="NAKİT">
+      <label class="field-label">Açıklama / Gider Nedeni</label>
+      <input type="text" id="giderAciklama" placeholder="Kira, kargo, malzeme..." class="field-input" style="margin-bottom:12px;">
+      <label class="field-label">Tutar (₺)</label>
+      <input type="number" id="giderTutar" placeholder="0.00" class="field-input" style="margin-bottom:16px;font-size:20px;font-weight:900;color:#dc2626;border-color:#ef4444;">
+      <button onclick="bankoGiderKaydet()" style="width:100%;background:linear-gradient(135deg,#ef4444,#dc2626);color:white;border:none;padding:14px;border-radius:10px;font-weight:900;font-size:15px;cursor:pointer;">💾 GİDERİ KAYDET</button>
+    </div>
+    <div style="background:white;border-radius:14px;border:1px solid #e2e8f0;padding:20px;">
+      <h3 style="margin:0 0 12px;color:#1e293b;font-size:14px;">📋 Bugünün Giderleri</h3>
+      <div id="bankoGiderListesi"><div style="text-align:center;color:#94a3b8;padding:20px;">Yükleniyor...</div></div>
+    </div>
+  </div>
+
+  <!-- KARGO SEKMESİ -->
+  <div id="bankoKargo" style="display:none;">
+    <div style="background:white;border-radius:14px;border:1px solid #e2e8f0;padding:20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 4px;color:#f59e0b;font-size:16px;">📦 Kargoya Verilecekler</h3>
+      <p style="font-size:12px;color:#64748b;margin:0 0 16px;">Tetkikleri tamamlanan ve henüz kargoya verilmemiş firmalar</p>
+      <div id="bankoKargoListesi"><div style="text-align:center;color:#94a3b8;padding:20px;">Yükleniyor...</div></div>
+    </div>
+    <div id="bankoKargoModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.85);z-index:1000010;align-items:center;justify-content:center;backdrop-filter:blur(5px);">
+      <div style="background:white;width:min(420px,92vw);border-radius:16px;padding:25px;box-shadow:0 25px 50px rgba(0,0,0,0.5);">
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #f1f5f9;padding-bottom:12px;margin-bottom:16px;">
+          <h3 style="margin:0;color:#f59e0b;font-size:16px;">📦 Kargoya Ver</h3>
+          <button onclick="document.getElementById('bankoKargoModal').style.display='none'" style="background:#fee2e2;color:#ef4444;border:none;padding:5px 10px;border-radius:6px;font-weight:bold;cursor:pointer;">✖</button>
+        </div>
+        <div id="bankoKargoFirmaGoster" style="background:#fffbeb;padding:10px;border-radius:8px;font-weight:900;color:#92400e;margin-bottom:14px;border:1px solid #fde68a;"></div>
+        <input type="hidden" id="bankoKargoSatirNo">
+        <input type="hidden" id="bankoKargoFirmaAdi">
+        <input type="hidden" id="bankoKargoFirmaId">
+        <label class="field-label">Kargo Firması</label>
+<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+  <button class="kargoFirmaBtn aktif" onclick="kargoFirmasecBtnSec(this,'PTT')" style="flex:1;min-width:70px;padding:8px;border-radius:8px;border:2px solid #f59e0b;background:#fffbeb;color:#92400e;font-weight:900;cursor:pointer;">📮 PTT</button>
+  <button class="kargoFirmaBtn" onclick="kargoFirmasecBtnSec(this,'Aras')" style="flex:1;min-width:70px;padding:8px;border-radius:8px;border:2px solid #e2e8f0;background:white;color:#64748b;font-weight:700;cursor:pointer;">🚚 Aras</button>
+  <button class="kargoFirmaBtn" onclick="kargoFirmasecBtnSec(this,'MNG')" style="flex:1;min-width:70px;padding:8px;border-radius:8px;border:2px solid #e2e8f0;background:white;color:#64748b;font-weight:700;cursor:pointer;">📦 MNG</button>
+  <button class="kargoFirmaBtn" onclick="kargoFirmasecBtnSec(this,'Yurtiçi')" style="flex:1;min-width:70px;padding:8px;border-radius:8px;border:2px solid #e2e8f0;background:white;color:#64748b;font-weight:700;cursor:pointer;">🏠 Yurtiçi</button>
+  <button class="kargoFirmaBtn" onclick="kargoFirmasecBtnSec(this,'Elden')" style="flex:1;min-width:70px;padding:8px;border-radius:8px;border:2px solid #e2e8f0;background:white;color:#64748b;font-weight:700;cursor:pointer;">🤝 Elden</button>
+</div>
+<input type="hidden" id="bankoKargoFirması" value="PTT">
+
+<label class="field-label">Kargo Takip Numarası</label>
+<input type="text" id="bankoTakipNo" placeholder="Takip numarasını girin..." class="field-input" style="margin-bottom:14px;font-weight:700;font-size:15px;">
+
+<label class="field-label">Firma Telefonu (WhatsApp için)</label>
+<input type="text" id="bankoKargoTel" placeholder="905XXXXXXXXX" class="field-input" style="margin-bottom:16px;">
+
+<div style="display:flex;gap:10px;">
+  <button onclick="bankoKargoKaydet()" style="flex:2;background:linear-gradient(135deg,#f59e0b,#d97706);color:white;border:none;padding:14px;border-radius:10px;font-weight:900;font-size:15px;cursor:pointer;">📦 KARGOYA VER VE KAYDET</button>
+  <button onclick="bankoWhatsappGonder()" id="btnWhatsapp" style="flex:1;background:linear-gradient(135deg,#25d366,#128c7e);color:white;border:none;padding:14px;border-radius:10px;font-weight:900;font-size:14px;cursor:pointer;display:none;">💬 WA</button>
+</div>
+      </div>
+    </div>
+    <!-- VADESİ GEÇEN ÖDEMELER -->
+  <div id="bankoVade" style="display:none;">
+    <div style="background:white;border-radius:14px;border:1px solid #fecaca;padding:20px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div>
+          <h3 style="margin:0 0 4px;color:#ef4444;font-size:16px;">⚠️ Vadesi Geçen Ödemeler</h3>
+          <p style="font-size:12px;color:#64748b;margin:0;">Ödeme yapmayan firmalara WhatsApp hatırlatması gönderin</p>
+        </div>
+        <button onclick="vadeListesiYukle()" style="background:#ef4444;color:white;border:none;padding:8px 16px;border-radius:8px;font-weight:900;cursor:pointer;font-size:12px;">🔄 Yenile</button>
+      </div>
+      <div id="bankoVadeListesi"><div style="text-align:center;color:#94a3b8;padding:20px;">Yükleniyor...</div></div>
+    </div>
+  </div>
+  </div>
+
+  <!-- DÜZENLEME MODALI -->
+<div id="duzenModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.85);z-index:1000011;align-items:center;justify-content:center;backdrop-filter:blur(5px);">
+  <div style="background:white;width:min(420px,92vw);border-radius:16px;padding:25px;box-shadow:0 25px 50px rgba(0,0,0,0.5);">
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #f1f5f9;padding-bottom:12px;margin-bottom:16px;">
+      <h3 style="margin:0;color:#1e293b;font-size:16px;">✏️ İşlemi Düzenle</h3>
+      <button onclick="document.getElementById('duzenModal').style.display='none'" style="background:#fee2e2;color:#ef4444;border:none;padding:5px 10px;border-radius:6px;font-weight:bold;cursor:pointer;">✖</button>
+    </div>
+
+    <input type="hidden" id="duzenSatirNo">
+    <input type="hidden" id="duzenTip">
+    <input type="hidden" id="duzenSaat">
+    <input type="hidden" id="duzenFirmaAdi">
+    <input type="hidden" id="duzenOdemeTipi" value="NAKİT">
+
+    <label class="field-label">Ödeme Tipi</label>
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+      <button id="duzenOdeme_NAKİT" onclick="duzenOdemeSec(this,'NAKİT')" style="flex:1;min-width:70px;padding:8px;border-radius:8px;border:2px solid #10b981;background:#dcfce7;color:#15803d;font-weight:900;cursor:pointer;">💵 Nakit</button>
+      <button id="duzenOdeme_KREDİ_KARTI" onclick="duzenOdemeSec(this,'KREDİ KARTI')" style="flex:1;min-width:70px;padding:8px;border-radius:8px;border:2px solid #e2e8f0;background:white;color:#64748b;font-weight:700;cursor:pointer;">💳 K.Kartı</button>
+      <button id="duzenOdeme_HAVALE" onclick="duzenOdemeSec(this,'HAVALE')" style="flex:1;min-width:70px;padding:8px;border-radius:8px;border:2px solid #e2e8f0;background:white;color:#64748b;font-weight:700;cursor:pointer;">🏦 Havale</button>
+      <button id="duzenOdeme_EFT" onclick="duzenOdemeSec(this,'EFT')" style="flex:1;min-width:70px;padding:8px;border-radius:8px;border:2px solid #e2e8f0;background:white;color:#64748b;font-weight:700;cursor:pointer;">📤 EFT</button>
+    </div>
+
+    <label class="field-label">Tutar (₺)</label>
+    <input type="number" id="duzenTutar" class="field-input" style="margin-bottom:12px;font-size:18px;font-weight:900;color:#1e293b;">
+
+    <label class="field-label">Açıklama</label>
+    <input type="text" id="duzenAciklama" class="field-input" style="margin-bottom:20px;">
+
+    <button id="btnDuzenKaydet" onclick="bankoIslemKaydet()" style="width:100%;background:linear-gradient(135deg,#1e293b,#0f172a);color:white;border:none;padding:14px;border-radius:10px;font-weight:900;font-size:15px;cursor:pointer;">💾 KAYDET</button>
+  </div>
+</div>
+
+<!-- KASAYI KAPAT -->
+<div style="margin-top:24px;padding:20px;background:#0f172a;border-radius:14px;border:1px solid #1e293b;">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+    <div>
+      <div style="color:white;font-weight:900;font-size:15px;">🔒 Günü Kapat</div>
+      <div style="color:#64748b;font-size:12px;margin-top:3px;">Tüm işlemler arşivlenir, rapor muhasebe ve yönetime gönderilir</div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button onclick="bankoAnlikRaporAl()" style="background:linear-gradient(135deg,#0ea5e9,#0284c7);color:white;border:none;padding:12px 24px;border-radius:10px;font-weight:900;font-size:14px;cursor:pointer;white-space:nowrap;">📊 ANLİK RAPOR AL</button>
+      <button onclick="bankoKasaKapat()" style="background:linear-gradient(135deg,#ef4444,#dc2626);color:white;border:none;padding:12px 24px;border-radius:10px;font-weight:900;font-size:14px;cursor:pointer;white-space:nowrap;">🔒 KASAYI KAPAT VE RAPOR GÖNDER</button>
+    </div>
+  </div>
+</div>
+</div> <!-- panelBanko kapanır -->
+
+<div id="panelROI" class="panel hidden-panel" style="display:none;">
+  <div style="padding:20px; max-width:1200px; margin:0 auto;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+      <h2 style="margin:0; color:#1e293b; font-size:22px;">ROI Paneli</h2>
+      <button onclick="roiYukle()" style="background:#1e293b; color:white; border:none; padding:10px 20px; border-radius:8px; font-weight:bold; cursor:pointer;">Yenile</button>
+    </div>
+    <div id="roiOzetKartlar" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-bottom:24px;"></div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:24px;">
+      <div>
+        <h3 style="margin:0 0 12px; color:#1e293b; font-size:16px;">Firma Bazli Gelir</h3>
+        <div id="roiFirmaListesi" style="max-height:400px; overflow-y:auto;"></div>
+      </div>
+      <div>
+        <h3 style="margin:0 0 12px; color:#ef4444; font-size:16px;">Sozlesme Bitisi Yaklasanlar</h3>
+        <div id="roiSozlesmeUyari"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     SOSYAL MEDYA PANELİ
+════════════════════════════════════════ -->
+<div id="panelSosyalMedya" class="panel hidden-panel" style="display:none;">
+  <div style="padding:20px; max-width:1200px; margin:0 auto;">
+
+    <!-- BAŞLIK -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+      <div>
+        <h2 style="margin:0; color:#1e293b; font-size:22px;">📱 Sosyal Medya Yönetim Merkezi</h2>
+        <p style="margin:4px 0 0; color:#64748b; font-size:13px;">AvrupaISG içerik takvimi, AI asistan ve performans takibi</p>
+      </div>
+      <span id="sm-gecikme-badge" style="display:none; background:#ef4444; color:white; padding:6px 14px; border-radius:20px; font-size:12px; font-weight:900;"></span>
+    </div>
+
+    <!-- KPI KARTLARI -->
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;">
+      <div class="sm-kpi-card" style="background:#eff6ff; border:1px solid #bfdbfe;">
+        <div style="font-size:28px; font-weight:900; color:#1d4ed8;" id="sm-kpi1">0</div>
+        <div style="font-size:11px; color:#64748b; font-weight:700; margin-top:4px;">TOPLAM POST</div>
+      </div>
+      <div class="sm-kpi-card" style="background:#f0fdf4; border:1px solid #bbf7d0;">
+        <div style="font-size:28px; font-weight:900; color:#15803d;" id="sm-kpi2">0</div>
+        <div style="font-size:11px; color:#64748b; font-weight:700; margin-top:4px;">PAYLAŞILDI</div>
+      </div>
+      <div class="sm-kpi-card" style="background:#fefce8; border:1px solid #fde68a;">
+        <div style="font-size:28px; font-weight:900; color:#92400e;" id="sm-kpi3">0</div>
+        <div style="font-size:11px; color:#64748b; font-weight:700; margin-top:4px;">PLANLANDI</div>
+      </div>
+      <div class="sm-kpi-card" style="background:#fef2f2; border:1px solid #fecaca;">
+        <div style="font-size:28px; font-weight:900; color:#991b1b;" id="sm-kpi4">0</div>
+        <div style="font-size:11px; color:#64748b; font-weight:700; margin-top:4px;">GECİKTİ</div>
+      </div>
+    </div>
+
+    <!-- SEKMELER -->
+    <div style="display:flex; gap:6px; margin-bottom:16px; border-bottom:2px solid #e2e8f0; padding-bottom:0;">
+      <button id="sm-tab-takvim" class="sm-tab active" onclick="smTab('takvim')">📅 İçerik Takvimi</button>
+      <button id="sm-tab-ai"     class="sm-tab"        onclick="smTab('ai')">🤖 AI Asistan</button>
+      <button id="sm-tab-perf"   class="sm-tab"        onclick="smTab('perf')">📊 Performans</button>
+      <button id="sm-tab-uyari"  class="sm-tab"        onclick="smTab('uyari')">🚨 Uyarılar</button>
+    </div>
+
+    <!-- TAKVİM PANELİ -->
+    <div id="sm-pane-takvim" class="sm-pane active">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div style="font-weight:700; color:#1e293b; font-size:14px;">Planlanan &amp; Geçmiş Postlar</div>
+        <button class="sm-btn sm-btn-green" onclick="smShowNewPost()">+ Yeni Post Planla</button>
+      </div>
+      <div id="sm-new-post-form" style="display:none; background:#f8fafc; border:2px solid #e2e8f0; border-radius:12px; padding:20px; margin-bottom:16px;">
+        <div style="font-weight:900; color:#1e293b; margin-bottom:14px; font-size:14px;">📝 Yeni Post Detayları</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:10px;">
+          <div>
+            <label style="font-size:11px; font-weight:700; color:#475569;">Paylaşım Tarihi</label>
+            <input type="date" id="sm-fp-tarih" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box; margin-top:4px;">
+          </div>
+          <div>
+            <label style="font-size:11px; font-weight:700; color:#475569;">Platform</label>
+            <select id="sm-fp-platform" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; margin-top:4px;">
+              <option>Instagram</option>
+              <option>LinkedIn</option>
+              <option>Facebook</option>
+              <option>Twitter/X</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px; font-weight:700; color:#475569;">İçerik Türü</label>
+            <select id="sm-fp-tur" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; margin-top:4px;">
+              <option>Egitim</option>
+              <option>Tanitim</option>
+              <option>Sektor</option>
+              <option>Ekip</option>
+              <option>Referans</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:11px; font-weight:700; color:#475569;">Başlık / Konu</label>
+          <input type="text" id="sm-fp-baslik" placeholder="Örn: İş Sağlığı Haftası 2025" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; margin-top:4px; box-sizing:border-box;">
+        </div>
+        <div style="margin-bottom:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <label style="font-size:11px; font-weight:700; color:#475569;">Caption / Post Metni</label>
+            <button class="sm-btn sm-btn-blue sm-btn-sm" onclick="smAiCaption()">✨ AI ile Yaz <span id="sm-ai-cap-loading" style="display:none;">⏳</span></button>
+          </div>
+          <textarea id="sm-fp-caption" rows="4" placeholder="AI ile otomatik oluşturabilirsiniz..." style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box; resize:vertical;"></textarea>
+        </div>
+        <div style="margin-bottom:14px;">
+          <label style="font-size:11px; font-weight:700; color:#475569;">Hashtagler</label>
+          <input type="text" id="sm-fp-hashtag" placeholder="#osgb #issagligi #isg" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; margin-top:4px; box-sizing:border-box;">
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="sm-btn sm-btn-green" onclick="smSavePost()">💾 Kaydet</button>
+          <button class="sm-btn sm-btn-gray" onclick="smHideNewPost()">İptal</button>
+        </div>
+      </div>
+      <div id="sm-post-listesi">
+        <div style="text-align:center; padding:30px; color:#94a3b8;">Yükleniyor... ⏳</div>
+      </div>
+    </div>
+
+    <!-- AI ASISTAN PANELİ -->
+    <div id="sm-pane-ai" class="sm-pane">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; height:500px;">
+        <div style="display:flex; flex-direction:column; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
+          <div style="background:#1e293b; color:white; padding:12px 16px; font-weight:700; font-size:13px;">🤖 Sosyal Medya AI Asistanı</div>
+          <div id="sm-chat-msgs" style="flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px;"></div>
+          <div style="padding:10px; border-top:1px solid #e2e8f0; display:flex; gap:6px;">
+            <input id="sm-chat-inp" type="text" placeholder="Bir şey sor..." style="flex:1; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;" onkeydown="if(event.key==='Enter') smSendChat()">
+            <button class="sm-btn sm-btn-blue" onclick="smSendChat()">Gönder</button>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="font-weight:700; color:#1e293b; font-size:13px; margin-bottom:4px;">⚡ Hızlı Komutlar</div>
+          <button class="sm-btn sm-btn-blue" style="text-align:left;" onclick="smHizli('Bu hafta için 3 Instagram post fikri öner')">📸 Bu hafta 3 post fikri</button>
+          <button class="sm-btn sm-btn-blue" style="text-align:left;" onclick="smHizli('OSGB hizmetleri için LinkedIn paylaşımı yaz')">💼 LinkedIn OSGB paylaşımı</button>
+          <button class="sm-btn sm-btn-blue" style="text-align:left;" onclick="smHizli('Reels senaryosu yaz')">🎬 Reels senaryosu</button>
+          <button class="sm-btn sm-btn-blue" style="text-align:left;" onclick="smHizli('Müşteri referansı için post şablonu oluştur')">⭐ Referans post şablonu</button>
+          <button class="sm-btn sm-btn-green" style="text-align:left;" onclick="smHizli('Bu ayın içerik takvimini planla')">📅 Aylık takvim planla</button>
+          <button class="sm-btn sm-btn-green" style="text-align:left;" onclick="smHizli('Rakip OSGB firmaları ile fark yaratan içerik stratejisi öner')">🎯 İçerik stratejisi</button>
+          <button class="sm-btn sm-btn-gray" style="text-align:left;" onclick="smHizli('Mobil sağlık taramaları için story metni yaz')">🚐 Mobil saha story metni</button>
+          <div style="margin-top:auto; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px;">
+            <div style="font-size:11px; font-weight:700; color:#475569; margin-bottom:8px;">📊 Post Performansı Güncelle</div>
+            <input id="sm-perf-id" type="text" placeholder="Post ID" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:4px; font-size:12px; margin-bottom:6px; box-sizing:border-box;">
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:4px; margin-bottom:6px;">
+              <input id="sm-perf-begeni" type="number" placeholder="❤️ Beğeni" style="padding:6px; border:1px solid #cbd5e1; border-radius:4px; font-size:11px;">
+              <input id="sm-perf-yorum"  type="number" placeholder="💬 Yorum"  style="padding:6px; border:1px solid #cbd5e1; border-radius:4px; font-size:11px;">
+              <input id="sm-perf-erisim" type="number" placeholder="👁 Erişim" style="padding:6px; border:1px solid #cbd5e1; border-radius:4px; font-size:11px;">
+            </div>
+            <select id="sm-perf-durum" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:4px; font-size:12px; margin-bottom:6px;">
+              <option value="planland">Planlandı</option>
+              <option value="paylasild">Paylaşıldı</option>
+              <option value="gecikti">Gecikti</option>
+            </select>
+            <button class="sm-btn sm-btn-green" style="width:100%;" onclick="smPerfGuncelle()">Güncelle</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PERFORMANS PANELİ -->
+    <div id="sm-pane-perf" class="sm-pane">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px;">
+          <div style="font-weight:700; color:#1e293b; margin-bottom:12px;">📊 Haftalık Erişim Grafiği</div>
+          <div id="sm-bar-chart" style="display:flex; align-items:flex-end; gap:4px; height:100px;"></div>
+        </div>
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px;">
+          <div style="font-weight:700; color:#1e293b; margin-bottom:12px;">🏆 En İyi Performanslı Postlar</div>
+          <div id="sm-top-posts">
+            <div style="color:#94a3b8; font-size:13px; text-align:center; padding:20px;">Performans verisi yükleniyor...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- UYARILAR PANELİ -->
+    <div id="sm-pane-uyari" class="sm-pane">
+      <div style="font-weight:700; color:#991b1b; margin-bottom:12px; font-size:14px;">🚨 Gecikmeli &amp; Paylaşılmayan Postlar</div>
+      <div id="sm-uyari-listesi">
+        <div style="text-align:center; padding:20px; color:#94a3b8;">Kontrol ediliyor...</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================== -->
+<!-- 📢 TOPLU MAİL MODALI -->
+<!-- ============================================== -->
+<div id="modalTopluMail" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.88); z-index:1000010; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+  <div style="background:#fff; width:min(820px,95vw); max-height:92vh; border-radius:18px; overflow:hidden; box-shadow:0 25px 60px rgba(0,0,0,0.5); display:flex; flex-direction:column;">
+    <!-- Modal Başlık -->
+    <div style="background:linear-gradient(135deg,#eab308,#ca8a04); padding:18px 22px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
+      <div>
+        <h3 style="margin:0; color:#1c1917; font-size:18px; font-weight:900;">📢 Toplu Mail Gönderici</h3>
+        <p style="margin:3px 0 0; color:#78350f; font-size:12px;">Hedef firmaları seçin, konu ve metni yazın, gönderme butonuna basın.</p>
+      </div>
+      <button onclick="document.getElementById('modalTopluMail').style.display='none'" style="background:rgba(0,0,0,0.15); color:#1c1917; border:none; padding:8px 14px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:14px;">✖ KAPAT</button>
+    </div>
+
+    <div style="display:flex; flex:1; overflow:hidden; min-height:0;">
+      <!-- Sol Panel: Alıcı Listesi -->
+      <div style="width:320px; flex-shrink:0; border-right:1px solid #e2e8f0; display:flex; flex-direction:column; overflow:hidden;">
+        <div style="padding:12px; background:#fffbeb; border-bottom:1px solid #fde68a;">
+          <input type="text" id="tmArama" placeholder="Firma veya e-posta ara..." oninput="filtreTopluMail()" style="width:100%; padding:9px; border:1px solid #cbd5e1; border-radius:8px; box-sizing:border-box; font-size:13px;">
+          <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; font-size:12px;">
+            <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-weight:bold;">
+              <input type="radio" name="tmKategoriSec" value="HEPSI" checked> Hepsi
+            </label>
+            <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-weight:bold; color:#16a34a;">
+              <input type="radio" name="tmKategoriSec" value="AKTIF"> Mevcut Müşteriler
+            </label>
+            <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-weight:bold; color:#ea580c;">
+              <input type="radio" name="tmKategoriSec" value="POTANSIYEL"> Potansiyel
+            </label>
+          </div>
+        </div>
+        <div id="tmAliciListe" style="flex:1; overflow-y:auto; padding:10px;">
+          <div style="text-align:center; padding:30px; color:#94a3b8;">Liste yükleniyor...</div>
+        </div>
+        <div style="padding:10px; background:#f8fafc; border-top:1px solid #e2e8f0; text-align:center; font-size:12px; font-weight:bold; color:#475569;">
+          Seçilen: <span id="tmSayac" style="color:#eab308; font-size:15px;">0</span> firma
+        </div>
+      </div>
+
+      <!-- Sağ Panel: Mail İçeriği -->
+      <div style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+        <div style="padding:16px; flex:1; overflow-y:auto;">
+          <label style="display:block; font-size:11px; font-weight:bold; color:#64748b; margin-bottom:5px;">KONU</label>
+          <input type="text" id="tmKonu" placeholder="Mail konusu..." style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; box-sizing:border-box; margin-bottom:14px; font-size:14px;">
+
+          <label style="display:block; font-size:11px; font-weight:bold; color:#64748b; margin-bottom:5px;">MESAJ METNİ</label>
+          <textarea id="tmMetin" rows="12" placeholder="Mail içeriğini buraya yazın..." style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; box-sizing:border-box; resize:vertical; font-size:13px; line-height:1.6; font-family:Arial,sans-serif;"></textarea>
+
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-top:12px; background:#f0fdf4; padding:10px; border:1px solid #bbf7d0; border-radius:8px;">
+            <input type="checkbox" id="tmEkBrosurSec" style="transform:scale(1.3);">
+            <span style="color:#166534; font-weight:bold; font-size:13px;">📎 Şirket Broşürünü Ek Olarak Ekle</span>
+          </label>
+        </div>
+
+        <div style="padding:14px; border-top:1px solid #e2e8f0; background:#fffbeb;">
+          <button type="button" id="btnAtesiBaslat" onclick="gonderKeskinNisanci()" style="width:100%; background:linear-gradient(135deg,#eab308,#ca8a04); color:#1c1917; border:none; padding:14px; border-radius:10px; font-weight:900; font-size:15px; cursor:pointer; box-shadow:0 4px 10px rgba(202,138,4,0.4);">
+            🚀 BUTUN SEÇİLİ ŞİRKETLERE YOLLA!
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================== -->
+
+<!-- ============================================== -->
+<!-- 🦺 İSG YÖNETİM PANELİ -->
+<!-- ============================================== -->
