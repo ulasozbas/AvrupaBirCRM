@@ -202,70 +202,60 @@ if (p.hizmetler && p.hizmetler.indexOf("IseGiris") > -1)  firmaIseGirisListesine
 function api_firmaGuncelle(p) {
   try {
     var ss = SpreadsheetApp.openById(CRM_SHEET_ID);
-    var sheet = ss.getSheetByName("FIRMALAR") || ss.getSheetByName("FIRMALAR");
-    if (!sheet) return { ok: false, msg: "FİRMALAR veritabanı bulunamadı!" };
-    var data = sheet.getDataRange().getValues();
+    var sh = ss.getSheetByName("FİRMALAR");
+    if (!sh) return { ok: false, msg: "FİRMALAR sayfası bulunamadı" };
+
+    var data = sh.getDataRange().getValues();
     var headers = data[0];
-    var idxId = headers.indexOf("FirmaID");
-    if(idxId === -1) return { ok: false, msg: "FirmaID sütunu yok!" };
-    var rowIndex = -1;
+
+    // Sütun indekslerini bul
+    var colMap = {};
+    headers.forEach(function(h, i) { colMap[String(h).trim()] = i; });
+
+    // Firma satırını bul
+    var firmaIdCol = colMap["FirmaID"] !== undefined ? colMap["FirmaID"] : colMap["firmaId"];
+    var targetRow = -1;
     for (var i = 1; i < data.length; i++) {
-      if (String(data[i][idxId]).trim() === String(p.firmaId).trim()) { rowIndex = i + 1; break; }
-    }
-    if (rowIndex === -1) return { ok: false, msg: "Firma sistemde bulunamadı!" };
-    var iSorumluEmail = headers.indexOf("SorumluEmail");
-    if (iSorumluEmail === -1) iSorumluEmail = headers.indexOf("sorumluEmail");
-    if (iSorumluEmail > -1) {
-      var mevcutSorumlu = String(data[rowIndex - 1][iSorumluEmail]).toLowerCase().trim();
-      var islemYapanKisi = String(p.kullanici || "").toLowerCase().trim();
-      if (mevcutSorumlu !== "" && mevcutSorumlu !== islemYapanKisi) {
-        if (!isAdmin_(islemYapanKisi)) {
-          return { ok: false, msg: "⛔ YETKİ REDDEDİLDİ: Bu firma [" + mevcutSorumlu + "] üzerine kayıtlıdır." };
-        }
+      if (String(data[i][firmaIdCol]).trim() === String(p.firmaId).trim()) {
+        targetRow = i;
+        break;
       }
     }
-    function setValueIfExist(colName, val) {
-      var colIdx = headers.indexOf(colName);
-      if (colIdx > -1 && val !== undefined) { sheet.getRange(rowIndex, colIdx + 1).setValue(val); }
+    if (targetRow === -1) return { ok: false, msg: "Firma bulunamadı: " + p.firmaId };
+
+    var row = sh.getRange(targetRow + 1, 1, 1, headers.length).getValues()[0];
+
+    // Mevcut alanlar
+    if (colMap["FirmaAdi"]      !== undefined && p.firma)         row[colMap["FirmaAdi"]]      = p.firma;
+    if (colMap["YetkiliAdi"]    !== undefined && p.yetkili)       row[colMap["YetkiliAdi"]]    = p.yetkili;
+    if (colMap["Telefon"]       !== undefined && p.tel)           row[colMap["Telefon"]]       = p.tel;
+    if (colMap["Email"]         !== undefined && p.mail)          row[colMap["Email"]]         = p.mail;
+    if (colMap["Durum"]         !== undefined && p.durum)         row[colMap["Durum"]]         = p.durum;
+    if (colMap["VergiNo"]       !== undefined && p.vergiNo)       row[colMap["VergiNo"]]       = p.vergiNo;
+    if (colMap["CalisanSayisi"] !== undefined && p.calisanSayisi) row[colMap["CalisanSayisi"]] = p.calisanSayisi;
+    if (colMap["Sektor"]        !== undefined && p.sektor)        row[colMap["Sektor"]]        = p.sektor;
+    if (colMap["Ilce"]          !== undefined && p.ilce)          row[colMap["Ilce"]]          = p.ilce;
+    if (colMap["Not"]           !== undefined && p.not !== undefined) row[colMap["Not"]]       = p.not;
+    if (colMap["Adres"]         !== undefined && p.adres !== undefined) row[colMap["Adres"]]   = p.adres;
+    if (colMap["Referans"]      !== undefined && p.referans !== undefined) row[colMap["Referans"]] = p.referans;
+
+    // ✅ YENİ 3 ALAN
+    if (colMap["VergiDairesi"]  !== undefined && p.vergiDairesi !== undefined) row[colMap["VergiDairesi"]] = p.vergiDairesi;
+    if (colMap["SgkSicilNo"]    !== undefined && p.sgkSicilNo   !== undefined) row[colMap["SgkSicilNo"]]   = p.sgkSicilNo;
+
+    sh.getRange(targetRow + 1, 1, 1, headers.length).setValues([row]);
+
+    // Audit log
+    if (typeof auditLog_ === "function") {
+      auditLog_("FIRMA_GUNCELLE", p.firmaId, p.firma, p.kullanici);
     }
-    setValueIfExist("FirmaAdi", p.firma);
-    setValueIfExist("FirmaUnvani", p.firma);
-    setValueIfExist("YetkiliAdi", p.yetkili);
-    setValueIfExist("Telefon", p.tel);
-    setValueIfExist("Email", p.mail);
-    if (p.durum && (p.durum.toUpperCase() === "AKTİF" || p.durum.toUpperCase() === "SÖZLEŞME İMZALANDI")) {
-      chatBildir_("🎉 *İŞ ONAYLANDI!*\nFirma: " + String(p.firma||"") + "\nDurum: " + p.durum + "\nGüncelleyen: " + String(p.kullanici||""));
-    }
-    setValueIfExist("VergiNo", p.vergiNo);
-    setValueIfExist("CalisanSayisi", p.calisanSayisi);
-    setValueIfExist("Sektor", p.sektor);
-    setValueIfExist("Ilce", p.ilce);
-    setValueIfExist("Not", p.not);
-    setValueIfExist("Adres", p.adres);
-    setValueIfExist("Referans", p.referans);
-    setValueIfExist("RahatsizEtme", (p.rahatsizEtme === true || p.rahatsizEtme === "true") ? "EVET" : "");
-    if (p.hizmetler !== undefined) {
-      setValueIfExist("HizmetOSGB", p.hizmetler.indexOf("OSGB") > -1 ? "EVET" : "");
-      setValueIfExist("HizmetMobil", p.hizmetler.indexOf("Mobil") > -1 ? "EVET" : "");
-      setValueIfExist("HizmetIseGiris", p.hizmetler.indexOf("IseGiris") > -1 ? "EVET" : "");
-    }
-    if (p.hizmetler && p.hizmetler.length > 0) {
-      if (p.hizmetler.indexOf("OSGB") > -1) firmaIsgListesineEkle_(ss, p.firmaId, p.firma, p);
-      if (p.hizmetler.indexOf("Mobil") > -1) firmaMobilListesineEkle_(ss, p.firmaId, p.firma, p);
-      if (p.hizmetler.indexOf("IseGiris") > -1) firmaIseGirisListesineEkle_(ss, p.firmaId, p.firma, p);
-    }
-    if(p.sorumluGuncelle === true) {
-      setValueIfExist("SorumluEmail", p.sorumluEmail);
-      setValueIfExist("SorumluAdSoyad", p.sorumluAdSoyad);
-    }
-    firmaListesiCacheTemizle_();
-    chatBildir_("✏️ *Firma Güncellendi*\nFirma: " + String(p.firma||"") + "\nGüncelleyen: " + String(p.kullanici||""));
-    return { ok: true, msg: "Firma Bilgileri Başarıyla Güncellendi!" };
-  } catch (e) {
-    return { ok: false, msg: "Güncelleme Hatası: " + e.message };
+
+    return { ok: true, msg: "Firma güncellendi." };
+
+  } catch(e) {
+    return { ok: false, msg: e.message };
   }
 }
-
 // ==========================================
 // FİRMA LİSTELE
 // ==========================================
